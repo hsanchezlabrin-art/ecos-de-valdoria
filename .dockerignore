@@ -2,6 +2,7 @@
 *
 !server/package.json
 !server/index.js
+!server/names.js
 !juego/src/data.js
 !juego/src/terrain.js
 !juego/src/sim.js

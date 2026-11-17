@@ -23,6 +23,7 @@ function client(name, cls, save) {
         if (c.snaps.length === 1) resolve(c);
       } else if (m.t === 'e') c.events.push(...m.e);
       else if (m.t === 'chat') c.chats.push(m);
+      else if (m.t === 'token') c.token = m.token;
       else if (m.t === 'error') reject(new Error(m.msg));
     });
     ws.on('error', reject);
@@ -31,7 +32,8 @@ function client(name, cls, save) {
 }
 
 async function main() {
-  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT) }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const dataDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'valdoria-'));
+  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((resolve) => srv.stdout.on('data', (d) => String(d).includes('servidor en el puerto') && resolve()));
   let checks = 0;
   const ok = (cond, msg) => {
@@ -116,6 +118,21 @@ async function main() {
     await wait(400);
     ok(b.chats.some((m) => m.kind === 'sys' && m.text === 'Anascript ha dejado Valdoria.'), 'se avisa cuando un jugador sale');
     ok(!b.last.p.some((r) => r[0] === a.id), 'Ana desaparece del mundo de Beto');
+
+    // Registro de nombres: el nombre de Ana sigue siendo suyo aunque se haya ido
+    ok(typeof a.token === 'string' && a.token.length > 20, 'al entrar por primera vez el servidor entrega una llave');
+    let stolen = null;
+    await client('ANASCRIPT', 'guerrero', null).catch((e) => (stolen = e.message));
+    ok(stolen && stolen.includes('ya pertenece'), 'otro jugador no puede usar un nombre ya registrado');
+    const back = await client('Anascript', 'arquera', { cls: 'arquera', level: 3, token: a.token });
+    ok(!!back.id, 'con su llave, Ana vuelve a entrar con su nombre');
+    back.ws.close();
+    const avail = await (await fetch(`http://127.0.0.1:${PORT}/name-available?name=Anascript`)).json();
+    const free = await (await fetch(`http://127.0.0.1:${PORT}/name-available?name=Nadie123`)).json();
+    ok(avail.available === false && free.available === true, '/name-available indica si un nombre está libre');
+    await wait(400);
+    const saved = JSON.parse(require('fs').readFileSync(path.join(dataDir, 'names.json'), 'utf8'));
+    ok(saved.anascript && !JSON.stringify(saved).includes(a.token), 'el registro se guarda en disco sin la llave en claro');
     b.ws.close();
     console.log(`\nServidor OK: ${checks} comprobaciones superadas.`);
   } finally {

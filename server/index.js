@@ -12,6 +12,7 @@
 const http = require('http');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+const Names = require('./names.js');
 
 const SRC = process.env.GAME_SRC || path.join(__dirname, '..', 'juego', 'src');
 const Data = require(path.join(SRC, 'data.js'));
@@ -199,12 +200,20 @@ function onJoin(c, msg) {
   if (world.players.size >= MAX_PLAYERS) return send(c, { t: 'error', msg: 'El servidor está lleno. Inténtalo en unos minutos.' }), c.ws.close();
   const cls = isClass(msg.cls) ? msg.cls : 'guerrero';
   const name = cleanName(msg.name);
-  const taken = [...world.players.values()].some((q) => q.name.toLowerCase() === name.toLowerCase());
-  if (taken) {
+  const online = [...world.players.values()].some((q) => q.name.toLowerCase() === name.toLowerCase());
+  if (online) {
     send(c, { t: 'error', code: 'name_taken', msg: `Ya hay un jugador conectado con el nombre «${name}». Elige otro nombre.` });
     return c.ws.close();
   }
+  // El nombre pertenece a quien lo registró primero: se necesita su llave
+  const token = msg.save && typeof msg.save.token === 'string' ? msg.save.token : null;
+  const claim = Names.claim(name, token, cls);
+  if (!claim.ok) {
+    send(c, { t: 'error', code: 'name_taken', msg: `El nombre «${name}» ya pertenece a otro personaje. Elige otro nombre.` });
+    return c.ws.close();
+  }
   c.p = Sim.addPlayer(world, cleanSave(msg.save, name, cls));
+  if (claim.token) send(c, { t: 'token', name, token: claim.token });
   c.invDirty = true;
   send(c, { t: 'welcome', id: c.p.id, protocol: PROTOCOL, players: world.players.size });
   snapshot(c);
@@ -268,9 +277,16 @@ function onCommand(c, msg) {
 // ---------- Red ----------
 
 const server = http.createServer((req, res) => {
+  const url = new URL(req.url, 'http://x');
+  if (url.pathname === '/name-available') {
+    const name = cleanName(url.searchParams.get('name'));
+    const free = !Names.isTaken(name) && ![...world.players.values()].some((q) => q.name.toLowerCase() === name.toLowerCase());
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ name, available: free }));
+  }
   if (req.url === '/status') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    return res.end(JSON.stringify({ ok: true, players: world.players.size, protocol: PROTOCOL, uptime: Math.round((Date.now() - started) / 1000) }));
+    return res.end(JSON.stringify({ ok: true, players: world.players.size, characters: Names.count(), protocol: PROTOCOL, uptime: Math.round((Date.now() - started) / 1000) }));
   }
   res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Servidor de Ecos de Valdoria en funcionamiento.\n');

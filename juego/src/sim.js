@@ -224,7 +224,8 @@
     const dx = target.x - ent.pos.x;
     const dz = target.z - ent.pos.z;
     const dist = Math.hypot(dx, dz);
-    if (dist <= stopDist) return false;
+    // Margen de 1 cm: sin él, el redondeo deja al personaje "casi llegando" para siempre
+    if (dist <= stopDist + 0.01) return false;
     const step = Math.min(speed * dt, dist - stopDist);
     ent.pos.x += (dx / dist) * step;
     ent.pos.z += (dz / dist) * step;

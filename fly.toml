@@ -9,6 +9,12 @@ primary_region = "gru" # São Paulo: la región de Fly más cercana a Chile
 
 [env]
   PORT = "8080"
+  DATA_DIR = "/data"
+
+# Disco persistente: registro de nombres de personajes (sobrevive a reinicios y despliegues)
+[mounts]
+  source = "valdoria_data"
+  destination = "/data"
 
 [http_service]
   internal_port = 8080

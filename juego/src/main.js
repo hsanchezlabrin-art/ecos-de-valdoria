@@ -26,10 +26,38 @@
   function storeSave(cls, data) {
     if (!data) return;
     try {
+      // Conserva la llave del nombre (el servidor no la incluye en sus copias de la partida)
+      const prev = JSON.parse(localStorage.getItem(saveKey(cls)) || 'null');
+      if (prev && prev.token && !data.token && prev.name === data.name) data = { ...data, token: prev.token };
       localStorage.setItem(saveKey(cls), JSON.stringify(data));
     } catch {
       /* almacenamiento no disponible */
     }
+  }
+
+  // ---------- Nombres aleatorios ----------
+  const SYL_A = ['Ael', 'Bran', 'Cael', 'Dor', 'Eld', 'Fen', 'Gal', 'Hal', 'Ith', 'Kael', 'Lor', 'Mor', 'Nym', 'Or', 'Ryn', 'Syl', 'Thal', 'Val', 'Wyn', 'Zar', 'Ar', 'Bel', 'Cor', 'Dra', 'Eri', 'Gor', 'Ily', 'Jor', 'Lys', 'Mae', 'Nor', 'Per', 'Ser', 'Tor', 'Ul', 'Vey'];
+  const SYL_B = ['dor', 'wyn', 'ion', 'ara', 'eth', 'ius', 'iel', 'mir', 'os', 'ra', 'wen', 'gar', 'is', 'an', 'ia', 'rak', 'ven', 'thas', 'elle', 'orn', 'una', 'ric', 'mar', 'ys'];
+  const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
+  const randomName = () => pickOne(SYL_A) + pickOne(SYL_B) + (Math.random() < 0.25 ? pickOne(['a', 'o', 'el']) : '');
+
+  // Propone un nombre que no esté registrado en el servidor (si hay conexión)
+  async function suggestName() {
+    const base = V.Config.SERVER_URL.replace(/^ws/, 'http').replace(/\/ws$/, '');
+    let name = randomName();
+    for (let i = 0; i < 6; i++) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 2500);
+        const res = await fetch(`${base}/name-available?name=${encodeURIComponent(name)}`, { signal: ctrl.signal });
+        clearTimeout(t);
+        if ((await res.json()).available) return name;
+      } catch {
+        return name; // sin conexión: cualquier nombre sirve para jugar solo
+      }
+      name = randomName();
+    }
+    return name;
   }
   function writeSave() {
     if (G.started) storeSave(G.player.cls, Game.serialize());
@@ -136,7 +164,7 @@
       Game.setTarget(ud.mob);
       Game.attackTarget();
     } else if (ud.npc) {
-      Game.talkTo(ud.npc);
+      Game.selectNpc(ud.npc);
     } else {
       Game.moveTo(hit.point);
     }
@@ -268,14 +296,26 @@
       btnReset.hidden = false;
       saveInfo.textContent = `${save.name} · ${def.name} de nivel ${save.level}`;
     } else {
-      if (!nameInput.dataset.touched) nameInput.value = 'Viajero';
+      if (!nameInput.dataset.touched) newRandomName();
       btnStart.textContent = 'Crear personaje';
       btnReset.hidden = true;
       saveInfo.textContent = '';
     }
   }
+  let nameReq = 0;
+  function newRandomName() {
+    const req = ++nameReq;
+    nameInput.value = randomName();
+    suggestName().then((n) => {
+      if (req === nameReq && !nameInput.dataset.touched) nameInput.value = n;
+    });
+  }
   classBtns.forEach((b) => b.addEventListener('click', () => selectClass(b.dataset.cls)));
   nameInput.addEventListener('input', () => (nameInput.dataset.touched = '1'));
+  document.getElementById('btnDice').addEventListener('click', () => {
+    delete nameInput.dataset.touched;
+    newRandomName();
+  });
   selectClass(lastClass() || CLASS_IDS.find((c) => loadSave(c)) || 'guerrero');
 
   btnReset.addEventListener('click', () => {
@@ -342,6 +382,7 @@
           cls,
           save: data,
           onSave: (d) => storeSave(d.cls, d),
+          onToken: (token) => storeSave(cls, { ...data, ...(Game.serialize() || {}), name, cls, token }),
           onLost: () => {
             G.keys = {};
             document.getElementById('netLost').hidden = false;

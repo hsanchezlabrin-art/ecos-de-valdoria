@@ -13,6 +13,7 @@ on:
       - 'juego/src/sim.js'
       - 'fly.toml'
       - '.dockerignore'
+      - 'test/**'
       - '.github/workflows/servidor.yml'
   workflow_dispatch:
 
@@ -55,6 +56,18 @@ jobs:
       - name: Crear la app si no existe
         if: steps.token.outputs.skip != 'true'
         run: flyctl status --app "$APP" > /dev/null 2>&1 || flyctl apps create "$APP" --org personal
+
+      - name: Disco persistente (registro de nombres)
+        if: steps.token.outputs.skip != 'true'
+        run: |
+          if ! flyctl volumes list --app "$APP" --json | jq -e '.[] | select(.name == "valdoria_data")' > /dev/null; then
+            echo "Creando el disco valdoria_data (1 GB) en gru"
+            flyctl volumes create valdoria_data --region gru --size 1 --app "$APP" --yes
+            # Las máquinas creadas antes del disco no lo tienen montado: se recrean en el despliegue
+            for id in $(flyctl machine list --app "$APP" --json | jq -r '.[].id'); do
+              flyctl machine destroy "$id" --force --app "$APP"
+            done
+          fi
 
       - name: Desplegar
         if: steps.token.outputs.skip != 'true'

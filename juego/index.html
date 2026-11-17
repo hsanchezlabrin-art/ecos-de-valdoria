@@ -222,6 +222,9 @@
   .lead { margin: 0; font-size: 17px; line-height: 1.5; color: #ddd1b8; max-width: 38ch; }
   #start label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
   #nameInput { font: 700 18px var(--display); color: var(--parch); background: rgba(0,0,0,.5); border: 1px solid var(--edge); padding: 10px 12px; border-radius: 3px; user-select: text; }
+  .name-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  #btnDice { width: 48px; border: 1px solid var(--edge); border-radius: 3px; background: rgba(0,0,0,.5); font-size: 20px; }
+  #btnDice:hover { border-color: var(--gold); }
   .pick-label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
   .class-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .class-pick button { display: grid; justify-items: center; gap: 4px; padding: 10px 8px; background: rgba(0,0,0,.45); border: 1px solid var(--edge-soft); border-radius: 3px; font: 700 14px var(--display); letter-spacing: .04em; color: var(--muted); transition: border-color .15s, background .15s, color .15s; }
@@ -283,6 +286,30 @@
   @media (orientation: portrait) { body.touch #rotate { display: grid; } }
 
   .tclose { margin-left: auto; width: 26px; height: 26px; font-size: 13px; }
+  .tf-title { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+  .target-frame[data-lv="npc"] { border-color: var(--gold); }
+  .target-frame[data-lv="npc"] .lvl { color: var(--gold); border-color: var(--gold); font-size: 13px; }
+  .target-frame[data-lv="npc"] #tName { color: #e6d6ff; }
+  .np.np-npc.is-target { color: var(--gold); text-decoration: underline; text-underline-offset: 3px; }
+  .np.np-npc.is-target::before { content: '▼ '; font-size: 9px; vertical-align: 2px; }
+
+  /* Ficha de objeto */
+  .item-menu { position: fixed; z-index: 8; width: 240px; padding: 12px; display: grid; gap: 6px; background: var(--panel-solid); border: 1px solid var(--edge); border-radius: 3px; box-shadow: inset 0 0 0 1px #000, 0 14px 40px rgba(0,0,0,.6); }
+  .item-menu[hidden] { display: none; }
+  .im-head { display: grid; grid-template-columns: 42px 1fr; gap: 10px; align-items: center; margin-bottom: 2px; }
+  .im-head .islot { width: 42px; font-size: 20px; color: var(--r); }
+  .im-head strong { display: block; font-size: 15px; line-height: 1.2; }
+  .im-head small { display: block; font-size: 12px; color: var(--muted); }
+  .im-stat { margin: 0; font-size: 14px; color: #8fd37a; font-weight: 700; }
+  .im-req { margin: 0; font-size: 12px; color: var(--muted); }
+  .im-desc { margin: 0; font-size: 13px; color: #cfc3aa; font-style: italic; }
+  .im-warn { margin: 0; font-size: 13px; color: #ff8b78; font-weight: 700; }
+  .im-actions { display: grid; gap: 6px; margin-top: 4px; }
+  .im-actions button { padding: 9px 10px; border: 1px solid var(--edge); border-radius: 3px; background: #1a1d22; font-weight: 700; color: var(--parch); }
+  .im-actions button.buy { background: #1d1a12; color: var(--gold); }
+  .im-actions button:disabled { opacity: .4; cursor: not-allowed; }
+  .im-actions button:hover:not(:disabled) { border-color: var(--gold); }
+  body.touch .im-actions button { padding: 12px 10px; font-size: 15px; }
   .touch-only { display: none; }
 
   /* ---------- HUD táctil al estilo de los MMORPG móviles ----------
@@ -369,6 +396,7 @@
 
   <section class="frame target-frame" id="tFrame" hidden aria-label="Objetivo">
     <div class="tf-head"><span class="lvl" id="tLvl"></span><span id="tName"></span><button class="x tclose" id="tClose" aria-label="Soltar objetivo">✕</button></div>
+    <div class="tf-title" id="tTitle" hidden></div>
     <div class="bar hp"><i id="tHpFill"></i><span id="tHpTxt"></span></div>
   </section>
 
@@ -403,6 +431,8 @@
     <ul id="shopList"></ul>
     <p class="hint">Vende el botín haciendo clic en tu inventario mientras la tienda está abierta.</p>
   </section>
+
+  <div class="item-menu" id="itemMenu" hidden role="dialog" aria-label="Opciones del objeto"></div>
 
   <section class="panel" id="tradePanel" hidden role="dialog" aria-modal="true" aria-labelledby="trTitle">
     <header><h2 id="trTitle">Comprar</h2><button class="x" id="trCancelX" aria-label="Cancelar" onclick="document.getElementById('trCancel').click()">✕</button></header>
@@ -474,7 +504,10 @@
     <p class="lead">Siete tierras rodean la Aldea de Brezal. Caza, sube de nivel, consigue mejor equipo y enfréntate a Tharmok en el pantano.</p>
     <p id="saveInfo"></p>
     <label for="nameInput">Nombre del personaje</label>
-    <input id="nameInput" maxlength="16" value="Viajero" autocomplete="off" spellcheck="false">
+    <div class="name-row">
+      <input id="nameInput" maxlength="16" value="" autocomplete="off" spellcheck="false">
+      <button type="button" id="btnDice" title="Otro nombre al azar" aria-label="Otro nombre al azar">🎲</button>
+    </div>
     <span class="pick-label">Clase</span>
     <div class="class-pick" role="group" aria-label="Clase">
       <button type="button" data-cls="guerrero"><b>⚔︎</b>Guerrero</button>

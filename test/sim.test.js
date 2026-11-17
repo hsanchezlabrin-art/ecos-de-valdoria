@@ -84,7 +84,21 @@ for (const cls of Data.CLASS_IDS) {
   ok(!w.mobs.some((m) => m.aggro === b), 'al salir Beto, los monstruos lo olvidan');
 }
 
-// 3) Reglas de la tienda: hay que estar junto al mercader
+// 3) Hablar con un NPC lejano: el jugador camina hasta él y la conversación ocurre al llegar
+{
+  const w = Sim.createWorld();
+  const p = Sim.addPlayer(w, Sim.newCharacter('Viajero', 'guerrero'));
+  C.talkTo(w, p, 'sanadora');
+  let talked = false;
+  for (let t = 0; t < 6 && !talked; t += DT) {
+    Sim.step(w, DT);
+    talked = Sim.drainEvents(w).some((e) => e.type === 'log' && e.text.startsWith('Ilwen'));
+  }
+  ok(talked, 'al llegar junto a la Sanadora, ella responde');
+  ok(!p.moving && p.interact === null, 'el jugador se detiene al llegar');
+}
+
+// 4) Reglas de la tienda: hay que estar junto al mercader
 {
   const w = Sim.createWorld();
   const p = Sim.addPlayer(w, Sim.newCharacter('Cliente', 'mago'));

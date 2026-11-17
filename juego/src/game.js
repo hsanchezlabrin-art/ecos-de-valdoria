@@ -93,10 +93,11 @@
     if (net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify(msg));
   }
 
-  function startOnline({ url, name, cls, save, onSave, onLost }) {
+  function startOnline({ url, name, cls, save, onSave, onLost, onToken }) {
     online = true;
     net.onSave = onSave;
     net.onLost = onLost;
+    net.onToken = onToken;
     G.mobs = [];
     return new Promise((resolve, reject) => {
       let ready = false;
@@ -152,6 +153,10 @@
             break;
           case 'save':
             gotSave(msg.d);
+            break;
+          case 'token':
+            // Llave del nombre: se guarda junto al personaje para poder volver a usarlo
+            if (net.onToken) net.onToken(msg.token);
             break;
         }
       };
@@ -391,7 +396,22 @@
 
   const sync = () => (G.target = P ? P.target : null);
 
+  // NPC seleccionado (solo visual, en el cliente): anillo dorado, marco y nombre subrayado
+  G.npcSel = null;
+  function selectNpc(id) {
+    const npc = G.world.npcs.find((n) => n.id === id);
+    if (!npc || P.dead) return;
+    if (online) {
+      P.target = null;
+      send({ t: 'target', id: null });
+    } else C.setTarget(W, P, null);
+    sync();
+    G.npcSel = npc;
+    talkTo(id);
+  }
+
   function setTarget(m) {
+    G.npcSel = null;
     if (online) {
       P.target = m && !m.dead ? m : null;
       send({ t: 'target', id: P.target ? P.target.id : null });
@@ -425,6 +445,7 @@
   const countItem = (id) => Sim.countItem(P, id);
   // Con la tienda abierta, el clic en el inventario abre el diálogo de venta (confirmación y cantidad)
   const clickInventory = (i) => (UI.shopOpen() ? UI.openTrade('sell', i) : act(() => C.useItem(W, P, i), { t: 'use', i }));
+  const useItem = (i) => act(() => C.useItem(W, P, i), { t: 'use', i });
   const sellItem = (i, q) => act(() => C.sellItem(W, P, i, q), { t: 'sell', i, q });
   const unequip = (k) => act(() => C.unequip(W, P, k), { t: 'unequip', k });
   const buyItem = (id, q) => act(() => C.buyItem(W, P, id, q), { t: 'buy', id, q });
@@ -619,11 +640,20 @@
       G.scene.add(targetRing);
     }
     const t = G.target;
-    targetRing.visible = !!t && !t.dead && !t.hidden;
-    if (targetRing.visible) {
-      targetRing.position.set(t.pos.x, t.pos.y + 0.1, t.pos.z);
-      targetRing.scale.setScalar(0.9 + (t.def.scale || 1) * 0.6);
-      targetRing.material.color.setHex(t.def.aggressive ? 0xff5a4a : 0xf2cf5b);
+    const npc = G.npcSel;
+    if (npc) {
+      const np = npc.root.position;
+      targetRing.visible = true;
+      targetRing.position.set(np.x, np.y + 0.1, np.z);
+      targetRing.scale.setScalar(1.45 + Math.sin(G.time * 4) * 0.06);
+      targetRing.material.color.setHex(0xd9b56a);
+    } else {
+      targetRing.visible = !!t && !t.dead && !t.hidden;
+      if (targetRing.visible) {
+        targetRing.position.set(t.pos.x, t.pos.y + 0.1, t.pos.z);
+        targetRing.scale.setScalar(0.9 + (t.def.scale || 1) * 0.6);
+        targetRing.material.color.setHex(t.def.aggressive ? 0xff5a4a : 0xf2cf5b);
+      }
     }
     if (!shieldBubble) {
       shieldBubble = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 12), new THREE.MeshBasicMaterial({ color: 0x8fb8ff, transparent: true, opacity: 0.18, depthWrite: false }));
@@ -715,7 +745,7 @@
   V.Game = {
     newCharacter, createPlayer, serialize, spawnMobs, startOnline, sendChat,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, useSkill, countItem, usePotion,
-    clickInventory, sellItem, unequip, buyItem, respawnPlayer, update,
+    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, selectNpc,
     get online() {
       return online;
     },

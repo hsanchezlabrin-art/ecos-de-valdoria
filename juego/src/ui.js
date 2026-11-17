@@ -58,10 +58,15 @@ function initUI() {
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => togglePanel(b.dataset.close, false)));
   bindTrade();
   $('tClose').onclick = () => V.Game.setTarget(null);
+  // La ficha de objeto se cierra al tocar fuera de ella
+  document.addEventListener('pointerdown', (e) => {
+    const menu = $('itemMenu');
+    if (!menu.hidden && !menu.contains(e.target) && !e.target.closest('.islot')) closeItemMenu();
+  });
 
   myPlate = addStatic(G.player.pos, G.player.model.height + 0.5, G.player.name, 'np-player', 40);
   myPlate.id = G.player.id;
-  for (const n of G.world.npcs) addStatic(n.root.position, 2.9, n.name, 'np-npc', 40);
+  for (const n of G.world.npcs) addStatic(n.root.position, 2.9, n.name, 'np-npc', 40).npcId = n.id;
   for (const s of G.world.signs) addStatic(s.pos, s.height, s.text, 'np-sign', 26);
 
   // Chat (solo en línea): Enter abre, Enter envía, Esc cierra
@@ -223,6 +228,7 @@ function updateNameplates() {
   }
   for (const s of statics) {
     const d = Math.hypot(s.pos.x - cam.x, s.pos.z - cam.z);
+    if (s.npcId) s.el.classList.toggle('is-target', !!G.npcSel && G.npcSel.id === s.npcId);
     const gone = (s.pos === p.pos && p.dead) || (s.ent && s.ent.dead);
     place(s.el, d < s.maxDist && !gone ? project(s.pos, s.height) : null);
   }
@@ -413,6 +419,10 @@ function bindTrade() {
 
 function closeAll() {
   let closed = false;
+  if (!$('itemMenu').hidden) {
+    closeItemMenu();
+    return true;
+  }
   if (trade) {
     closeTrade();
     return true;
@@ -436,7 +446,7 @@ function itemTitle(it) {
   return lines.join('\n');
 }
 
-function slotEl(id, qty, onClick, extraCls = '') {
+function slotEl(id, qty, onClick, extraCls = '', onQuick = null) {
   const b = document.createElement('button');
   b.className = `islot ${extraCls}`;
   if (id) {
@@ -446,16 +456,127 @@ function slotEl(id, qty, onClick, extraCls = '') {
     b.title = itemTitle(it) + (shopOpen() ? `\nVender: ${sellPrice(it)} oro` : '');
     b.innerHTML = `<span class="glyph"></span>${qty > 1 ? `<span class="qty">${qty}</span>` : ''}`;
     b.firstChild.textContent = it.glyph;
-    b.addEventListener('click', onClick);
+    b.addEventListener('click', (e) => onClick(e, b));
+    if (onQuick) {
+      // Clic derecho o doble clic: equipar / usar / vender al instante
+      b.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        closeItemMenu();
+        onQuick();
+      });
+      b.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        closeItemMenu();
+        onQuick();
+      });
+    }
   } else {
     b.disabled = true;
   }
   return b;
 }
 
+// ---------- Ficha de objeto: detalles y acciones (Equipar, Usar, Vender, Quitar) ----------
+
+function equipProblem(it) {
+  const p = G.player;
+  if (it.cls && it.cls !== p.cls) return `Solo para la clase ${CLASSES[it.cls].name}`;
+  if (it.lvl && p.level < it.lvl) return `Necesitas nivel ${it.lvl} (tienes ${p.level})`;
+  return '';
+}
+
+function openItemMenu(anchor, source) {
+  const p = G.player;
+  const id = source.equipped ? p.equip[source.equipped] : p.inv[source.index] && p.inv[source.index].id;
+  if (!id) return;
+  const it = ITEMS[id];
+  const menu = $('itemMenu');
+  menu.innerHTML = '';
+  const add = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    menu.append(n);
+    return n;
+  };
+  const head = add('div', 'im-head');
+  const ic = document.createElement('span');
+  ic.className = 'islot filled';
+  ic.style.setProperty('--r', RARITY[it.rarity].color);
+  ic.textContent = it.glyph;
+  const nm = document.createElement('div');
+  const strong = document.createElement('strong');
+  strong.textContent = it.name;
+  strong.style.color = RARITY[it.rarity].color;
+  const small = document.createElement('small');
+  const qty = source.equipped ? '' : p.inv[source.index].qty > 1 ? ` · ×${p.inv[source.index].qty}` : '';
+  small.textContent = `${RARITY[it.rarity].name}${source.equipped ? ' · Equipado' : ''}${qty}`;
+  nm.append(strong, small);
+  head.append(ic, nm);
+
+  const stats = [];
+  if (it.atk) stats.push(`Ataque +${it.atk}`);
+  if (it.def) stats.push(`Defensa +${it.def} · Vida +${it.hp}`);
+  if (it.type === 'potion') stats.push(it.desc);
+  for (const s of stats) add('p', 'im-stat', s);
+  if (it.cls || it.lvl) {
+    const req = [it.cls ? `Clase: ${CLASSES[it.cls].name}` : '', it.lvl ? `Nivel ${it.lvl}` : ''].filter(Boolean).join(' · ');
+    add('p', 'im-req', `Requiere: ${req}`);
+  }
+  if (it.type !== 'potion') add('p', 'im-desc', it.desc);
+
+  const actions = add('div', 'im-actions');
+  const btn = (label, fn, opts = {}) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    if (opts.primary) b.className = 'buy';
+    if (opts.disabled) b.disabled = true;
+    b.addEventListener('click', () => {
+      closeItemMenu();
+      fn();
+    });
+    actions.append(b);
+    return b;
+  };
+
+  if (source.equipped) {
+    btn('Quitar', () => unequip(source.equipped), { primary: true });
+  } else {
+    if (it.type === 'weapon' || it.type === 'armor') {
+      const problem = equipProblem(it);
+      btn('Equipar', () => V.Game.useItem(source.index), { primary: true, disabled: !!problem });
+      if (problem) actions.before(add('p', 'im-warn', problem));
+    } else if (it.type === 'potion') {
+      btn('Usar', () => V.Game.useItem(source.index), { primary: true });
+    }
+    if (shopOpen()) btn(`Vender · ${sellPrice(it)} oro`, () => openTrade('sell', source.index));
+  }
+  btn('Cerrar', () => {});
+
+  menu.hidden = false;
+  // Colocar junto al objeto, sin salirse de la pantalla
+  const r = anchor.getBoundingClientRect();
+  const w = menu.offsetWidth;
+  const h = menu.offsetHeight;
+  let x = r.left - w - 8;
+  if (x < 8) x = Math.min(innerWidth - w - 8, r.right + 8);
+  const y = Math.max(8, Math.min(innerHeight - h - 8, r.top - 8));
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  const first = menu.querySelector('.im-actions button:not(:disabled)');
+  if (first) first.focus();
+}
+
+function closeItemMenu() {
+  const menu = $('itemMenu');
+  if (menu) menu.hidden = true;
+}
+
 function refreshPanels() {
   if (!E) return;
   const p = G.player;
+  closeItemMenu(); // el inventario cambió: la ficha abierta podría apuntar a otra casilla
   if (!E.inv.hidden) {
     const s = p.stats;
     $('invStats').innerHTML = '';
@@ -481,7 +602,7 @@ function refreshPanels() {
       const wrap = document.createElement('div');
       wrap.className = 'eq';
       const id = p.equip[key];
-      wrap.append(slotEl(id, 1, () => unequip(key), 'equipped'));
+      wrap.append(slotEl(id, 1, (e, b) => openItemMenu(b, { equipped: key }), 'equipped', () => unequip(key)));
       const t = document.createElement('div');
       const lab = document.createElement('small');
       lab.textContent = label;
@@ -496,11 +617,14 @@ function refreshPanels() {
     grid.innerHTML = '';
     for (let i = 0; i < 30; i++) {
       const slot = p.inv[i];
-      grid.append(slotEl(slot && slot.id, slot && slot.qty, () => clickInventory(i)));
+      grid.append(slotEl(slot && slot.id, slot && slot.qty, (e, b) => openItemMenu(b, { index: i }), '', () => clickInventory(i)));
     }
+    const touch = V.Mobile && V.Mobile.isTouch;
     $('invHint').textContent = shopOpen()
-      ? 'Tienda abierta: haz clic en un objeto para venderlo.'
-      : 'Clic en un objeto para usarlo o equiparlo. Clic en el equipo para quitártelo.';
+      ? 'Tienda abierta: toca un objeto para venderlo o equiparlo.'
+      : touch
+        ? 'Toca un objeto para ver sus opciones: equipar, usar o quitar.'
+        : 'Clic en un objeto para ver sus opciones. Clic derecho o doble clic: equipar o usar al instante.';
   }
   if (!E.shop.hidden) {
     const list = $('shopList');
@@ -637,12 +761,28 @@ function updateUI() {
   E.buffs.hidden = !buff;
 
   const t = G.target;
-  E.tFrame.hidden = !t || t.dead || t.hidden;
-  if (t && !t.dead && !t.hidden) {
-    E.tLvl.textContent = t.lvl;
-    E.tName.textContent = t.def.name;
-    E.tFrame.dataset.lv = levelClass(t.lvl - p.level);
-    bar(E.tHp, E.tHpT, t.hp, t.maxHp);
+  const npc = G.npcSel;
+  const tBar = E.tHp.parentElement;
+  const tTitle = $('tTitle');
+  if (npc) {
+    // NPC seleccionado: nombre y oficio, sin barra de vida
+    E.tFrame.hidden = false;
+    E.tFrame.dataset.lv = 'npc';
+    E.tLvl.textContent = '✦';
+    E.tName.textContent = npc.name;
+    tTitle.textContent = `${npc.title} · Haz clic para hablar`;
+    tTitle.hidden = false;
+    tBar.hidden = true;
+  } else {
+    tTitle.hidden = true;
+    tBar.hidden = false;
+    E.tFrame.hidden = !t || t.dead || t.hidden;
+    if (t && !t.dead && !t.hidden) {
+      E.tLvl.textContent = t.lvl;
+      E.tName.textContent = t.def.name;
+      E.tFrame.dataset.lv = levelClass(t.lvl - p.level);
+      bar(E.tHp, E.tHpT, t.hp, t.maxHp);
+    }
   }
 
   updateHotbar();
