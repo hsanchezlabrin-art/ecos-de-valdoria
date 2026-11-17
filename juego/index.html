@@ -464,7 +464,7 @@
   #dropList .islot { width: 34px; font-size: 16px; color: var(--r); }
   #dropList .pct { font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; }
   #mapPanel { left: 50%; transform: translate(-50%, -50%); width: min(760px, calc(100% - 24px)); z-index: 6; }
-  #bigmap { width: 100%; height: auto; max-height: calc(100vh - 150px); aspect-ratio: 1; display: block; margin: 0 auto; border: 1px solid var(--edge-soft); border-radius: 3px; cursor: grab; touch-action: none; background: #1d251a; }
+  #bigmap { width: min(100%, calc(100vh - 150px)); height: auto; aspect-ratio: 1; display: block; margin: 0 auto; border: 1px solid var(--edge-soft); border-radius: 3px; cursor: grab; touch-action: none; background: #1d251a; }
   .map-tools { display: flex; align-items: center; gap: 6px; }
   #invitePanel { left: 50%; top: 22%; transform: translateX(-50%); width: min(340px, calc(100% - 24px)); z-index: 7; text-align: center; }
   #invitePanel p { margin: 0 0 12px; font-size: 16px; }
@@ -487,6 +487,23 @@
   body.touch #hotbar .slot:nth-child(8) { left: 175px; top: 48px; }
   body.touch .menu-btns button { height: 46px; }
   body.touch #btnHelp { display: none; }
+
+  /* Pantallas medianas: el menú pasa bajo el minimapa para no tapar la barra de habilidades */
+  @media (max-width: 1180px) {
+    body:not(.touch) .menu-btns { bottom: auto; top: calc(250px + env(safe-area-inset-top, 0px)); }
+    body:not(.touch) .menu-btns button { padding: 6px 10px; font-size: 13px; }
+  }
+
+  /* Celulares bajos: menú solo con íconos para no tocar el arco de habilidades */
+  @media (max-height: 440px) {
+    body.touch .menu-btns { gap: 4px; }
+    body.touch .menu-btns button { width: 42px; height: 42px; padding: 0; font-size: 0; gap: 0; }
+    body.touch .menu-btns button::before { font-size: 19px; }
+    body.touch .mapbox { right: calc(58px + env(safe-area-inset-right, 0px)); gap: 2px; padding: 5px; }
+    body.touch #minimap { width: 88px; height: 88px; }
+    body.touch .mapbox .online { display: none; }
+    body.touch .mm-zoom { right: -6px; }
+  }
 </style>
 </head>
 <body>

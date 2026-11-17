@@ -932,5 +932,9 @@
     get connected() {
       return !!net.ws && net.ws.readyState === 1;
     },
+    // Para pruebas: corta la conexión como si se cayera la red
+    simulateDrop() {
+      if (net.ws) net.ws.close();
+    },
   };
 })();
