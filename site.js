@@ -400,6 +400,23 @@
     }
   }
 
+  // Resalta la descarga del sistema del visitante y apunta el botón principal a ella
+  function detectOS() {
+    const ua = navigator.userAgent || '';
+    const os = /Mac|iPhone|iPad/.test(ua) ? 'mac' : /Windows/.test(ua) ? 'win' : null;
+    if (!os) return;
+    const card = document.querySelector(`.platform[data-os="${os}"]`);
+    if (!card) return;
+    card.classList.add('mine');
+    card.querySelector('.badge').hidden = false;
+    card.parentElement.prepend(card);
+    const label = document.getElementById('heroDl');
+    if (label) label.textContent = os === 'mac' ? 'Descargar para Mac' : 'Descargar para Windows';
+    const heroBtn = label && label.closest('a');
+    if (heroBtn) heroBtn.href = card.querySelector('.dl-link').href;
+  }
+
+  detectOS();
   hero();
   classCards();
   worldMap();

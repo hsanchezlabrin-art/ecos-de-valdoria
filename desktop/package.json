@@ -1,7 +1,7 @@
 {
   "name": "ecos-de-valdoria",
   "productName": "Ecos de Valdoria",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "RPG de fantasía en 3D",
   "author": "hsanchezlabrin-art",
   "license": "UNLICENSED",
@@ -9,7 +9,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --publish never"
+    "dist": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never"
   },
   "devDependencies": {
     "electron": "33.2.1",
@@ -35,6 +36,26 @@
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "build/icon.png",
       "artifactName": "EcosDeValdoria-Setup.${ext}"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["universal"] }],
+      "icon": "build/icon.png",
+      "category": "public.app-category.role-playing-games",
+      "artifactName": "EcosDeValdoria-Mac.${ext}",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Ecos de Valdoria",
+      "background": "build/dmgBackground.png",
+      "icon": "build/icon.png",
+      "iconSize": 96,
+      "window": { "width": 600, "height": 380 },
+      "contents": [
+        { "x": 160, "y": 200, "type": "file" },
+        { "x": 440, "y": 200, "type": "link", "path": "/Applications" }
+      ]
     },
     "nsis": {
       "oneClick": false,

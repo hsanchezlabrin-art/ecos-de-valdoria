@@ -137,4 +137,25 @@ $g.Dispose()
 Save-Bmp24 $bmp (Join-Path $out 'installerHeader.bmp')
 $bmp.Dispose()
 
+# ---------- Fondo de la ventana del .dmg de macOS 600x380 ----------
+$c = New-Canvas 600 380; $bmp = $c[0]; $g = $c[1]
+Fill-Slate $g 600 380 300 150
+$rnd = New-Object System.Random 11
+for ($i = 0; $i -lt 40; $i++) {
+  $x = $rnd.Next(10, 590); $y = $rnd.Next(240, 372); $a = $rnd.Next(50, 170)
+  $g.FillEllipse((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb($a, 255, 160, 80))), $x, $y, 2.5, 2.5)
+}
+$sf = New-Object System.Drawing.StringFormat; $sf.Alignment = 'Center'
+$g.DrawString('ECOS DE', (New-Object System.Drawing.Font('Georgia', 11, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)), (New-Object System.Drawing.SolidBrush($muted)), (New-Object System.Drawing.RectangleF(0, 34, 600, 16)), $sf)
+$g.DrawString('VALDORIA', (New-Object System.Drawing.Font('Georgia', 30, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)), (New-Object System.Drawing.SolidBrush($gold)), (New-Object System.Drawing.RectangleF(0, 50, 600, 40)), $sf)
+$g.DrawString('Arrastra el juego a la carpeta Aplicaciones', (New-Object System.Drawing.Font('Georgia', 13, [System.Drawing.FontStyle]::Italic, [System.Drawing.GraphicsUnit]::Pixel)), (New-Object System.Drawing.SolidBrush($parch)), (New-Object System.Drawing.RectangleF(0, 300, 600, 20)), $sf)
+# Flecha de bronce entre el ícono del juego (x=160) y Aplicaciones (x=440)
+$pen = New-Object System.Drawing.Pen($gold, 3)
+$pen.EndCap = [System.Drawing.Drawing2D.LineCap]::ArrowAnchor
+$g.DrawLine($pen, 236, 200, 364, 200)
+$g.DrawRectangle((New-Object System.Drawing.Pen($goldDark, 1)), 6, 6, 587, 367)
+$g.Dispose()
+$bmp.Save((Join-Path $out 'dmgBackground.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+$bmp.Dispose()
+
 Get-ChildItem $out | Select-Object Name, Length

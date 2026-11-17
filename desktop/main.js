@@ -36,7 +36,19 @@ function createMain() {
     icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
-  Menu.setApplicationMenu(null);
+  if (process.platform === 'darwin') {
+    // macOS necesita un menú para Cmd+Q, copiar/pegar en el chat y pantalla completa
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        { role: 'appMenu' },
+        { role: 'editMenu' },
+        { label: 'Ver', submenu: [{ role: 'togglefullscreen', label: 'Pantalla completa' }] },
+        { role: 'windowMenu' },
+      ])
+    );
+  } else {
+    Menu.setApplicationMenu(null);
+  }
   win.loadFile(path.join(__dirname, 'app', 'index.html'));
 
   // F11 pantalla completa · Ctrl+Shift+I herramientas de desarrollo

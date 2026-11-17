@@ -1,7 +1,7 @@
-# Compila el instalador de Windows y lo publica como Release.
-# Se ejecuta al subir una etiqueta de versión (git tag v0.2.0 && git push --tags)
+# Compila los instaladores de Windows y macOS y los publica como Release.
+# Se ejecuta al subir una etiqueta de versión (git tag v0.3.0 && git push origin v0.3.0)
 # o a mano desde la pestaña Actions de GitHub.
-name: Instalador de Windows
+name: Instaladores
 
 on:
   push:
@@ -12,8 +12,18 @@ permissions:
   contents: write
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+            file: desktop/dist/EcosDeValdoria-Setup.exe
+          - os: macos-latest
+            target: --mac
+            file: desktop/dist/EcosDeValdoria-Mac.dmg
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -22,44 +32,52 @@ jobs:
           node-version: 20
 
       - name: Copiar el juego dentro de la app
-        shell: pwsh
+        shell: bash
         run: |
-          Copy-Item -Recurse juego desktop/app
-          if ("${{ github.ref_type }}" -eq "tag") {
-            $v = "${{ github.ref_name }}".TrimStart('v')
-            Push-Location desktop
-            npm version $v --no-git-tag-version --allow-same-version
-            Pop-Location
-          }
+          cp -R juego desktop/app
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            (cd desktop && npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version)
+          fi
 
       - name: Instalar dependencias
         working-directory: desktop
         run: npm install --no-audit --no-fund
 
-      - name: Compilar instalador
+      - name: Compilar
         working-directory: desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --win --publish never
+        run: npx electron-builder ${{ matrix.target }} --publish never
 
-      - name: Guardar instalador como artefacto
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: EcosDeValdoria-Setup
-          path: desktop/dist/EcosDeValdoria-Setup.exe
+          name: instalador-${{ matrix.os }}
+          path: ${{ matrix.file }}
 
-      - name: Publicar Release
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
         with:
           name: Ecos de Valdoria ${{ github.ref_name }}
-          files: desktop/dist/EcosDeValdoria-Setup.exe
+          files: |
+            dist/EcosDeValdoria-Setup.exe
+            dist/EcosDeValdoria-Mac.dmg
           make_latest: true
           body: |
-            Instalador para Windows 10 y 11 (64 bits). No requiere permisos de administrador.
+            **Windows 10 y 11 (64 bits)** · `EcosDeValdoria-Setup.exe` · no requiere permisos de administrador.
+            Si Windows muestra «Windows protegió su PC», pulsa **Más información → Ejecutar de todas formas**.
 
-            1. Descarga **EcosDeValdoria-Setup.exe**.
-            2. Si Windows muestra "Windows protegió su PC", pulsa **Más información → Ejecutar de todas formas** (el instalador aún no está firmado).
-            3. Sigue el asistente y abre el juego desde el acceso directo del escritorio.
+            **macOS 11 o superior (Apple Silicon e Intel)** · `EcosDeValdoria-Mac.dmg`.
+            Abre el .dmg y arrastra el juego a Aplicaciones. Como la app aún no está firmada por Apple, la primera vez:
+            haz clic derecho sobre el juego → **Abrir** → **Abrir**. Si macOS dice que la app «está dañada», abre Terminal y ejecuta:
+            `xattr -cr "/Applications/Ecos de Valdoria.app"`
 
             Guía del juego: https://ecos-de-valdoria.vercel.app/guia.html

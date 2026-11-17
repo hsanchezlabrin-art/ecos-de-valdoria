@@ -4,7 +4,9 @@ RPG de fantasía en 3D para Windows, hecho con three.js y Electron.
 Tres clases (Guerrero, Arquera y Mago), siete tierras alrededor de la Aldea de Brezal y un jefe final, Tharmok.
 
 - Web y guía: https://ecos-de-valdoria.vercel.app
-- Descarga: https://github.com/hsanchezlabrin-art/ecos-de-valdoria/releases/latest
+- Jugar en el navegador: https://ecos-de-valdoria.vercel.app/jugar
+- Descargas (Windows y macOS): https://github.com/hsanchezlabrin-art/ecos-de-valdoria/releases/latest
+- Servidor en línea (Fly.io): https://ecos-de-valdoria.fly.dev/status
 
 ## Estructura
 

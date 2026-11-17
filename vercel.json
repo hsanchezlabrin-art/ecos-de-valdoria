@@ -1,0 +1,5 @@
+{
+  "redirects": [
+    { "source": "/jugar", "destination": "/juego/", "permanent": false }
+  ]
+}

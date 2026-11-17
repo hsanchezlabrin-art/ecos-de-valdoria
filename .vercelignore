@@ -1,5 +1,4 @@
-# La web solo muestra el juego y las guías: el juego jugable se descarga, no se sirve aquí.
-juego/index.html
+# La web muestra el juego, las guías y la versión jugable en el navegador (/jugar).
 desktop
 server
 test
