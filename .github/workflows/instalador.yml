@@ -26,7 +26,9 @@ jobs:
               desktop/dist/EcosDeValdoria-Setup.exe
               desktop/dist/EcosDeValdoria-Setup.exe.blockmap
               desktop/dist/latest.yml
-          - os: macos-latest
+          # Equipos Mac Intel: los Apple Silicon (macos-latest) suelen estar saturados en GitHub.
+          # La app es universal igual: funciona en Mac Intel y Apple Silicon.
+          - os: macos-15-intel
             target: --mac
             files: |
               desktop/dist/EcosDeValdoria-Mac.dmg
