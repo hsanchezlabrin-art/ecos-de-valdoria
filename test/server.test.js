@@ -49,6 +49,8 @@ async function main() {
     const cheat = { cls: 'arquera', level: 999, gold: -50, xp: 1e12, inv: [{ id: 'no_existe', qty: 5 }, { id: 'pocion_vida', qty: 3 }], equip: { weapon: 'filo_crepusculo', armor: 'egida' }, pos: { x: 0, z: 5 } };
     const a = await client('Ana<script>', 'arquera', cheat);
     const b = await client('Beto', 'guerrero', null);
+    // Ciro está lejos de todo (más allá del radio de visión de 72 m)
+    const far = await client('Ciro', 'mago', { cls: 'mago', level: 3, pos: { x: -120, z: 95 } });
     ok(a.id && b.id && a.id !== b.id, 'dos jugadores reciben identificadores distintos');
     const proto = await client('Proto', '__proto__', { cls: '__proto__', inv: [{ id: '__proto__', qty: 1 }] });
     const protoRow = proto.last.p.find((r) => r[0] === proto.id);
@@ -91,7 +93,9 @@ async function main() {
     await wait(6000);
     const hits = b.events.filter((e) => e.type === 'float' && e.ent === boar[0]);
     ok(hits.length > 0, `el servidor calcula el daño de Beto al jabalí (${hits.length} golpes)`);
-    ok(!a.events.some((e) => e.type === 'float' && e.ent === boar[0]), 'Ana no recibe eventos de un combate lejano');
+    ok(!far.events.some((e) => e.type === 'float' && e.ent === boar[0]), 'Ciro, lejos, no recibe eventos de ese combate');
+    ok(!far.last.p.some((r) => r[0] === b.id), 'Ciro no ve a Beto a más de 72 m');
+    far.ws.close();
 
     // Ajenos al protocolo: mensajes basura no rompen el servidor
     b.ws.send('{esto no es json');
