@@ -1,0 +1,38 @@
+# Diagnóstico del servidor en Fly.io: estado de la máquina, eventos (reinicios, salidas,
+# falta de memoria) y últimos registros. Se ejecuta a mano desde Actions o al cambiar este archivo.
+name: Diagnóstico del servidor
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnostico.yml'
+
+env:
+  APP: ecos-de-valdoria
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Estado de la app
+        run: flyctl status --app "$APP" || true
+
+      - name: Máquinas
+        run: flyctl machine list --app "$APP" || true
+
+      - name: Eventos de la máquina (reinicios, salidas, memoria)
+        run: |
+          for id in $(flyctl machine list --app "$APP" --json | jq -r '.[].id'); do
+            echo "=== Máquina $id ==="
+            flyctl machine status "$id" --app "$APP" || true
+            flyctl machine status "$id" --app "$APP" --display-config | jq '{restart: .config.restart, services: [.config.services[]? | {autostop: .autostop, autostart: .autostart, min: .min_machines_running}], guest: .config.guest}' || true
+          done
+
+      - name: Últimos registros
+        run: flyctl logs --app "$APP" --no-tail | tail -n 300 || true
