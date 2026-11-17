@@ -1,5 +1,6 @@
 # Servidor de juego en Fly.io. Se despliega solo desde GitHub Actions (servidor.yml).
 # El mundo vive en memoria: debe haber exactamente UNA máquina encendida siempre.
+# Estado: https://ecos-de-valdoria.fly.dev/status
 app = "ecos-de-valdoria"
 primary_region = "gru" # São Paulo: la región de Fly más cercana a Chile
 
