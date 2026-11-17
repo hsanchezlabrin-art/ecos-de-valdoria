@@ -145,13 +145,15 @@
       if (net.onLost) net.onLost(net.kicked);
       return;
     }
-    // Reconexión automática: hasta 8 intentos con espera creciente
+    // Reconexión automática: hasta 20 intentos (unos 90 s). Si el servidor se estaba
+    // reiniciando, vuelve en 2-3 s y el jugador sigue donde estaba.
     if (net.reconnecting) return;
     net.reconnecting = true;
     G.keys = {};
+    G.joy = null;
     if (net.onReconnect) net.onReconnect('start');
-    for (let i = 0; i < 8; i++) {
-      await new Promise((r) => setTimeout(r, Math.min(8000, 1000 * (i + 1))));
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, i === 0 ? 400 : Math.min(6000, 700 * i)));
       try {
         await connect(net.url);
         send({ t: 'resume', v: PROTOCOL, session: net.session });

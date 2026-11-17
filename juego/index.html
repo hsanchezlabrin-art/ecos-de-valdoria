@@ -504,6 +504,34 @@
     body.touch .mapbox .online { display: none; }
     body.touch .mm-zoom { right: -6px; }
   }
+
+  /* ---------- v0.4.1: interfaz táctil más compacta ----------
+     Se reduce cada elemento fijo según el alto de la pantalla (no los nombres flotantes). */
+  body.touch { --ui: .8; }
+  @media (max-height: 500px) { body.touch { --ui: .66; } }
+  @media (max-height: 400px) { body.touch { --ui: .6; } }
+  body.touch .player-frame, body.touch .party-frame, body.touch .target-frame, body.touch .mapbox,
+  body.touch #log, body.touch #hotbar, body.touch .menu-btns, body.touch #joystick,
+  body.touch #btnAttack, body.touch #btnTarget, body.touch #btnChat, body.touch .panel,
+  body.touch .item-menu, body.touch #banner, body.touch #reconnecting, body.touch #death > div, body.touch #netLost > div {
+    zoom: var(--ui);
+  }
+  /* Con la reducción general ya no hace falta achicar a mano el grupo de acción */
+  body.touch #hotbar { transform: none; }
+  body.touch #btnAttack { right: calc(27px + env(safe-area-inset-right, 0px)); bottom: calc(25px + env(safe-area-inset-bottom, 0px)); width: 92px; height: 92px; font-size: 17px; }
+  body.touch #btnTarget { right: calc(318px + env(safe-area-inset-right, 0px)); }
+  body.touch #joystick { width: 132px; height: 132px; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
+  body.touch #joyKnob { width: 58px; height: 58px; }
+  body.touch #log { height: 92px; width: min(380px, 44vw); }
+  body.touch .party-frame { top: calc(118px + env(safe-area-inset-top, 0px)); }
+
+  /* Objetivo: botón pequeño junto a Atacar (como en los MMORPG móviles), no en el centro */
+  body.touch #btnTarget { right: calc(140px + env(safe-area-inset-right, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); padding: 7px 14px; font-size: 14px; border-radius: 4px; }
+  /* Barra de chat fija bajo los mensajes, abajo a la izquierda */
+  body.touch #log { height: 128px; width: min(440px, 48vw); gap: 6px; font-size: 14px; }
+  body.touch #logLines { font-size: 14px; }
+  body.touch #log #chatInput, body.touch #log #chatInput:not(.open) { display: block; position: static; width: 100%; z-index: auto; font-size: 16px; padding: 7px 10px; background: rgba(0,0,0,.55); border: 1px solid var(--edge-soft); border-radius: 3px; }
+  body.touch #joystick { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
 </style>
 </head>
 <body>
@@ -655,7 +683,6 @@
   <div id="joystick" hidden aria-label="Joystick de movimiento"><div id="joyKnob"></div></div>
   <button id="btnAttack" class="touch-only" aria-label="Atacar">Atacar</button>
   <button id="btnTarget" class="touch-only" aria-label="Siguiente objetivo">Objetivo</button>
-  <button id="btnChat" class="touch-only" aria-label="Escribir en el chat">Chat</button>
   <div id="labels"></div>
   <div id="floats"></div>
 </div>

@@ -60,20 +60,23 @@
     let id = null;
     let cx = 0;
     let cy = 0;
-    const R = 46;
+    let radius = 46;
 
     const move = (e) => {
       let dx = e.clientX - cx;
       let dy = e.clientY - cy;
       const len = Math.hypot(dx, dy);
-      if (len > R) {
-        dx = (dx / len) * R;
-        dy = (dy / len) * R;
+      if (len > radius) {
+        dx = (dx / len) * radius;
+        dy = (dy / len) * radius;
       }
-      knob.style.transform = `translate(${dx}px, ${dy}px)`;
-      const k = Math.min(1, len / R);
-      G.joy = k < 0.18 ? null : { x: dx / R, y: dy / R };
+      // La perilla se mueve en el espacio del joystick (que puede estar escalado)
+      const k = pad.offsetWidth ? pad.offsetWidth / pad.getBoundingClientRect().width : 1;
+      knob.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+      const amount = Math.min(1, len / radius);
+      G.joy = amount < 0.18 ? null : { x: dx / radius, y: dy / radius };
     };
+    // Soltar: deja de caminar pase lo que pase
     const end = () => {
       id = null;
       G.joy = null;
@@ -84,22 +87,32 @@
     pad.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (id !== null) return;
+      // Un toque nuevo siempre manda (si quedó uno "fantasma", se reemplaza)
       id = e.pointerId;
       const r = pad.getBoundingClientRect();
       cx = r.left + r.width / 2;
       cy = r.top + r.height / 2;
+      radius = r.width * 0.35;
       try {
         pad.setPointerCapture(id);
       } catch {
-        /* sin captura: igual funciona mientras el dedo siga sobre el joystick */
+        /* sin captura: los avisos llegan igual a la ventana */
       }
       pad.classList.add('active');
       move(e);
     });
-    pad.addEventListener('pointermove', (e) => e.pointerId === id && move(e));
-    pad.addEventListener('pointerup', (e) => e.pointerId === id && end());
-    pad.addEventListener('pointercancel', (e) => e.pointerId === id && end());
+    // Se escucha en toda la ventana: si el dedo sale del círculo, igual se detecta al soltar
+    addEventListener('pointermove', (e) => e.pointerId === id && move(e), { passive: true });
+    addEventListener('pointerup', (e) => e.pointerId === id && end());
+    addEventListener('pointercancel', (e) => e.pointerId === id && end());
+    pad.addEventListener('lostpointercapture', (e) => e.pointerId === id && end());
+    // Respaldo: sin dedos en la pantalla, el joystick siempre queda suelto
+    addEventListener('touchend', (e) => e.touches.length === 0 && end(), { passive: true });
+    addEventListener('touchcancel', (e) => e.touches.length === 0 && end(), { passive: true });
+    // Si la app pasa a segundo plano o pierde el foco
+    addEventListener('blur', end);
+    addEventListener('pagehide', end);
+    document.addEventListener('visibilitychange', () => document.hidden && end());
   }
 
   // ---------- Zoom con dos dedos ----------
@@ -149,15 +162,6 @@
       Game.attackTarget();
     });
     $('btnTarget').addEventListener('click', () => Game.targetNearest());
-    // Chat: el botón abre el campo de texto (en celular no hay tecla Enter a mano)
-    const chatBtn = $('btnChat');
-    const input = $('chatInput');
-    chatBtn.hidden = !Game.online;
-    chatBtn.addEventListener('click', () => {
-      input.classList.add('open');
-      input.focus();
-    });
-    input.addEventListener('blur', () => input.classList.remove('open'));
   }
 
   function onStart(canvas) {

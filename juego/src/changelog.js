@@ -8,6 +8,17 @@
 })(function () {
   return [
     {
+      version: '0.4.1',
+      date: '2026-11-17',
+      title: 'Joystick y celulares',
+      items: [
+        'Arreglado: el joystick a veces quedaba pegado y el personaje seguía caminando solo.',
+        'Interfaz en celulares con proporciones de MMORPG móvil: más compacta, deja ver más del mundo.',
+        'Barra de chat fija abajo a la izquierda; el botón Objetivo pasa junto a Atacar.',
+        'Reconexión más rápida y con más intentos si el servidor se reinicia.',
+      ],
+    },
+    {
       version: '0.4.0',
       date: '2026-11-17',
       title: 'Cuentas, grupos y un mundo más sólido',
