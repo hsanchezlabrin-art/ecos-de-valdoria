@@ -257,7 +257,6 @@ const shopOpen = () => !!E && !E.shop.hidden;
 function openShop() {
   togglePanel('shop', true);
   togglePanel('inv', true);
-  log('Orlen: «Pociones frescas y acero honrado. ¿Qué necesitas?»', 'npc');
 }
 
 function closeAll() {

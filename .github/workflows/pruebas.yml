@@ -1,0 +1,20 @@
+# Ejecuta la simulación del juego en Node (sin gráficos) en cada push.
+# Garantiza que la lógica sigue funcionando fuera del navegador, como la usará el servidor online.
+name: Pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  simulacion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Simulación sin gráficos
+        run: node test/sim.test.js

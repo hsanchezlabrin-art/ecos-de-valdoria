@@ -1,7 +1,14 @@
 // Datos del juego: clases, zonas, monstruos, objetos, habilidades, NPCs y fórmulas.
 // Todo el contenido vive aquí. La web de guías lee este mismo archivo, así que lo que
-// cambies aquí se refleja en la guía automáticamente.
-(function () {
+// cambies aquí se refleja en la guía automáticamente. Funciona en el navegador (V.Data)
+// y en Node (require), para que el servidor use exactamente las mismas reglas.
+(function (factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else {
+    const V = (globalThis.V = globalThis.V || {});
+    V.Data = factory();
+  }
+})(function () {
   const MAX_LEVEL = 20;
   const xpToNext = (lvl) => Math.floor(42 * Math.pow(lvl, 1.85) + 18);
 
@@ -203,8 +210,8 @@
     },
   ];
 
-  V.Data = {
+  return {
     MAX_LEVEL, xpToNext, CLASSES, CLASS_IDS, playerBaseStats, mobStats, ZONES, MOBS, RARITY, ITEMS,
     WEAPON_TIERS, resolveDrop, shopFor, sellPrice, NPCS,
   };
-})();
+});

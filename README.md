@@ -17,6 +17,18 @@ Tres clases (Guerrero, Arquera y Mago), siete tierras alrededor de la Aldea de B
 
 `juego/src/data.js` es la única fuente de clases, habilidades, zonas, monstruos, objetos y NPCs. La guía de la web se genera a partir de ese archivo.
 
+### Arquitectura (preparada para el modo online)
+
+| Archivo | Rol | Corre en |
+| --- | --- | --- |
+| `data.js` | Reglas y contenido | Navegador y Node |
+| `terrain.js` | Alturas del terreno, aldea y zonas | Navegador y Node |
+| `sim.js` | Simulación completa: jugadores, monstruos, combate, habilidades, botín, NPCs. Multijugador, sin gráficos. Emite eventos | Navegador y Node (futuro servidor) |
+| `game.js` | Cliente: envía comandos a la simulación y dibuja su estado y eventos | Navegador |
+| `models.js`, `world.js`, `ui.js`, `main.js` | Modelos 3D, escenario, interfaz y arranque | Navegador |
+
+`test/sim.test.js` ejecuta la simulación en Node con bots de las tres clases y varios jugadores. Corre en GitHub Actions en cada push (`node test/sim.test.js`).
+
 ## Publicar una versión
 
 1. Sube los cambios a `main` (Vercel actualiza la web solo).
