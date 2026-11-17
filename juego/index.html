@@ -378,6 +378,115 @@
     #invPanel, #shopPanel { width: 300px; }
   }
   @media (prefers-reduced-motion: reduce) { .ft, #banner.show { animation-duration: .01s; } }
+
+  /* ---------- v0.4: pantalla de inicio con cuenta, selector y creador ---------- */
+  #start { gap: 3vw; justify-content: space-between; padding-right: max(16px, 4vw); }
+  .start-card { max-height: calc(100vh - 32px); overflow-y: auto; padding: 4px 6px 4px 0; scrollbar-width: thin; }
+  .view { display: grid; gap: 10px; }
+  .view[hidden] { display: none; }
+  .view label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+  .view label.check { display: flex; align-items: center; gap: 8px; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--parch); }
+  .view input:not([type=checkbox]) { font: 600 17px var(--body); color: var(--parch); background: rgba(0,0,0,.5); border: 1px solid var(--edge); padding: 10px 12px; border-radius: 3px; user-select: text; }
+  .view input:focus { outline: none; border-color: var(--gold); }
+  .view input[hidden], .view label[hidden] { display: none; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--edge-soft); }
+  .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px; font: 700 15px var(--display); letter-spacing: .05em; color: var(--muted); }
+  .tabs button.on { color: var(--gold); border-bottom-color: var(--gold); }
+  #authForm { display: grid; gap: 6px; }
+  #btnAuth, #btnPlay, #btnCreate { background: linear-gradient(#c79f52, #8a6d3b); color: #15110a; border: 1px solid #e6c77d; padding: 12px 18px; font: 700 17px var(--display); letter-spacing: .08em; border-radius: 3px; margin-top: 4px; }
+  #btnAuth:disabled, #btnPlay:disabled, #btnCreate:disabled { filter: grayscale(.6); opacity: .65; cursor: wait; }
+  .view-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .view-head h2 { margin: 0; font: 700 22px var(--display); color: var(--gold); }
+  .muted { color: var(--muted); font-size: 14px; }
+  .row-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ghost { background: rgba(0,0,0,.45); border: 1px solid var(--edge-soft); color: var(--parch); padding: 8px 12px; border-radius: 3px; font-weight: 700; font-size: 14px; }
+  .ghost:hover { border-color: var(--gold); }
+  .ghost.danger { color: #ff9a88; }
+  .char-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .char-list li button { width: 100%; display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; background: rgba(0,0,0,.45); border: 1px solid var(--edge-soft); border-radius: 3px; }
+  .char-list li button.on { border-color: var(--gold); background: rgba(217,181,106,.12); }
+  .char-list .cg { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--edge); border-radius: 50%; font-size: 18px; color: var(--gold); background: #0c0e11; }
+  .char-list strong { display: block; font: 700 16px var(--display); color: var(--parch); }
+  .char-list small { color: var(--muted); font-size: 13px; }
+  .char-list .lv { font: 700 14px var(--display); color: var(--gold); }
+  .char-list .empty { padding: 14px; text-align: center; color: var(--muted); border: 1px dashed var(--edge-soft); border-radius: 3px; }
+  .class-pick button span { pointer-events: none; }
+  .news { font-size: 14px; color: var(--muted); }
+  .news summary { cursor: pointer; color: var(--gold); font-weight: 700; }
+  .news h3 { margin: 10px 0 4px; font: 700 14px var(--display); color: var(--parch); }
+  .news ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+  .preview { position: relative; flex: 0 1 min(440px, 42vw); align-self: stretch; display: grid; grid-template-rows: 1fr auto auto; padding: 24px 0; }
+  .preview[hidden] { display: none; }
+  .preview canvas { width: 100%; height: 100%; min-height: 260px; cursor: grab; touch-action: none; }
+  .pv-info { display: grid; justify-items: center; gap: 2px; text-align: center; padding: 10px 14px; background: rgba(10,12,15,.72); border: 1px solid var(--edge-soft); border-radius: 3px; }
+  .pv-info strong { font: 700 22px var(--display); color: var(--gold); }
+  .pv-info span { font-size: 14px; color: var(--muted); }
+  .pv-info ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; font-size: 13px; font-weight: 700; }
+  .pv-hint { margin: 6px 0 0; text-align: center; font-size: 12px; color: var(--muted); }
+  @media (max-width: 760px) { .preview { display: none !important; } }
+
+  /* ---------- HUD v0.4 ---------- */
+  .bar.air { height: 10px; }
+  .bar.air i { background: linear-gradient(#bfe6ff, #5aa8e0); }
+  .bar.air span { font-size: 9px; }
+  .party-frame { top: calc(140px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: 210px; padding: 6px 8px 8px; display: grid; gap: 6px; }
+  .party-frame header { display: flex; align-items: center; justify-content: space-between; font: 700 12px var(--display); letter-spacing: .1em; color: var(--gold); text-transform: uppercase; }
+  .party-frame .pm { display: grid; gap: 2px; padding: 4px 6px; border: 1px solid #23211d; border-radius: 2px; background: rgba(0,0,0,.3); cursor: pointer; }
+  .party-frame .pm .nm { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; font-weight: 700; }
+  .party-frame .pm .nm b { color: var(--gold); font-weight: 700; }
+  .party-frame .pm .bar { height: 7px; }
+  .party-frame .pm.dead { opacity: .5; }
+  .party-frame .pm .kick { border: 0; background: none; color: var(--muted); font-size: 11px; padding: 0 2px; }
+  .mini { background: #1a1d22; border: 1px solid var(--edge-soft); border-radius: 2px; color: var(--parch); font-size: 12px; font-weight: 700; padding: 3px 8px; }
+  .mini:hover { border-color: var(--gold); }
+  .tinfo { width: 26px; height: 26px; font: italic 700 14px Georgia, serif; color: var(--gold); margin-left: auto; }
+  .tinfo + .tclose { margin-left: 4px; }
+  .tf-actions { display: flex; gap: 6px; }
+  .tf-actions .buy { flex: 1; padding: 6px 8px; font-size: 13px; }
+  .target-frame[data-lv="player"] { border-color: #7fb6ff; }
+  .target-frame[data-lv="player"] .lvl { color: #7fb6ff; border-color: #7fb6ff; }
+  .mm-wrap { position: relative; }
+  .mm-zoom { position: absolute; right: -4px; bottom: 2px; display: grid; gap: 3px; }
+  .mm-zoom button { width: 22px; height: 22px; padding: 0; border: 1px solid var(--edge); border-radius: 3px; background: #0b0d10; font-weight: 700; line-height: 1; color: var(--gold); }
+  #minimap { cursor: zoom-in; }
+  #statPanel { left: calc(12px + env(safe-area-inset-left, 0px)); width: 320px; }
+  .st-head { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .st-head strong { display: block; font: 700 18px var(--display); }
+  .st-head small { color: var(--muted); font-size: 13px; }
+  .st-grid { display: grid; grid-template-columns: 1fr auto; gap: 5px 14px; margin: 0; font-size: 14px; }
+  .st-grid dt { color: var(--muted); }
+  .st-grid dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+  .st-grid dt.sep, .st-grid dd.sep { border-top: 1px solid #23211d; padding-top: 6px; margin-top: 2px; }
+  .st-grid .up { color: #8fd37a; }
+  #dropPanel { left: 50%; transform: translate(-50%, -50%); width: min(340px, calc(100% - 24px)); z-index: 6; }
+  #dropList { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+  #dropList li { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; font-size: 14px; }
+  #dropList .islot { width: 34px; font-size: 16px; color: var(--r); }
+  #dropList .pct { font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; }
+  #mapPanel { left: 50%; transform: translate(-50%, -50%); width: min(760px, calc(100% - 24px)); z-index: 6; }
+  #bigmap { width: 100%; height: auto; max-height: calc(100vh - 150px); aspect-ratio: 1; display: block; margin: 0 auto; border: 1px solid var(--edge-soft); border-radius: 3px; cursor: grab; touch-action: none; background: #1d251a; }
+  .map-tools { display: flex; align-items: center; gap: 6px; }
+  #invitePanel { left: 50%; top: 22%; transform: translateX(-50%); width: min(340px, calc(100% - 24px)); z-index: 7; text-align: center; }
+  #invitePanel p { margin: 0 0 12px; font-size: 16px; }
+  #reconnecting { position: fixed; z-index: 9; top: calc(70px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 8px 16px; background: var(--panel-solid); border: 1px solid var(--gold); border-radius: 3px; color: var(--parch); font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  #reconnecting[hidden] { display: none; }
+  .spin { width: 14px; height: 14px; border: 2px solid var(--edge-soft); border-top-color: var(--gold); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ft.poison { color: #9be05a; }
+  .ft.stun { color: #ffe38a; font-size: 15px; }
+  .ft.lvlup { color: #ffd36b; font: 700 30px var(--display); text-shadow: 0 0 12px rgba(255,200,90,.8), 0 2px 3px #000; animation-duration: 2.2s; }
+  #log p.chat-party { color: #8fe0a0; }
+  #log p.chat-party b { color: #b9f0c4; }
+  body.touch .party-frame { top: calc(104px + env(safe-area-inset-top, 0px)); width: 180px; }
+  body.touch #chatInput { display: none; }
+  body.touch #chatInput.open { display: block; }
+  /* Botones táctiles: 8 casillas (anillo interior: habilidades 1-4; exterior: 5, 6 y pociones) */
+  body.touch #hotbar .slot:nth-child(5) { left: 48px; top: 175px; }
+  body.touch #hotbar .slot:nth-child(6) { left: 72px; top: 117px; }
+  body.touch #hotbar .slot:nth-child(7) { left: 117px; top: 72px; }
+  body.touch #hotbar .slot:nth-child(8) { left: 175px; top: 48px; }
+  body.touch .menu-btns button { height: 46px; }
+  body.touch #btnHelp { display: none; }
 </style>
 </head>
 <body>
@@ -391,45 +500,80 @@
     <div class="bar hp"><i id="pHpFill"></i><span id="pHpTxt"></span></div>
     <div class="bar mp"><i id="pMpFill"></i><span id="pMpTxt"></span></div>
     <div class="bar xp"><i id="pXpFill"></i><span id="pXpTxt"></span></div>
+    <div class="bar air" id="pAir" hidden><i id="pAirFill"></i><span id="pAirTxt">Aire</span></div>
     <div id="buffs" hidden></div>
   </section>
 
+  <section class="frame party-frame" id="partyFrame" hidden aria-label="Grupo">
+    <header><span>Grupo</span><button type="button" class="mini" id="btnPartyLeave">Salir</button></header>
+    <div id="partyList"></div>
+  </section>
+
   <section class="frame target-frame" id="tFrame" hidden aria-label="Objetivo">
-    <div class="tf-head"><span class="lvl" id="tLvl"></span><span id="tName"></span><button class="x tclose" id="tClose" aria-label="Soltar objetivo">✕</button></div>
+    <div class="tf-head"><span class="lvl" id="tLvl"></span><span id="tName"></span><button class="x tinfo" id="tInfo" title="Botín posible (Shift + clic)" aria-label="Ver botín posible">i</button><button class="x tclose" id="tClose" aria-label="Soltar objetivo">✕</button></div>
     <div class="tf-title" id="tTitle" hidden></div>
     <div class="bar hp"><i id="tHpFill"></i><span id="tHpTxt"></span></div>
+    <div class="tf-actions" id="tActions" hidden><button type="button" class="buy" id="btnInvite">Invitar al grupo</button></div>
   </section>
 
   <section class="frame mapbox" aria-label="Mapa">
     <div class="zone" id="zoneName">Aldea de Brezal</div>
-    <canvas id="minimap" width="180" height="180"></canvas>
+    <div class="mm-wrap">
+      <canvas id="minimap" width="180" height="180" title="Abrir mapa (M)"></canvas>
+      <div class="mm-zoom"><button type="button" id="mmIn" aria-label="Acercar mapa">+</button><button type="button" id="mmOut" aria-label="Alejar mapa">−</button></div>
+    </div>
     <div class="gold"><b id="goldTxt">0</b> oro</div>
     <div class="online" id="onlineTxt" hidden></div>
   </section>
 
   <section class="frame" id="log">
     <div id="logLines" aria-live="polite"></div>
-    <input id="chatInput" maxlength="160" placeholder="Pulsa Enter para escribir en el chat" autocomplete="off" spellcheck="false" enterkeyhint="send" hidden>
+    <input id="chatInput" maxlength="160" placeholder="Enter para hablar · #texto para el grupo · /invitar Nombre" autocomplete="off" spellcheck="false" enterkeyhint="send">
   </section>
   <nav id="hotbar" aria-label="Habilidades"></nav>
   <div class="menu-btns">
     <button id="btnInv" data-icon="▣">Inventario <kbd>I</kbd></button>
+    <button id="btnStats" data-icon="♙">Estado <kbd>C</kbd></button>
+    <button id="btnMap" data-icon="⌖">Mapa <kbd>M</kbd></button>
     <button id="btnHelp" data-icon="?">Controles <kbd>H</kbd></button>
     <button id="btnFull" data-icon="⛶" hidden>Pantalla completa <kbd>⛶</kbd></button>
   </div>
 
   <section class="panel" id="invPanel" hidden>
     <header><h2>Inventario</h2><button class="x" data-close="inv" aria-label="Cerrar">✕</button></header>
-    <dl id="invStats"></dl>
     <div id="invEquip"></div>
     <div id="invGrid"></div>
     <p class="hint" id="invHint"></p>
+  </section>
+
+  <section class="panel" id="statPanel" hidden>
+    <header><h2>Estado</h2><button class="x" data-close="stats" aria-label="Cerrar">✕</button></header>
+    <div class="st-head"><span class="lvl" id="stLvl">1</span><div><strong id="stName"></strong><small id="stClass"></small></div></div>
+    <dl class="st-grid" id="statList"></dl>
+    <p class="hint">Los golpes críticos hacen daño extra. Tu probabilidad de crítico depende de tu clase, de tu arma y de algunas habilidades.</p>
   </section>
 
   <section class="panel" id="shopPanel" hidden>
     <header><h2>Mercader Orlen</h2><button class="x" data-close="shop" aria-label="Cerrar">✕</button></header>
     <ul id="shopList"></ul>
     <p class="hint">Vende el botín haciendo clic en tu inventario mientras la tienda está abierta.</p>
+  </section>
+
+  <section class="panel" id="dropPanel" hidden>
+    <header><h2 id="dropTitle">Botín</h2><button class="x" data-close="drop" aria-label="Cerrar">✕</button></header>
+    <ul id="dropList"></ul>
+    <p class="hint">Probabilidad de que suelte cada objeto al morir. Las armas se adaptan a tu clase.</p>
+  </section>
+
+  <section class="panel" id="mapPanel" hidden>
+    <header><h2>Mapa de Valdoria</h2><div class="map-tools"><button type="button" class="mini" id="mapIn" aria-label="Acercar">+</button><button type="button" class="mini" id="mapOut" aria-label="Alejar">−</button><button type="button" class="mini" id="mapCenter">Centrar</button><button class="x" data-close="map" aria-label="Cerrar">✕</button></div></header>
+    <canvas id="bigmap" width="720" height="720"></canvas>
+    <p class="hint">Arrastra para mover el mapa · rueda o + / − para acercar · tú eres la flecha blanca, tu grupo los puntos verdes.</p>
+  </section>
+
+  <section class="panel" id="invitePanel" hidden role="dialog" aria-labelledby="inviteText">
+    <p id="inviteText"></p>
+    <div class="tr-actions"><button type="button" class="buy" id="inviteYes">Aceptar</button><button type="button" class="btn" id="inviteNo">Rechazar</button></div>
   </section>
 
   <div class="item-menu" id="itemMenu" hidden role="dialog" aria-label="Opciones del objeto"></div>
@@ -460,21 +604,23 @@
   <section class="panel" id="helpPanel" hidden>
     <header><h2>Controles</h2><button class="x" data-close="help" aria-label="Cerrar">✕</button></header>
     <dl class="keys">
-      <dt>Clic izquierdo</dt><dd>Moverte al punto o atacar al monstruo</dd>
+      <dt>Clic izquierdo</dt><dd>Moverte, atacar a un monstruo, hablar con un NPC o seleccionar a un jugador</dd>
+      <dt>Shift + clic</dt><dd>Ver el botín que puede soltar un monstruo</dd>
       <dt>Arrastrar</dt><dd>Girar la cámara (botón izquierdo o derecho)</dd>
       <dt>Rueda</dt><dd>Acercar o alejar la cámara</dd>
       <dt>W A S D</dt><dd>Caminar respecto a la cámara</dd>
-      <dt>Tab</dt><dd>Seleccionar el monstruo más cercano</dd>
-      <dt>F</dt><dd>Atacar al objetivo</dd>
-      <dt>1 – 4</dt><dd>Habilidades (se desbloquean en los niveles 1, 3, 5 y 8)</dd>
-      <dt>5 · 6</dt><dd>Poción de vida · Poción de maná</dd>
-      <dt>I · H</dt><dd>Inventario · Esta ayuda</dd>
+      <dt>Tab · F</dt><dd>Siguiente monstruo · Atacar al objetivo</dd>
+      <dt>1 – 6</dt><dd>Habilidades (niveles 1, 3, 5, 8, 11 y 15)</dd>
+      <dt>7 · 8</dt><dd>Poción de vida · Poción de maná</dd>
+      <dt>I · C · M · H</dt><dd>Inventario · Estado · Mapa · Esta ayuda</dd>
+      <dt>Enter</dt><dd>Chat. Empieza con # para hablar solo con tu grupo, o escribe /invitar Nombre</dd>
       <dt>Esc</dt><dd>Cerrar ventanas o soltar el objetivo</dd>
     </dl>
-    <p class="hint">En la aldea: el Mercader Orlen compra y vende, la Sanadora Ilwen te cura gratis y la Capitana Brisa te dice a qué zona ir. Haz clic sobre ellos para hablar. Los nombres en rojo son monstruos muy superiores a ti.</p>
+    <p class="hint">Para formar un grupo, selecciona a otro jugador y pulsa «Invitar al grupo». La experiencia se reparte entre los miembros cercanos, con un 10% extra por cada uno. En aguas profundas se acaba el aire: vuelve a la orilla.</p>
   </section>
 
   <div id="banner"></div>
+  <div id="reconnecting" hidden role="status"><span class="spin" aria-hidden="true"></span> Se cortó la conexión. Reconectando…</div>
   <div id="death" hidden>
     <div>
       <h2>Has caído</h2>
@@ -485,47 +631,88 @@
   <div id="netLost" hidden>
     <div>
       <h2>Conexión perdida</h2>
-      <p>Se cortó la conexión con el servidor de Valdoria. Tu progreso hasta el último guardado está a salvo.</p>
+      <p id="netLostMsg">No se pudo recuperar la conexión con el servidor. Tu personaje quedó guardado.</p>
       <button class="btn" id="btnReconnect">Volver al inicio</button>
     </div>
   </div>
   <div id="joystick" hidden aria-label="Joystick de movimiento"><div id="joyKnob"></div></div>
   <button id="btnAttack" class="touch-only" aria-label="Atacar">Atacar</button>
   <button id="btnTarget" class="touch-only" aria-label="Siguiente objetivo">Objetivo</button>
-  <button id="btnChat" class="touch-only" hidden aria-label="Escribir en el chat">Chat</button>
+  <button id="btnChat" class="touch-only" aria-label="Escribir en el chat">Chat</button>
   <div id="labels"></div>
   <div id="floats"></div>
 </div>
 
 <div id="start">
   <div class="start-card">
-    <p class="eyebrow" id="versionTag">Prototipo jugable · v0.3</p>
+    <p class="eyebrow" id="versionTag"></p>
     <h1>Ecos de Valdoria</h1>
-    <p class="lead">Siete tierras rodean la Aldea de Brezal. Caza, sube de nivel, consigue mejor equipo y enfréntate a Tharmok en el pantano.</p>
-    <p id="saveInfo"></p>
-    <label for="nameInput">Nombre del personaje</label>
-    <div class="name-row">
-      <input id="nameInput" maxlength="16" value="" autocomplete="off" spellcheck="false">
-      <button type="button" id="btnDice" title="Otro nombre al azar" aria-label="Otro nombre al azar">🎲</button>
-    </div>
-    <span class="pick-label">Clase</span>
-    <div class="class-pick" role="group" aria-label="Clase">
-      <button type="button" data-cls="guerrero"><b>⚔︎</b>Guerrero</button>
-      <button type="button" data-cls="arquera"><b>➶</b>Arquera</button>
-      <button type="button" data-cls="mago"><b>✺</b>Mago</button>
-    </div>
-    <p class="class-desc" id="classDesc"></p>
-    <span class="pick-label">Modo</span>
-    <div class="mode-pick" role="group" aria-label="Modo de juego">
-      <button type="button" data-mode="online"><b>●</b> En línea</button>
-      <button type="button" data-mode="offline">Un jugador</button>
-    </div>
-    <p class="net-msg" id="netMsg" role="status"></p>
-    <p class="ios-tip" id="iosTip" hidden>En iPhone, para jugar en pantalla completa: toca <b>Compartir</b> y luego <b>«Agregar a pantalla de inicio»</b>. Abre el juego desde ese ícono.</p>
-    <button id="btnStart">Entrar al mundo</button>
-    <button id="btnReset" hidden>Borrar personaje</button>
-    <p class="start-keys">Clic para moverte y atacar · Arrastra para girar la cámara · 1–4 habilidades · I inventario · H ayuda</p>
+
+    <!-- Cuenta -->
+    <section class="view" id="viewAuth">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-tab="login" class="on">Entrar</button>
+        <button type="button" role="tab" data-tab="register">Crear cuenta</button>
+      </div>
+      <form id="authForm" autocomplete="on" novalidate>
+        <label for="authUser">ID de cuenta</label>
+        <input id="authUser" name="username" maxlength="16" autocomplete="username" spellcheck="false" required>
+        <label for="authEmail" class="reg-only" hidden>Correo</label>
+        <input id="authEmail" class="reg-only" type="email" name="email" maxlength="120" autocomplete="email" hidden>
+        <label for="authPass">Contraseña</label>
+        <input id="authPass" type="password" name="password" maxlength="72" autocomplete="current-password" required>
+        <label class="check"><input type="checkbox" id="authRemember" checked> Recordarme en este equipo</label>
+        <p class="net-msg" id="authMsg" role="status"></p>
+        <button type="submit" id="btnAuth">Entrar</button>
+      </form>
+      <p class="ios-tip" id="iosTip" hidden>En iPhone, para jugar en pantalla completa: toca <b>Compartir</b> y luego <b>«Agregar a pantalla de inicio»</b>. Abre el juego desde ese ícono.</p>
+      <details class="news" id="news"><summary>Novedades</summary><div id="newsBody"></div></details>
+    </section>
+
+    <!-- Selector de personajes -->
+    <section class="view" id="viewChars" hidden>
+      <div class="view-head"><h2>Tus personajes</h2><span class="muted" id="acctName"></span></div>
+      <ul class="char-list" id="charList"></ul>
+      <p class="net-msg" id="charMsg" role="status"></p>
+      <button type="button" id="btnPlay">Entrar al mundo</button>
+      <div class="row-btns">
+        <button type="button" class="ghost" id="btnNewChar">Crear personaje</button>
+        <button type="button" class="ghost danger" id="btnDelChar">Borrar</button>
+        <button type="button" class="ghost" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </section>
+
+    <!-- Creador -->
+    <section class="view" id="viewCreate" hidden>
+      <div class="view-head"><h2>Nuevo personaje</h2></div>
+      <label for="nameInput">Nombre</label>
+      <div class="name-row">
+        <input id="nameInput" maxlength="16" autocomplete="off" spellcheck="false">
+        <button type="button" id="btnDice" title="Otro nombre al azar" aria-label="Otro nombre al azar">🎲</button>
+      </div>
+      <span class="pick-label">Sexo</span>
+      <div class="mode-pick sex-pick" role="group" aria-label="Sexo">
+        <button type="button" data-sex="m">Hombre</button>
+        <button type="button" data-sex="f">Mujer</button>
+      </div>
+      <span class="pick-label">Clase</span>
+      <div class="class-pick" role="group" aria-label="Clase">
+        <button type="button" data-cls="guerrero"><b>⚔︎</b><span>Guerrero</span></button>
+        <button type="button" data-cls="arquera"><b>➶</b><span>Arquera</span></button>
+        <button type="button" data-cls="mago"><b>✺</b><span>Mago</span></button>
+      </div>
+      <p class="class-desc" id="classDesc"></p>
+      <p class="net-msg" id="createMsg" role="status"></p>
+      <button type="button" id="btnCreate">Crear personaje</button>
+      <div class="row-btns"><button type="button" class="ghost" id="btnBack">Volver</button></div>
+    </section>
   </div>
+
+  <aside class="preview" id="preview" hidden>
+    <canvas id="previewCanvas" aria-label="Vista del personaje"></canvas>
+    <div class="pv-info"><strong id="pvName"></strong><span id="pvClass"></span><ul id="pvGear"></ul></div>
+    <p class="pv-hint">Arrastra para girar</p>
+  </aside>
 </div>
 
 <div id="rotate" role="alert">
@@ -547,13 +734,14 @@
 </div>
 
 <script src="./vendor/three.min.js"></script>
+<script src="./src/version.js"></script>
+<script src="./src/changelog.js"></script>
 <script src="./src/state.js"></script>
 <script src="./src/config.js"></script>
 <script src="./src/data.js"></script>
 <script src="./src/terrain.js"></script>
 <script src="./src/models.js"></script>
 <script src="./src/world.js"></script>
-<script src="./src/sim.js"></script>
 <script src="./src/ui.js"></script>
 <script src="./src/mobile.js"></script>
 <script src="./src/game.js"></script>

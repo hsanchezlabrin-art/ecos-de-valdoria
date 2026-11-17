@@ -3,7 +3,7 @@
 (function () {
 const { ZONES, NPCS } = V.Data;
 const { buildHumanoid, mat } = V.Models;
-const { WORLD, WORLD_LIMIT, VILLAGE_R, WATER_Y, FIELD_ZONES, ss, lerp, rng, pathDist, heightAt, inVillage, zoneAt } = V.Terrain;
+const { WORLD, WORLD_LIMIT, VILLAGE_R, WATER_Y, FIELD_ZONES, ss, lerp, rng, pathDist, heightAt, inVillage, zoneAt, layout } = V.Terrain;
 
 const THREE = window.THREE;
 
@@ -69,40 +69,7 @@ function buildSky(scene) {
 }
 
 function buildVegetation(scene) {
-  const r = rng(42);
-  const trunks = [];
-  const pines = [];
-  const rounds = [];
-  for (let i = 0; i < 5200; i++) {
-    const x = (r() - 0.5) * 2 * 182;
-    const z = (r() - 0.5) * 2 * 182;
-    const d = Math.hypot(x, z);
-    if (d > 182 || d < VILLAGE_R + 5) continue;
-    if (pathDist(x, z) < 4) continue;
-    const h = heightAt(x, z);
-    if (h < WATER_Y + 0.2) continue;
-    const zn = FIELD_ZONES.find((zz) => Math.hypot(x - zz.x, z - zz.z) < zz.r * 1.15);
-    let density = zn ? zn.trees : 0.16;
-    if (zn && zn.treeType !== 'pine' && Math.hypot(x - zn.x, z - zn.z) < zn.r * 0.5) density *= 0.2;
-    if (d > 150) density = 0.45;
-    if (r() > density) continue;
-    const type = zn ? zn.treeType : r() < 0.5 ? 'pine' : 'round';
-    const s = 0.8 + r() * 0.7;
-    const rot = r() * Math.PI * 2;
-    if (type === 'pine') {
-      trunks.push({ x, y: h, z, s, rot, c: 0x4a3626, tall: 1 });
-      pines.push({ x, y: h + 2.0 * s, z, s: s * 1.25, rot, c: r() < 0.5 ? 0x2d4a2a : 0x34552e });
-      pines.push({ x, y: h + 3.4 * s, z, s: s * 0.9, rot, c: 0x3a5e33 });
-    } else if (type === 'round') {
-      trunks.push({ x, y: h, z, s, rot, c: 0x5a4130, tall: 1 });
-      rounds.push({ x, y: h + 2.6 * s, z, s: s * 1.5, rot, c: r() < 0.5 ? 0x4f7a34 : 0x5e8a3a });
-    } else if (type === 'swamp') {
-      trunks.push({ x, y: h, z, s, rot, c: 0x3a3226, tall: 1.3 });
-      rounds.push({ x, y: h + 3.1 * s, z, s: s * 1.2, rot, c: 0x324a2a });
-    } else {
-      trunks.push({ x, y: h, z, s: s * 0.8, rot, c: 0x3d3835, tall: 1.6 });
-    }
-  }
+  const L = layout();
   const dummy = new THREE.Object3D();
   const col = new THREE.Color();
   const make = (geom, list, apply) => {
@@ -120,51 +87,30 @@ function buildVegetation(scene) {
   };
   const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 2.4, 6);
   trunkGeo.translate(0, 1.2, 0);
-  make(trunkGeo, trunks, (t) => {
+  make(trunkGeo, L.trunks, (t) => {
     dummy.position.set(t.x, t.y - 0.1, t.z);
     dummy.scale.set(t.s, t.s * t.tall, t.s);
     dummy.rotation.set(0, t.rot, t.tall > 1.4 ? 0.15 : 0);
   });
-  make(new THREE.ConeGeometry(1.5, 2.6, 7), pines, (t) => {
+  make(new THREE.ConeGeometry(1.5, 2.6, 7), L.pines, (t) => {
     dummy.position.set(t.x, t.y, t.z);
     dummy.scale.setScalar(t.s);
     dummy.rotation.set(0, t.rot, 0);
   });
-  make(new THREE.IcosahedronGeometry(1.2, 0), rounds, (t) => {
+  make(new THREE.IcosahedronGeometry(1.2, 0), L.rounds, (t) => {
     dummy.position.set(t.x, t.y, t.z);
     dummy.scale.set(t.s, t.s * 0.85, t.s);
     dummy.rotation.set(0, t.rot, 0);
   });
-
-  // Rocas
-  const rocks = [];
-  for (let i = 0; i < 420; i++) {
-    const x = (r() - 0.5) * 2 * 182;
-    const z = (r() - 0.5) * 2 * 182;
-    const d = Math.hypot(x, z);
-    if (d < VILLAGE_R + 3 || pathDist(x, z) < 3) continue;
-    const zn = FIELD_ZONES.find((zz) => Math.hypot(x - zz.x, z - zz.z) < zz.r);
-    const s = 0.4 + r() * (d > 150 ? 3 : 1.2);
-    rocks.push({ x, y: heightAt(x, z), z, s, rot: r() * 6, c: zn && zn.id === 'ceniza' ? 0x2f2c2a : 0x77716a });
-  }
-  make(new THREE.DodecahedronGeometry(1, 0), rocks, (t) => {
+  make(new THREE.DodecahedronGeometry(1, 0), L.rocks, (t) => {
     dummy.position.set(t.x, t.y + t.s * 0.3, t.z);
     dummy.scale.set(t.s, t.s * 0.7, t.s);
     dummy.rotation.set(t.rot, t.rot * 2, 0);
   });
 
   // Grietas de lava en la Llanura de Ceniza
-  const cz = ZONES.find((z) => z.id === 'ceniza');
-  const lava = [];
-  for (let i = 0; i < 46; i++) {
-    const a = r() * Math.PI * 2;
-    const rr = Math.sqrt(r()) * cz.r;
-    const x = cz.x + Math.cos(a) * rr;
-    const z = cz.z + Math.sin(a) * rr;
-    lava.push({ x, y: heightAt(x, z) + 0.04, z, s: 1 + r() * 2.5, rot: r() * 6, c: 0xff6a22 });
-  }
-  const lavaMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.1, 3), new THREE.MeshBasicMaterial({ color: 0xff7a2a }), lava.length);
-  lava.forEach((t, i) => {
+  const lavaMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.1, 3), new THREE.MeshBasicMaterial({ color: 0xff7a2a }), L.lava.length);
+  L.lava.forEach((t, i) => {
     dummy.position.set(t.x, t.y, t.z);
     dummy.scale.set(1, 1, t.s);
     dummy.rotation.set(0, t.rot, 0);
@@ -196,13 +142,12 @@ function campfire(scene, x, z, big = false) {
   return { light, flame, base: light.intensity };
 }
 
-function house(scene, x, z, rot, r) {
+function house(scene, h) {
+  const { x, z, rot, w, d } = h;
   const g = new THREE.Group();
   const y = heightAt(x, z);
   g.position.set(x, y, z);
   g.rotation.y = rot;
-  const w = 4.5 + r() * 2;
-  const d = 4 + r() * 1.5;
   const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 3, d), mat(0xd8c9a8));
   wall.position.y = 1.5;
   wall.castShadow = wall.receiveShadow = true;
@@ -212,7 +157,7 @@ function house(scene, x, z, rot, r) {
     b.position.set((sx * w) / 2, 1.5, d / 2 + 0.02);
     g.add(b);
   }
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.8, 2.4, 4), mat(r() < 0.5 ? 0x8a3b2b : 0x5d4a3a));
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.8, 2.4, 4), mat(h.roof));
   roof.position.y = 4.2;
   roof.rotation.y = Math.PI / 4;
   roof.scale.set(1, 1, d / w);
@@ -226,21 +171,9 @@ function house(scene, x, z, rot, r) {
 }
 
 function buildVillage(scene) {
-  const r = rng(5);
+  const L = layout();
   const fires = [campfire(scene, 0, 0, true)];
-  const pathAngles = FIELD_ZONES.map((zn) => Math.atan2(zn.z, zn.x));
-  const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
-  let placed = 0;
-  for (let i = 0; i < 24 && placed < 8; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    if (pathAngles.some((pa) => angDiff(a, pa) < 0.38)) continue;
-    if (i % 2) continue;
-    const rr = 15 + r() * 2;
-    const x = Math.cos(a) * rr;
-    const z = Math.sin(a) * rr;
-    house(scene, x, z, Math.atan2(-x, -z), r);
-    placed++;
-  }
+  for (const h of L.houses) house(scene, h);
 
   // Puesto del mercader
   const sx = 6.5;
@@ -271,7 +204,7 @@ function buildVillage(scene) {
   // Santuario de la sanadora: piedra con un cristal que brilla
   const sn = NPCS.find((n) => n.id === 'sanadora');
   const shrine = new THREE.Group();
-  shrine.position.set(sn.x * 1.22, heightAt(sn.x, sn.z), sn.z * 1.22);
+  shrine.position.set(L.shrine.x, heightAt(sn.x, sn.z), L.shrine.z);
   const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 0.9, 7), mat(0x8a8478));
   stone.position.y = 0.45;
   const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), mat(0xbff0d8, { emissive: 0x5ad0a0, emissiveIntensity: 1.2 }));
@@ -313,36 +246,20 @@ function buildVillage(scene) {
 }
 
 function buildCamps(scene) {
-  const fires = [];
-  // Campamento goblin: tiendas y fogata
-  const gz = ZONES.find((z) => z.id === 'goblin');
-  fires.push(campfire(scene, gz.x, gz.z));
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + 0.3;
-    const x = gz.x + Math.cos(a) * 9;
-    const z = gz.z + Math.sin(a) * 9;
-    const tent = new THREE.Mesh(new THREE.ConeGeometry(2, 2.6, 5), mat(i % 2 ? 0x7d6440 : 0x6a5233));
-    tent.position.set(x, heightAt(x, z) + 1.3, z);
+  const L = layout();
+  const fires = L.fires.filter((f) => f.x || f.z).map((f) => campfire(scene, f.x, f.z, f.big));
+  for (const t of L.tents) {
+    const tent = new THREE.Mesh(new THREE.ConeGeometry(2, 2.6, 5), mat(t.c));
+    tent.position.set(t.x, heightAt(t.x, t.z) + 1.3, t.z);
     tent.castShadow = true;
     scene.add(tent);
   }
-  // Fuerte orco: empalizada con dos entradas
-  const fz = ZONES.find((z) => z.id === 'fuerte');
-  fires.push(campfire(scene, fz.x, fz.z, true));
-  const logs = [];
-  for (let i = 0; i < 90; i++) {
-    const a = (i / 90) * Math.PI * 2;
-    if (Math.abs(Math.sin(a - 0.6)) < 0.12) continue;
-    logs.push(a);
-  }
-  const logGeo = new THREE.CylinderGeometry(0.32, 0.36, 4.4, 6);
-  const im = new THREE.InstancedMesh(logGeo, mat(0x4f3a28), logs.length);
+  // Empalizada del fuerte orco
+  const im = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.32, 0.36, 4.4, 6), mat(0x4f3a28), L.logs.length);
   const dummy = new THREE.Object3D();
-  logs.forEach((a, i) => {
-    const x = fz.x + Math.cos(a) * 21;
-    const z = fz.z + Math.sin(a) * 21;
-    dummy.position.set(x, heightAt(x, z) + 1.9, z);
-    dummy.rotation.set((Math.random() - 0.5) * 0.08, 0, (Math.random() - 0.5) * 0.08);
+  L.logs.forEach((l, i) => {
+    dummy.position.set(l.x, heightAt(l.x, l.z) + 1.9, l.z);
+    dummy.rotation.set(Math.sin(i * 7.1) * 0.04, 0, Math.cos(i * 3.7) * 0.04);
     dummy.updateMatrix();
     im.setMatrixAt(i, dummy.matrix);
   });

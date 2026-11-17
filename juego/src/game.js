@@ -1,50 +1,228 @@
-// Cliente del juego: conecta la simulación con lo que se ve.
+// Cliente del juego en línea: cuenta, personajes, conexión y dibujo del mundo.
 //
-// Dos modos:
-//  · Un jugador: la simulación (sim.js) corre aquí mismo.
-//  · En línea: la simulación corre en el servidor. Este archivo envía las acciones del
-//    jugador, recibe el estado de lo que tiene cerca 10 veces por segundo, lo suaviza
-//    (interpolación) y dibuja los eventos (daño, botín, efectos) igual que en un jugador.
+// La simulación corre en el servidor. Este archivo envía las acciones del jugador,
+// recibe el estado de lo que tiene cerca 10 veces por segundo, lo suaviza
+// (interpolación) y dibuja los eventos (daño, botín, efectos). Si la conexión se corta,
+// se reconecta solo y vuelve a entrar con el mismo personaje.
 (function () {
   const G = V.G;
-  const Sim = V.Sim;
   const { buildHumanoid, buildQuadruped, animateModel, animateDeath, setWeaponLook, setArmorLook } = V.Models;
   const { heightAt } = V.Terrain;
-  const { ITEMS, CLASSES, MOBS } = V.Data;
+  const { ITEMS, CLASSES, MOBS, lookFor } = V.Data;
   const UI = new Proxy({}, { get: (_, k) => V.UI[k] }); // ui.js se carga después
 
   const THREE = window.THREE;
-  const C = Sim.cmd;
+  const PROTOCOL = 2;
   const d2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+  const PROJ_SPEED = { arrow: 38, fire: 24, arcane: 26 };
 
-  let online = false;
-  let P = null; // jugador local (en línea: su reflejo)
+  let P = null; // jugador local (reflejo del servidor)
 
-  // Un jugador
-  const W = Sim.createWorld();
-  G.sim = W;
-
-  // En línea
   const net = {
     ws: null,
+    url: null,
     myId: null,
+    session: null,
+    charId: null,
+    playing: false,
     players: new Map(),
     mobs: new Map(),
     projectiles: new Map(),
     queue: [],
+    waiters: [],
     count: 0,
-    lastSave: null,
-    sentDir: null,
-    onSave: null,
+    sentDir: '',
+    dirAt: 0,
+    lastMsg: 0,
+    pingTimer: null,
+    reconnecting: false,
     onLost: null,
+    onReconnect: null,
+    onKicked: null,
   };
-  const PROJ_SPEED = { arrow: 38, fire: 24, arcane: 26 };
+
+  // ---------- Conexión ----------
+
+  function send(msg) {
+    if (net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify(msg));
+  }
+
+  // Espera el primer mensaje de alguno de los tipos indicados
+  function waitFor(types, ms = 12000) {
+    return new Promise((resolve, reject) => {
+      const w = { types, resolve, reject, timer: setTimeout(() => done(new Error('El servidor no responde. Inténtalo más tarde.')), ms) };
+      const done = (err, msg) => {
+        clearTimeout(w.timer);
+        net.waiters = net.waiters.filter((x) => x !== w);
+        if (err) reject(err);
+        else resolve(msg);
+      };
+      w.done = done;
+      net.waiters.push(w);
+    });
+  }
+
+  function connect(url) {
+    net.url = url;
+    return new Promise((resolve, reject) => {
+      let ws;
+      try {
+        ws = new WebSocket(url);
+      } catch {
+        return reject(new Error('No se pudo conectar con el servidor.'));
+      }
+      net.ws = ws;
+      const timer = setTimeout(() => {
+        ws.close();
+        reject(new Error('El servidor no responde. Inténtalo más tarde.'));
+      }, 10000);
+      ws.onopen = () => {
+        clearTimeout(timer);
+        net.lastMsg = Date.now();
+        startHeartbeat();
+        resolve();
+      };
+      ws.onmessage = onMessage;
+      ws.onclose = () => {
+        clearTimeout(timer);
+        stopHeartbeat();
+        for (const w of [...net.waiters]) w.done(new Error('Se perdió la conexión con el servidor.'));
+        if (net.ws === ws) onClosed();
+        reject(new Error('No se pudo conectar con el servidor.'));
+      };
+    });
+  }
+
+  // Latido: si no llega nada en 12 s, la conexión está muerta y se reconecta
+  function startHeartbeat() {
+    stopHeartbeat();
+    net.pingTimer = setInterval(() => {
+      send({ t: 'ping', at: Date.now() });
+      if (Date.now() - net.lastMsg > 12000 && net.ws) net.ws.close();
+    }, 4000);
+  }
+  function stopHeartbeat() {
+    clearInterval(net.pingTimer);
+  }
+
+  function onMessage(e) {
+    net.lastMsg = Date.now();
+    let msg;
+    try {
+      msg = JSON.parse(e.data);
+    } catch {
+      return;
+    }
+    for (const w of net.waiters) {
+      if (w.types.includes(msg.t)) {
+        w.done(null, msg);
+        break;
+      }
+    }
+    switch (msg.t) {
+      case 'welcome':
+        net.myId = msg.id;
+        if (P) P.id = msg.id; // reconexión: el mismo reflejo con el id nuevo
+        break;
+      case 's':
+        applySnapshot(msg);
+        break;
+      case 'e':
+        net.queue.push(...msg.e);
+        break;
+      case 'chat':
+        UI.chat(msg);
+        break;
+      case 'kicked':
+        net.kicked = msg.msg;
+        break;
+    }
+  }
+
+  async function onClosed() {
+    if (!net.playing) return;
+    if (net.kicked) {
+      if (net.onLost) net.onLost(net.kicked);
+      return;
+    }
+    // Reconexión automática: hasta 8 intentos con espera creciente
+    if (net.reconnecting) return;
+    net.reconnecting = true;
+    G.keys = {};
+    if (net.onReconnect) net.onReconnect('start');
+    for (let i = 0; i < 8; i++) {
+      await new Promise((r) => setTimeout(r, Math.min(8000, 1000 * (i + 1))));
+      try {
+        await connect(net.url);
+        send({ t: 'resume', v: PROTOCOL, session: net.session });
+        const auth = await waitFor(['auth', 'authError']);
+        if (auth.t !== 'auth') throw new Error(auth.msg);
+        send({ t: 'play', id: net.charId });
+        await waitFor(['welcome']);
+        net.reconnecting = false;
+        net.sentDir = '';
+        if (net.onReconnect) net.onReconnect('ok');
+        return;
+      } catch {
+        /* siguiente intento */
+      }
+    }
+    net.reconnecting = false;
+    if (net.onLost) net.onLost('No se pudo recuperar la conexión con el servidor.');
+  }
+
+  // ---------- Cuenta y personajes ----------
+
+  async function authRequest(msg) {
+    send({ ...msg, v: PROTOCOL });
+    const r = await waitFor(['auth', 'authError']);
+    if (r.t === 'authError') {
+      const err = new Error(r.msg);
+      err.code = r.code;
+      throw err;
+    }
+    if (r.session) net.session = r.session;
+    return r;
+  }
+  const register = (user, email, pass) => authRequest({ t: 'register', user, email, pass });
+  const login = (user, pass) => authRequest({ t: 'login', user, pass });
+  async function resume(session) {
+    net.session = session;
+    return authRequest({ t: 'resume', session });
+  }
+  function logout() {
+    send({ t: 'logout' });
+    net.session = null;
+  }
+  async function charRequest(msg) {
+    send(msg);
+    const r = await waitFor(['chars', 'charError']);
+    if (r.t === 'charError') throw new Error(r.msg);
+    return r;
+  }
+  const createChar = (name, cls, sex) => charRequest({ t: 'createChar', name, cls, sex });
+  const deleteChar = (id) => charRequest({ t: 'deleteChar', id });
+
+  async function play(id, { onLost, onReconnect } = {}) {
+    net.onLost = onLost;
+    net.onReconnect = onReconnect;
+    net.charId = id;
+    G.mobs = [];
+    send({ t: 'play', id });
+    const r = await waitFor(['welcome', 'charError']);
+    if (r.t === 'charError') throw new Error(r.msg);
+    net.playing = true;
+    // Espera el primer estado con el propio personaje
+    for (let i = 0; i < 100 && !P; i++) await new Promise((res) => setTimeout(res, 30));
+    if (!P) throw new Error('El servidor no envió tu personaje.');
+    return P;
+  }
 
   // ---------- Vistas (modelo 3D + estado de animación) ----------
 
   function attachView(ent, model) {
     ent.model = model;
-    ent.view = { walkBlend: 0, atkAnim: 0, deathK: 0, phase: Math.random() * 10 };
+    ent.view = { walkBlend: 0, atkAnim: 0, deathK: 0, swim: 0, phase: Math.random() * 10 };
     model.root.position.set(ent.pos.x, ent.pos.y, ent.pos.z);
     model.root.rotation.y = ent.facing;
     G.scene.add(model.root);
@@ -61,119 +239,7 @@
     setArmorLook(p.model, ITEMS[p.equip.armor]);
   }
 
-  // ---------- Un jugador ----------
-
-  const newCharacter = (name, cls) => Sim.newCharacter(name, cls);
-
-  function createPlayer(data) {
-    online = false;
-    P = Sim.addPlayer(W, data, 'local');
-    attachView(P, buildHumanoid(CLASSES[P.cls].look));
-    applyEquip(P);
-    G.player = P;
-    return P;
-  }
-
-  function spawnMobs() {
-    if (online) return;
-    Sim.spawnMobs(W);
-    for (const m of W.mobs) {
-      attachView(m, m.def.kind === 'quad' ? buildQuadruped(m.def) : buildHumanoid(m.def));
-      m.model.root.traverse((o) => (o.userData.mob = m));
-      UI.createNameplate(m);
-    }
-    G.mobs = W.mobs;
-  }
-
-  const serialize = () => (online ? net.lastSave : Sim.serialize(P));
-
-  // ---------- En línea: conexión ----------
-
-  function send(msg) {
-    if (net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify(msg));
-  }
-
-  function startOnline({ url, name, cls, save, onSave, onLost, onToken }) {
-    online = true;
-    net.onSave = onSave;
-    net.onLost = onLost;
-    net.onToken = onToken;
-    G.mobs = [];
-    return new Promise((resolve, reject) => {
-      let ready = false;
-      const fail = (msg, code) => {
-        if (ready) return;
-        ready = true;
-        online = false;
-        try {
-          net.ws.close();
-        } catch {
-          /* nada */
-        }
-        const err = new Error(msg);
-        err.code = code;
-        reject(err);
-      };
-      const timer = setTimeout(() => fail('El servidor no responde. Inténtalo más tarde.'), 12000);
-      let ws;
-      try {
-        ws = net.ws = new WebSocket(url);
-      } catch {
-        return fail('No se pudo conectar con el servidor.');
-      }
-      ws.onopen = () => send({ t: 'join', v: V.Config.PROTOCOL, name, cls, save });
-      ws.onmessage = (e) => {
-        let msg;
-        try {
-          msg = JSON.parse(e.data);
-        } catch {
-          return;
-        }
-        switch (msg.t) {
-          case 'welcome':
-            net.myId = msg.id;
-            break;
-          case 'error':
-            clearTimeout(timer);
-            fail(msg.msg, msg.code);
-            break;
-          case 's':
-            applySnapshot(msg);
-            if (!ready && P) {
-              ready = true;
-              clearTimeout(timer);
-              resolve(P);
-            }
-            break;
-          case 'e':
-            net.queue.push(...msg.e);
-            break;
-          case 'chat':
-            UI.chat(msg);
-            break;
-          case 'save':
-            gotSave(msg.d);
-            break;
-          case 'token':
-            // Llave del nombre: se guarda junto al personaje para poder volver a usarlo
-            if (net.onToken) net.onToken(msg.token);
-            break;
-        }
-      };
-      ws.onclose = () => {
-        clearTimeout(timer);
-        if (!ready) fail('No se pudo conectar con el servidor.');
-        else if (net.onLost) net.onLost();
-      };
-    });
-  }
-
-  function gotSave(d) {
-    net.lastSave = d;
-    if (net.onSave) net.onSave(d);
-  }
-
-  // ---------- En línea: estado recibido ----------
+  // ---------- Estado recibido ----------
 
   const setNet = (ent, x, y, z, f) => {
     ent.net = { x, y, z, f };
@@ -186,7 +252,7 @@
     }
   };
 
-  function makeMe(row, me) {
+  function makeMe(row) {
     const cls = row[10];
     const cdef = CLASSES[cls];
     P = {
@@ -194,6 +260,7 @@
       kind: 'player',
       name: row[11],
       cls,
+      sex: row[15],
       cdef,
       skills: cdef.skills,
       pos: { x: row[1], y: row[2], z: row[3] },
@@ -208,15 +275,17 @@
       gold: 0,
       hp: row[7],
       mp: 0,
-      stats: { maxHp: row[8], maxMp: 1, atk: 0, def: 0 },
+      stats: { maxHp: row[8], maxMp: 1, atk: 0, def: 0, crit: 0, critMult: 1.8, atkSpeed: cdef.atkSpeed, speed: 7.2, range: cdef.range },
       buffT: 0,
       buffPct: 0,
       buffName: '',
       shield: 0,
       shieldT: 0,
+      breath: 30,
       dead: false,
+      party: null,
     };
-    attachView(P, buildHumanoid(cdef.look));
+    attachView(P, buildHumanoid(lookFor(cls, P.sex)));
     applyEquip(P);
     net.players.set(P.id, P);
     G.player = P;
@@ -228,13 +297,15 @@
     for (const row of s.p) {
       const id = row[0];
       seenP.add(id);
-      if (id === net.myId && !P) makeMe(row, s.me);
-      let q = net.players.get(id);
+      if (id === net.myId && !P) makeMe(row);
+      let q = id === net.myId ? P : net.players.get(id);
+      if (id === net.myId && !net.players.has(id)) net.players.set(id, P);
       if (!q) {
         const cdef = CLASSES[row[10]];
-        q = { id, kind: 'player', name: row[11], cls: row[10], cdef, pos: { x: 0, y: 0, z: 0 }, facing: 0, height: 2.5, equip: { weapon: null, armor: null }, stats: { maxHp: row[8] } };
+        q = { id, kind: 'player', name: row[11], cls: row[10], sex: row[15], cdef, pos: { x: 0, y: 0, z: 0 }, facing: 0, height: 2.5, equip: { weapon: null, armor: null }, stats: { maxHp: row[8] } };
         net.players.set(id, q);
-        attachView(q, buildHumanoid(cdef.look));
+        attachView(q, buildHumanoid(lookFor(q.cls, q.sex)));
+        q.model.root.traverse((o) => (o.userData.player = q));
         UI.addPlayerPlate(q);
       }
       setNet(q, row[1], row[2], row[3], row[4]);
@@ -244,8 +315,10 @@
         q.hp = row[7];
         q.stats.maxHp = row[8];
         q.level = row[9];
+        q.partyId = row[16] || null;
       }
       q.leap = !!row[14];
+      q.swimming = !!row[17];
       if (q.equip.weapon !== row[12] || q.equip.armor !== row[13]) {
         q.equip.weapon = row[12];
         q.equip.armor = row[13];
@@ -257,6 +330,7 @@
       UI.removePlayerPlate(q);
       detachView(q);
       net.players.delete(id);
+      if (G.playerSel === q) G.playerSel = null;
     }
 
     const seenM = new Set();
@@ -288,6 +362,9 @@
       m.aggro = !!row[11];
       m.deadT = row[12];
       m.respawnTime = row[13];
+      m.stunned = !!row[14];
+      m.slowed = !!row[15];
+      m.poisoned = !!row[16];
       m.hidden = false;
     }
     for (const [id, m] of net.mobs) if (!seenM.has(id)) m.hidden = true;
@@ -298,11 +375,7 @@
       const target = net.mobs.get(row[5]);
       if (!target) continue;
       seenJ.add(row[0]);
-      let j = net.projectiles.get(row[0]);
-      if (!j) {
-        j = { id: row[0], kind: row[1], big: !!row[6], pos: { x: row[2], y: row[3], z: row[4] }, target };
-        net.projectiles.set(j.id, j);
-      }
+      if (!net.projectiles.has(row[0])) net.projectiles.set(row[0], { id: row[0], kind: row[1], big: !!row[6], pos: { x: row[2], y: row[3], z: row[4] }, target });
     }
     for (const id of net.projectiles.keys()) if (!seenJ.has(id)) net.projectiles.delete(id);
 
@@ -321,21 +394,24 @@
       cds: d.cds,
       buffT: d.buffT,
       buffPct: d.buffPct,
+      buffCrit: d.buffCrit,
       buffName: d.buffName,
       shield: d.shield,
       shieldT: d.shieldT,
       combatT: d.combatT,
+      breath: d.breath,
+      swimming: d.swimming,
+      deep: d.deep,
+      party: d.party,
     });
     if (d.dead !== P.dead) P.dead = d.dead;
-    P.target = d.target ? net.mobs.get(d.target) || null : null;
+    if (!G.npcSel && !G.playerSel) P.target = d.target ? net.mobs.get(d.target) || null : null;
     if (d.inv) {
       P.inv = d.inv;
       P.equip = d.equip;
       applyEquip(P);
       UI.refreshPanels();
-    }
-    if (d.save) gotSave(d.save);
-    else if (wasLevel !== P.level) UI.refreshPanels();
+    } else if (wasLevel !== P.level) UI.refreshPanels();
   }
 
   function resetMob(m) {
@@ -396,37 +472,38 @@
 
   const sync = () => (G.target = P ? P.target : null);
 
-  // NPC seleccionado (solo visual, en el cliente): anillo dorado, marco y nombre subrayado
+  // NPC o jugador seleccionado (en el cliente): anillo de color y marco de objetivo
   G.npcSel = null;
+  G.playerSel = null;
+  function clearTarget() {
+    if (P) P.target = null;
+    send({ t: 'target', id: null });
+    sync();
+  }
   function selectNpc(id) {
     const npc = G.world.npcs.find((n) => n.id === id);
     if (!npc || P.dead) return;
-    if (online) {
-      P.target = null;
-      send({ t: 'target', id: null });
-    } else C.setTarget(W, P, null);
-    sync();
+    clearTarget();
+    G.playerSel = null;
     G.npcSel = npc;
-    talkTo(id);
+    send({ t: 'talk', id });
+  }
+  function selectPlayer(q) {
+    if (!q || q === P) return;
+    clearTarget();
+    G.npcSel = null;
+    G.playerSel = q;
   }
 
   function setTarget(m) {
     G.npcSel = null;
-    if (online) {
-      P.target = m && !m.dead ? m : null;
-      send({ t: 'target', id: P.target ? P.target.id : null });
-    } else C.setTarget(W, P, m);
+    G.playerSel = null;
+    P.target = m && !m.dead ? m : null;
+    send({ t: 'target', id: P.target ? P.target.id : null });
     sync();
   }
-  function attackTarget() {
-    if (online) send({ t: 'attack' });
-    else C.attack(W, P);
-  }
+  const attackTarget = () => send({ t: 'attack' });
   function targetNearest() {
-    if (!online) {
-      C.targetNearest(W, P);
-      return sync();
-    }
     const list = G.mobs.filter((m) => !m.dead && !m.hidden && d2(m.pos, P.pos) < 26).sort((a, b) => d2(a.pos, P.pos) - d2(b.pos, P.pos));
     if (!list.length) return;
     const i = list.indexOf(P.target);
@@ -434,23 +511,26 @@
   }
   function moveTo(point) {
     if (P.dead || P.leap) return;
-    if (online) send({ t: 'move', x: point.x, z: point.z });
-    else C.moveTo(W, P, point);
+    send({ t: 'move', x: point.x, z: point.z });
     showMarker(point);
   }
-  const act = (local, msg) => (online ? send(msg) : local());
-  const talkTo = (id) => act(() => C.talkTo(W, P, id), { t: 'talk', id });
-  const useSkill = (i) => act(() => C.useSkill(W, P, i), { t: 'skill', i });
-  const usePotion = (id) => act(() => C.usePotion(W, P, id), { t: 'potion', id });
-  const countItem = (id) => Sim.countItem(P, id);
-  // Con la tienda abierta, el clic en el inventario abre el diálogo de venta (confirmación y cantidad)
-  const clickInventory = (i) => (UI.shopOpen() ? UI.openTrade('sell', i) : act(() => C.useItem(W, P, i), { t: 'use', i }));
-  const useItem = (i) => act(() => C.useItem(W, P, i), { t: 'use', i });
-  const sellItem = (i, q) => act(() => C.sellItem(W, P, i, q), { t: 'sell', i, q });
-  const unequip = (k) => act(() => C.unequip(W, P, k), { t: 'unequip', k });
-  const buyItem = (id, q) => act(() => C.buyItem(W, P, id, q), { t: 'buy', id, q });
-  const respawnPlayer = () => act(() => C.respawn(W, P), { t: 'respawn' });
-  const sendChat = (text) => online && send({ t: 'chat', text });
+  const talkTo = (id) => send({ t: 'talk', id });
+  const useSkill = (i) => send({ t: 'skill', i });
+  const usePotion = (id) => send({ t: 'potion', id });
+  const countItem = (id) => (P ? P.inv.filter((s) => s.id === id).reduce((a, s) => a + s.qty, 0) : 0);
+  // Con la tienda abierta, el clic en el inventario abre el diálogo de venta
+  const clickInventory = (i) => (UI.shopOpen() ? UI.openTrade('sell', i) : send({ t: 'use', i }));
+  const useItem = (i) => send({ t: 'use', i });
+  const sellItem = (i, q) => send({ t: 'sell', i, q });
+  const unequip = (k) => send({ t: 'unequip', k });
+  const buyItem = (id, q) => send({ t: 'buy', id, q });
+  const respawnPlayer = () => send({ t: 'respawn' });
+  const sendChat = (text) => send({ t: 'chat', text });
+  const invite = (id) => send({ t: 'invite', id });
+  const inviteByName = (name) => send({ t: 'inviteByName', name });
+  const answerInvite = (accept) => send({ t: 'inviteAnswer', accept });
+  const leaveParty = () => send({ t: 'partyLeave' });
+  const kickFromParty = (id) => send({ t: 'partyKick', id });
 
   // ---------- Eventos ----------
 
@@ -466,7 +546,13 @@
         break;
       case 'faller':
         if (ev.fx === 'meteor') spawnFaller('meteor', ev.at, ev.dur);
-        else for (let k = 0; k < 14; k++) spawnFaller('arrow', { x: ev.at.x + (Math.random() * 2 - 1) * ev.r * 0.8, y: ev.at.y, z: ev.at.z + (Math.random() * 2 - 1) * ev.r * 0.8 }, ev.dur * (0.7 + Math.random() * 0.3));
+        else {
+          const n = ev.r > 5 ? 26 : 14;
+          for (let k = 0; k < n; k++) spawnFaller(ev.fx === 'frost' ? 'ice' : 'arrow', { x: ev.at.x + (Math.random() * 2 - 1) * ev.r * 0.8, y: ev.at.y, z: ev.at.z + (Math.random() * 2 - 1) * ev.r * 0.8 }, ev.dur * (0.7 + Math.random() * 0.3));
+        }
+        break;
+      case 'chain':
+        spawnLightning(ev.pts);
         break;
       case 'swing':
         if (ev.ent.view) ev.ent.view.atkAnim = 1;
@@ -479,6 +565,10 @@
         break;
       case 'mobDeath':
         if (ev.ent.view) ev.ent.view.deathK = 0;
+        break;
+      case 'levelUp':
+        spawnLevelUp(ev.ent);
+        UI.floatText(ev.ent.pos, ev.ent.height + 1.2, `¡Nivel ${ev.level}!`, 'lvlup');
         break;
       case 'log':
         if (mine(ev)) UI.log(ev.text, ev.cls);
@@ -494,6 +584,9 @@
         break;
       case 'openShop':
         if (mine(ev)) UI.openShop();
+        break;
+      case 'partyInvite':
+        if (mine(ev)) UI.showInvite(ev.name);
         break;
       case 'playerDeath':
         if (ev.ent.view) ev.ent.view.deathK = 0;
@@ -537,6 +630,56 @@
     marker.visible = true;
   }
 
+  // Subida de nivel: columna de luz dorada, anillo y chispas que suben
+  const glows = [];
+  const pillarGeo = new THREE.CylinderGeometry(1.1, 1.4, 9, 24, 1, true);
+  pillarGeo.translate(0, 4.5, 0);
+  const sparkGeo = new THREE.OctahedronGeometry(0.09, 0);
+  function spawnLevelUp(ent) {
+    const g = new THREE.Group();
+    const pillar = new THREE.Mesh(pillarGeo, new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
+    g.add(pillar);
+    const sparks = [];
+    for (let i = 0; i < 40; i++) {
+      const s = new THREE.Mesh(sparkGeo, new THREE.MeshBasicMaterial({ color: i % 3 ? 0xffe9a8 : 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const a = Math.random() * Math.PI * 2;
+      const r = 0.4 + Math.random() * 1.1;
+      s.userData = { a, r, v: 2 + Math.random() * 3, y: Math.random() * 1.5 };
+      g.add(s);
+      sparks.push(s);
+    }
+    const light = new THREE.PointLight(0xffd36b, 3, 14, 2);
+    light.position.y = 2;
+    g.add(light);
+    G.scene.add(g);
+    spawnRing(ent.pos, 0xffd36b, 5, 1.2);
+    spawnRing(ent.pos, 0xffffff, 3, 0.7);
+    glows.push({ g, pillar, sparks, light, ent, t: 0, life: 2.2 });
+  }
+
+  // Cadena de rayos: líneas quebradas entre los puntos
+  function spawnLightning(pts) {
+    const verts = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const segs = 6;
+      for (let k = 0; k < segs; k++) {
+        const t0 = k / segs;
+        const t1 = (k + 1) / segs;
+        const j = (t) => (t > 0 && t < 1 ? (Math.random() - 0.5) * 0.7 : 0);
+        verts.push(a.x + (b.x - a.x) * t0 + j(t0), a.y + (b.y - a.y) * t0 + j(t0), a.z + (b.z - a.z) * t0 + j(t0));
+        verts.push(a.x + (b.x - a.x) * t1 + j(t1), a.y + (b.y - a.y) * t1 + j(t1), a.z + (b.z - a.z) * t1 + j(t1));
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    const line = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xbfe0ff, transparent: true, blending: THREE.AdditiveBlending }));
+    G.scene.add(line);
+    effects.push({ line, t: 0, life: 0.35 });
+    for (const p of pts.slice(1)) spawnRing({ x: p.x, y: p.y - 1, z: p.z }, 0x9fd0ff, 1.4, 0.35);
+  }
+
   const PROJ_MESH = {
     arrow: () => {
       const g = new THREE.Group();
@@ -560,14 +703,14 @@
       g.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), new THREE.MeshBasicMaterial({ color: 0x9a6aff, transparent: true, opacity: 0.45, depthWrite: false })));
       return g;
     },
+    ice: () => new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.85 })),
   };
   const projMeshes = new Map();
   const tmp = new THREE.Vector3();
 
   function syncProjectiles() {
-    const list = online ? net.projectiles.values() : W.projectiles;
     const alive = new Set();
-    for (const pr of list) {
+    for (const pr of net.projectiles.values()) {
       alive.add(pr.id);
       let mesh = projMeshes.get(pr.id);
       if (!mesh) {
@@ -594,6 +737,8 @@
       mesh = new THREE.Group();
       mesh.add(new THREE.Mesh(new THREE.DodecahedronGeometry(0.9, 0), new THREE.MeshStandardMaterial({ color: 0x3a2a20, emissive: 0xff5a1a, emissiveIntensity: 1.3, flatShading: true })));
       mesh.add(new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0.35, depthWrite: false })));
+    } else if (kind === 'ice') {
+      mesh = PROJ_MESH.ice();
     } else {
       mesh = PROJ_MESH.arrow();
       mesh.rotation.x = Math.PI / 2;
@@ -609,12 +754,38 @@
       const e = effects[i];
       e.t += dt;
       const k = e.t / e.life;
-      e.m.scale.setScalar(0.3 + e.maxR * k);
-      e.m.material.opacity = 0.9 * (1 - k);
+      if (e.line) {
+        e.line.material.opacity = 1 - k;
+      } else {
+        e.m.scale.setScalar(0.3 + e.maxR * k);
+        e.m.material.opacity = 0.9 * (1 - k);
+      }
       if (k >= 1) {
-        G.scene.remove(e.m);
-        e.m.material.dispose();
+        const obj = e.line || e.m;
+        G.scene.remove(obj);
+        obj.material.dispose();
+        if (e.line) obj.geometry.dispose();
         effects.splice(i, 1);
+      }
+    }
+    for (let i = glows.length - 1; i >= 0; i--) {
+      const gl = glows[i];
+      gl.t += dt;
+      const k = gl.t / gl.life;
+      gl.g.position.set(gl.ent.pos.x, gl.ent.pos.y, gl.ent.pos.z);
+      gl.pillar.material.opacity = 0.55 * (k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85);
+      gl.pillar.scale.set(1 - k * 0.4, 0.3 + Math.min(1, k * 4) * 0.7, 1 - k * 0.4);
+      gl.light.intensity = 3 * (1 - k);
+      for (const s of gl.sparks) {
+        const u = s.userData;
+        u.y += u.v * dt;
+        u.a += dt * 2;
+        s.position.set(Math.cos(u.a) * u.r, u.y, Math.sin(u.a) * u.r);
+        s.material.opacity = Math.max(0, 1 - u.y / 8);
+      }
+      if (k >= 1) {
+        G.scene.remove(gl.g);
+        glows.splice(i, 1);
       }
     }
     for (let i = fallers.length - 1; i >= 0; i--) {
@@ -641,12 +812,19 @@
     }
     const t = G.target;
     const npc = G.npcSel;
+    const ply = G.playerSel;
     if (npc) {
       const np = npc.root.position;
       targetRing.visible = true;
       targetRing.position.set(np.x, np.y + 0.1, np.z);
       targetRing.scale.setScalar(1.45 + Math.sin(G.time * 4) * 0.06);
       targetRing.material.color.setHex(0xd9b56a);
+    } else if (ply) {
+      targetRing.visible = !ply.dead;
+      targetRing.position.set(ply.pos.x, ply.pos.y + 0.1, ply.pos.z);
+      targetRing.scale.setScalar(1.35 + Math.sin(G.time * 4) * 0.05);
+      const ally = P.party && P.party.members.some((m) => m.id === ply.id);
+      targetRing.material.color.setHex(ally ? 0x7fe08a : 0x7fb6ff); // verde: de tu grupo · azul: otro jugador
     } else {
       targetRing.visible = !!t && !t.dead && !t.hidden;
       if (targetRing.visible) {
@@ -690,7 +868,11 @@
     }
     v.atkAnim = Math.max(0, v.atkAnim - dt * (ent.kind === 'mob' ? 2.2 : 2.4));
     v.walkBlend += ((ent.moving ? 1 : 0) - v.walkBlend) * Math.min(1, dt * (ent.kind === 'mob' ? 8 : 10));
-    animateModel(ent.model, G.time + (ent.kind === 'mob' ? v.phase : 0), v.walkBlend, v.atkAnim);
+    v.swim += ((ent.swimming ? 1 : 0) - v.swim) * Math.min(1, dt * 6);
+    // Monstruo aturdido: se tambalea quieto
+    if (ent.stunned) ent.model.root.rotation.z = Math.sin(G.time * 12) * 0.08;
+    else if (ent.model.root.rotation.z) ent.model.root.rotation.z = 0;
+    animateModel(ent.model, G.time + (ent.kind === 'mob' ? v.phase : 0), v.walkBlend, v.atkAnim, v.swim);
   }
 
   // ---------- Bucle ----------
@@ -715,42 +897,40 @@
 
   function update(dt) {
     const dir = keyDir();
-    if (online) {
-      // Solo se envía la dirección cuando cambia (redondeada) para no saturar la red
-      const key = dir ? `${dir.x.toFixed(2)},${dir.z.toFixed(2)}` : '';
-      if (key !== net.sentDir) {
-        net.sentDir = key;
-        send({ t: 'dir', d: dir });
-      }
-      interpolate(dt);
-      const evs = net.queue.splice(0);
-      for (const raw of evs) {
-        const ev = resolveEvent(raw);
-        if (ev) handleEvent(ev);
-      }
-      for (const q of net.players.values()) if (q.model) drawEntity(q, dt);
-      for (const m of net.mobs.values()) if (m.model) drawEntity(m, dt);
-    } else {
-      C.setMoveDir(W, P, dir);
-      Sim.step(W, dt);
-      for (const ev of Sim.drainEvents(W)) handleEvent(ev);
-      for (const p of W.players.values()) if (p.model) drawEntity(p, dt);
-      for (const m of W.mobs) if (m.model) drawEntity(m, dt);
+    // La dirección se envía solo si cambia, como mucho 10 veces por segundo
+    const key = dir ? `${dir.x.toFixed(1)},${dir.z.toFixed(1)}` : '';
+    const now = performance.now();
+    if (key !== net.sentDir && (now - net.dirAt > 100 || !key)) {
+      net.sentDir = key;
+      net.dirAt = now;
+      send({ t: 'dir', d: dir });
     }
+    interpolate(dt);
+    for (const raw of net.queue.splice(0)) {
+      const ev = resolveEvent(raw);
+      if (ev) handleEvent(ev);
+    }
+    for (const q of net.players.values()) if (q.model) drawEntity(q, dt);
+    for (const m of net.mobs.values()) if (m.model) drawEntity(m, dt);
+    if (G.playerSel && !net.players.has(G.playerSel.id)) G.playerSel = null;
     sync();
     syncProjectiles();
     updateEffects(dt);
   }
 
   V.Game = {
-    newCharacter, createPlayer, serialize, spawnMobs, startOnline, sendChat,
-    setTarget, attackTarget, targetNearest, moveTo, talkTo, useSkill, countItem, usePotion,
-    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, selectNpc,
+    PROTOCOL, connect, register, login, resume, logout, createChar, deleteChar, play,
+    setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
+    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat,
+    invite, inviteByName, answerInvite, leaveParty, kickFromParty,
     get online() {
-      return online;
+      return true;
     },
     get onlineCount() {
       return net.count;
+    },
+    get connected() {
+      return !!net.ws && net.ws.readyState === 1;
     },
   };
 })();

@@ -1,72 +1,53 @@
-// Arranque por etapas (informa el progreso al splash de la app), entrada, cámara y bucle principal.
+// Arranque por etapas (informa el progreso al splash de la app), pantalla de cuenta,
+// selector y creador de personajes, entrada, cámara y bucle principal.
 (function () {
   const G = V.G;
-  const { ZONES, CLASSES, CLASS_IDS } = V.Data;
+  const { ZONES, CLASSES, ITEMS, RARITY, className, lookFor } = V.Data;
   const { buildWorld, heightAt } = V.World;
   const Game = V.Game;
   const UI = V.UI;
 
   const THREE = window.THREE;
   const desktop = window.desktop || null;
+  const VERSION = V.VERSION;
+  const $ = (id) => document.getElementById(id);
 
-  // ---------- Partidas guardadas: una por clase ----------
-  const saveKey = (cls) => (cls === 'guerrero' ? 'valdoria-save-v1' : `valdoria-save-v1-${cls}`);
-
-  function loadSave(cls) {
-    try {
-      const raw = localStorage.getItem(saveKey(cls));
-      if (!raw) return null;
-      const s = JSON.parse(raw);
-      s.cls = s.cls || 'guerrero';
-      return s.cls === cls ? s : null;
-    } catch {
-      return null;
-    }
+  // Al estrenar las cuentas se borran los personajes guardados en este equipo (v0.3 y anteriores)
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith('valdoria-save') || k === 'valdoria-mode' || k === 'valdoria-last-class') localStorage.removeItem(k);
+  } catch {
+    /* almacenamiento no disponible */
   }
-  function storeSave(cls, data) {
-    if (!data) return;
-    try {
-      // Conserva la llave del nombre (el servidor no la incluye en sus copias de la partida)
-      const prev = JSON.parse(localStorage.getItem(saveKey(cls)) || 'null');
-      if (prev && prev.token && !data.token && prev.name === data.name) data = { ...data, token: prev.token };
-      localStorage.setItem(saveKey(cls), JSON.stringify(data));
-    } catch {
-      /* almacenamiento no disponible */
-    }
-  }
-
-  // ---------- Nombres aleatorios ----------
-  const SYL_A = ['Ael', 'Bran', 'Cael', 'Dor', 'Eld', 'Fen', 'Gal', 'Hal', 'Ith', 'Kael', 'Lor', 'Mor', 'Nym', 'Or', 'Ryn', 'Syl', 'Thal', 'Val', 'Wyn', 'Zar', 'Ar', 'Bel', 'Cor', 'Dra', 'Eri', 'Gor', 'Ily', 'Jor', 'Lys', 'Mae', 'Nor', 'Per', 'Ser', 'Tor', 'Ul', 'Vey'];
-  const SYL_B = ['dor', 'wyn', 'ion', 'ara', 'eth', 'ius', 'iel', 'mir', 'os', 'ra', 'wen', 'gar', 'is', 'an', 'ia', 'rak', 'ven', 'thas', 'elle', 'orn', 'una', 'ric', 'mar', 'ys'];
-  const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
-  const randomName = () => pickOne(SYL_A) + pickOne(SYL_B) + (Math.random() < 0.25 ? pickOne(['a', 'o', 'el']) : '');
-
-  // Propone un nombre que no esté registrado en el servidor (si hay conexión)
-  async function suggestName() {
-    const base = V.Config.SERVER_URL.replace(/^ws/, 'http').replace(/\/ws$/, '');
-    let name = randomName();
-    for (let i = 0; i < 6; i++) {
+  const SESSION_KEY = 'valdoria-session';
+  const store = {
+    get: (k) => {
       try {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 2500);
-        const res = await fetch(`${base}/name-available?name=${encodeURIComponent(name)}`, { signal: ctrl.signal });
-        clearTimeout(t);
-        if ((await res.json()).available) return name;
+        return localStorage.getItem(k) || sessionStorage.getItem(k);
       } catch {
-        return name; // sin conexión: cualquier nombre sirve para jugar solo
+        return null;
       }
-      name = randomName();
-    }
-    return name;
-  }
-  function writeSave() {
-    if (G.started) storeSave(G.player.cls, Game.serialize());
-  }
+    },
+    set: (k, v, remember) => {
+      try {
+        (remember ? localStorage : sessionStorage).setItem(k, v);
+      } catch {
+        /* nada */
+      }
+    },
+    del: (k) => {
+      try {
+        localStorage.removeItem(k);
+        sessionStorage.removeItem(k);
+      } catch {
+        /* nada */
+      }
+    },
+  };
 
   // ---------- Pantalla de carga ----------
-  const loadEl = document.getElementById('loading');
-  const loadBar = document.getElementById('loadBar');
-  const loadTxt = document.getElementById('loadTxt');
+  const loadEl = $('loading');
+  const loadBar = $('loadBar');
+  const loadTxt = $('loadTxt');
   function progress(text, pct) {
     if (loadTxt) loadTxt.textContent = text;
     if (loadBar) loadBar.style.transform = `scaleX(${pct})`;
@@ -80,7 +61,7 @@
     progress('Encendiendo las fogatas…', 0.08);
     await frame();
 
-    const container = document.getElementById('game');
+    const container = $('game');
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const touch = V.Mobile && V.Mobile.isTouch;
     renderer.setPixelRatio(Math.min(devicePixelRatio, touch ? 1.5 : 2)); // celulares: menos carga
@@ -126,6 +107,7 @@
 
     bindInput();
     loop();
+    startScreen();
   }
 
   // ---------- Cámara ----------
@@ -152,30 +134,41 @@
   const ndc = new THREE.Vector2();
   let drag = null;
 
-  function pick(x, y) {
+  function pick(x, y, shift) {
     ndc.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
     ray.setFromCamera(ndc, camera);
-    const mobRoots = G.mobs.filter((m) => !m.dead && m.model.root.visible).map((m) => m.model.root);
+    const mobRoots = G.mobs.filter((m) => !m.dead && !m.hidden && m.model.root.visible).map((m) => m.model.root);
     const npcRoots = G.world.npcs.map((n) => n.root);
-    const hit = ray.intersectObjects([...mobRoots, ...npcRoots, G.world.terrain], true)[0];
+    const others = G.otherRoots();
+    const hit = ray.intersectObjects([...mobRoots, ...npcRoots, ...others, G.world.terrain], true)[0];
     if (!hit) return;
     const ud = hit.object.userData;
     if (ud.mob) {
+      if (shift) return UI.openDrops(ud.mob); // Shift + clic: botín posible
       Game.setTarget(ud.mob);
       Game.attackTarget();
     } else if (ud.npc) {
       Game.selectNpc(ud.npc);
+    } else if (ud.player) {
+      Game.selectPlayer(ud.player);
     } else {
       Game.moveTo(hit.point);
     }
   }
+  G.otherRoots = () => {
+    const out = [];
+    G.scene.traverse((o) => {
+      if (o.userData.player && o.parent && !o.parent.userData.player) out.push(o);
+    });
+    return out;
+  };
 
   function bindInput() {
     const canvas = renderer.domElement;
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
-      drag = { x: e.clientX, y: e.clientY, moved: false, button: e.button };
+      drag = { x: e.clientX, y: e.clientY, moved: false, button: e.button, shift: e.shiftKey };
     });
     canvas.addEventListener('pointermove', (e) => {
       if (!drag) return;
@@ -189,7 +182,7 @@
       drag.y = e.clientY;
     });
     canvas.addEventListener('pointerup', (e) => {
-      if (drag && !drag.moved && drag.button === 0 && G.started && !G.pinching) pick(e.clientX, e.clientY);
+      if (drag && !drag.moved && drag.button === 0 && G.started && !G.pinching) pick(e.clientX, e.clientY, drag.shift || e.shiftKey);
       drag = null;
     });
     canvas.addEventListener(
@@ -222,6 +215,12 @@
         case 'KeyI':
           UI.togglePanel('inv');
           break;
+        case 'KeyC':
+          UI.togglePanel('stats');
+          break;
+        case 'KeyM':
+          UI.togglePanel('map');
+          break;
         case 'KeyH':
           UI.togglePanel('help');
           break;
@@ -238,12 +237,14 @@
         case 'Digit2':
         case 'Digit3':
         case 'Digit4':
+        case 'Digit5':
+        case 'Digit6':
           Game.useSkill(+e.code.slice(-1) - 1);
           break;
-        case 'Digit5':
+        case 'Digit7':
           Game.usePotion('pocion_vida');
           break;
-        case 'Digit6':
+        case 'Digit8':
           Game.usePotion('pocion_mana');
           break;
       }
@@ -257,181 +258,417 @@
     });
   }
 
-  // ---------- Pantalla de inicio: elegir clase ----------
+  // ---------- Vista previa 3D del personaje (selector y creador) ----------
 
-  const nameInput = document.getElementById('nameInput');
-  const btnStart = document.getElementById('btnStart');
-  const btnReset = document.getElementById('btnReset');
-  const saveInfo = document.getElementById('saveInfo');
-  const classDesc = document.getElementById('classDesc');
-  const classBtns = [...document.querySelectorAll('.class-pick button')];
-  let cls = 'guerrero';
-  let save = null;
-  let resetArmed = false;
-
-  function lastClass() {
-    try {
-      const c = localStorage.getItem('valdoria-last-class');
-      return CLASSES[c] ? c : null;
-    } catch {
-      return null;
-    }
-  }
-
-  function selectClass(c) {
-    cls = c;
-    save = loadSave(c);
-    resetArmed = false;
-    btnReset.textContent = 'Borrar personaje';
-    for (const b of classBtns) {
-      const on = b.dataset.cls === c;
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-pressed', on);
-    }
-    const def = CLASSES[c];
-    classDesc.textContent = `${def.role}. ${def.desc}`;
-    if (save) {
-      nameInput.value = save.name;
-      btnStart.textContent = 'Continuar aventura';
-      btnReset.hidden = false;
-      saveInfo.textContent = `${save.name} · ${def.name} de nivel ${save.level}`;
-    } else {
-      if (!nameInput.dataset.touched) newRandomName();
-      btnStart.textContent = 'Crear personaje';
-      btnReset.hidden = true;
-      saveInfo.textContent = '';
-    }
-  }
-  let nameReq = 0;
-  function newRandomName() {
-    const req = ++nameReq;
-    nameInput.value = randomName();
-    suggestName().then((n) => {
-      if (req === nameReq && !nameInput.dataset.touched) nameInput.value = n;
+  const pv = { renderer: null, scene: null, camera: null, model: null, yaw: 0.5, key: '' };
+  function initPreview() {
+    const canvas = $('previewCanvas');
+    pv.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    pv.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    pv.scene = new THREE.Scene();
+    pv.camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+    pv.camera.position.set(0, 2.2, 7.6);
+    pv.camera.lookAt(0, 1.3, 0);
+    pv.scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x3a2e22, 0.95));
+    const key = new THREE.DirectionalLight(0xffe0b0, 1.5);
+    key.position.set(3, 5, 4);
+    const rim = new THREE.DirectionalLight(0xd9b56a, 1);
+    rim.position.set(-4, 3, -4);
+    pv.scene.add(key, rim);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.6, 0.12, 40), new THREE.MeshStandardMaterial({ color: 0x2a2620, roughness: 0.9 }));
+    disc.position.y = -0.06;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.025, 6, 64), new THREE.MeshBasicMaterial({ color: 0x8a6d3b }));
+    ring.rotation.x = Math.PI / 2;
+    pv.scene.add(disc, ring);
+    let dragX = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      dragX = e.clientX;
     });
+    canvas.addEventListener('pointermove', (e) => {
+      if (dragX === null) return;
+      pv.yaw += (e.clientX - dragX) * 0.012;
+      dragX = e.clientX;
+    });
+    canvas.addEventListener('pointerup', () => (dragX = null));
   }
-  classBtns.forEach((b) => b.addEventListener('click', () => selectClass(b.dataset.cls)));
-  nameInput.addEventListener('input', () => (nameInput.dataset.touched = '1'));
-  document.getElementById('btnDice').addEventListener('click', () => {
-    delete nameInput.dataset.touched;
-    newRandomName();
-  });
-  selectClass(lastClass() || CLASS_IDS.find((c) => loadSave(c)) || 'guerrero');
 
-  btnReset.addEventListener('click', () => {
-    if (!resetArmed) {
-      resetArmed = true;
-      btnReset.textContent = 'Pulsa otra vez para borrarlo';
+  // Muestra un personaje (clase, sexo y equipo) en la vista previa
+  function showPreview(info) {
+    const box = $('preview');
+    if (!info) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    if (!pv.renderer) initPreview();
+    const key = `${info.cls}|${info.sex}|${info.equip.weapon}|${info.equip.armor}`;
+    if (key !== pv.key) {
+      pv.key = key;
+      if (pv.model) pv.scene.remove(pv.model.root);
+      pv.model = V.Models.buildHumanoid(lookFor(info.cls, info.sex));
+      V.Models.setWeaponLook(pv.model, ITEMS[info.equip.weapon]);
+      V.Models.setArmorLook(pv.model, ITEMS[info.equip.armor]);
+      pv.scene.add(pv.model.root);
+    }
+    $('pvName').textContent = info.name || 'Sin nombre';
+    $('pvClass').textContent = `${className(info.cls, info.sex)}${info.level ? ` · Nivel ${info.level}` : ''}`;
+    const gear = $('pvGear');
+    gear.innerHTML = '';
+    for (const id of [info.equip.weapon, info.equip.armor]) {
+      if (!id) continue;
+      const li = document.createElement('li');
+      li.textContent = ITEMS[id].name;
+      li.style.color = RARITY[ITEMS[id].rarity].color;
+      gear.append(li);
+    }
+  }
+
+  function renderPreview(dt) {
+    if (!pv.renderer || $('preview').hidden || !pv.model) return;
+    const c = pv.renderer.domElement;
+    const w = c.clientWidth;
+    const h = c.clientHeight;
+    if (w && h && (c.width !== Math.round(w * pv.renderer.getPixelRatio()) || c.height !== Math.round(h * pv.renderer.getPixelRatio()))) {
+      pv.renderer.setSize(w, h, false);
+      pv.camera.aspect = w / h;
+      pv.camera.updateProjectionMatrix();
+    }
+    pv.yaw += dt * 0.35;
+    pv.model.root.rotation.y = pv.yaw;
+    const k = G.time % 3.2;
+    V.Models.animateModel(pv.model, G.time, 0, k < 0.45 ? 1 - k / 0.45 : 0);
+    pv.renderer.render(pv.scene, pv.camera);
+  }
+
+  // ---------- Pantalla de inicio: cuenta → personajes → mundo ----------
+
+  const views = { auth: $('viewAuth'), chars: $('viewChars'), create: $('viewCreate') };
+  function show(view) {
+    for (const [k, el] of Object.entries(views)) el.hidden = k !== view;
+    if (view === 'auth') showPreview(null);
+  }
+  const msg = (id, text, ok = false) => {
+    const el = $(id);
+    el.className = ok ? 'net-msg ok' : 'net-msg';
+    el.textContent = text || '';
+  };
+
+  let account = null;
+  let chars = [];
+  let selected = null;
+  let tab = 'login';
+
+  $('versionTag').textContent = `${desktop ? 'Versión de escritorio' : 'Prototipo jugable'} · v${VERSION}`;
+
+  // Novedades (registro de cambios)
+  (function renderNews() {
+    const box = $('newsBody');
+    for (const entry of (V.CHANGELOG || []).slice(0, 2)) {
+      const h = document.createElement('h3');
+      h.textContent = `v${entry.version} · ${entry.title}`;
+      const ul = document.createElement('ul');
+      for (const it of entry.items.slice(0, 8)) {
+        const li = document.createElement('li');
+        li.textContent = it;
+        ul.append(li);
+      }
+      box.append(h, ul);
+    }
+  })();
+
+  function setTab(t) {
+    tab = t;
+    document.querySelectorAll('.tabs [data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
+    document.querySelectorAll('.reg-only').forEach((el) => (el.hidden = t !== 'register'));
+    $('authPass').autocomplete = t === 'register' ? 'new-password' : 'current-password';
+    $('btnAuth').textContent = t === 'register' ? 'Crear cuenta y entrar' : 'Entrar';
+    msg('authMsg', t === 'register' ? 'Elige un ID (3 a 16 letras o números), tu correo y una contraseña de al menos 6 caracteres.' : '', true);
+  }
+  document.querySelectorAll('.tabs [data-tab]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+
+  async function ensureConnected() {
+    if (Game.connected) return;
+    await Game.connect(V.Config.SERVER_URL);
+  }
+
+  function gotAuth(auth, remember) {
+    account = auth.user;
+    if (auth.session) store.set(SESSION_KEY, auth.session, remember);
+    chars = auth.chars || [];
+    $('acctName').textContent = `Cuenta: ${account}`;
+    if (!chars.length) openCreate();
+    else openChars();
+  }
+
+  $('authForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const user = $('authUser').value.trim();
+    const pass = $('authPass').value;
+    const email = $('authEmail').value.trim();
+    const btn = $('btnAuth');
+    btn.disabled = true;
+    msg('authMsg', 'Conectando con el servidor de Valdoria…', true);
+    try {
+      await ensureConnected();
+      const auth = tab === 'register' ? await Game.register(user, email, pass) : await Game.login(user, pass);
+      $('authPass').value = '';
+      msg('authMsg', '');
+      gotAuth(auth, $('authRemember').checked);
+    } catch (err) {
+      msg('authMsg', err.message);
+    }
+    btn.disabled = false;
+  });
+
+  function openChars(selectId) {
+    show('chars');
+    msg('charMsg', '');
+    const list = $('charList');
+    list.innerHTML = '';
+    if (!chars.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'Todavía no tienes personajes.';
+      list.append(li);
+    }
+    const glyph = { guerrero: '⚔︎', arquera: '➶', mago: '✺' };
+    for (const ch of chars) {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.id = ch.id;
+      b.innerHTML = '<span class="cg"></span><span><strong></strong><small></small></span><span class="lv"></span>';
+      b.querySelector('.cg').textContent = glyph[ch.cls];
+      b.querySelector('strong').textContent = ch.name;
+      b.querySelector('small').textContent = className(ch.cls, ch.sex);
+      b.querySelector('.lv').textContent = `Nv ${ch.level}`;
+      b.addEventListener('click', () => selectChar(ch.id));
+      b.addEventListener('dblclick', () => enterWorld());
+      li.append(b);
+      list.append(li);
+    }
+    $('btnPlay').disabled = !chars.length;
+    $('btnDelChar').hidden = !chars.length;
+    $('btnNewChar').disabled = chars.length >= 7;
+    const want = selectId || (selected && chars.some((c) => c.id === selected) ? selected : chars[0] && chars[0].id);
+    if (want) selectChar(want);
+    else showPreview(null);
+  }
+
+  function selectChar(id) {
+    selected = id;
+    document.querySelectorAll('#charList button').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
+    const ch = chars.find((c) => c.id === id);
+    showPreview(ch && { name: ch.name, cls: ch.cls, sex: ch.sex, level: ch.level, equip: ch.equip || {} });
+    delArmed = false;
+    $('btnDelChar').textContent = 'Borrar';
+  }
+
+  let delArmed = false;
+  $('btnDelChar').addEventListener('click', async () => {
+    const ch = chars.find((c) => c.id === selected);
+    if (!ch) return;
+    if (!delArmed) {
+      delArmed = true;
+      $('btnDelChar').textContent = `¿Borrar a ${ch.name}? Pulsa otra vez`;
       return;
     }
     try {
-      localStorage.removeItem(saveKey(cls));
-    } catch {
-      /* nada */
+      chars = (await Game.deleteChar(ch.id)).chars;
+      selected = null;
+      openChars();
+      msg('charMsg', `${ch.name} fue borrado.`, true);
+    } catch (err) {
+      msg('charMsg', err.message);
     }
-    selectClass(cls);
   });
 
-  // ---------- Modo: en línea o un jugador ----------
-  const modeBtns = [...document.querySelectorAll('.mode-pick button')];
-  const netMsg = document.getElementById('netMsg');
-  let mode = 'online';
-  try {
-    if (localStorage.getItem('valdoria-mode') === 'offline') mode = 'offline';
-  } catch {
-    /* nada */
+  $('btnLogout').addEventListener('click', () => {
+    Game.logout();
+    store.del(SESSION_KEY);
+    account = null;
+    chars = [];
+    setTab('login');
+    show('auth');
+  });
+
+  // ---------- Creador de personaje ----------
+
+  const SYL_A = ['Ael', 'Bran', 'Cael', 'Dor', 'Eld', 'Fen', 'Gal', 'Hal', 'Ith', 'Kael', 'Lor', 'Mor', 'Nym', 'Or', 'Ryn', 'Syl', 'Thal', 'Val', 'Wyn', 'Zar', 'Ar', 'Bel', 'Cor', 'Dra', 'Eri', 'Gor', 'Ily', 'Jor', 'Lys', 'Mae', 'Nor', 'Per', 'Ser', 'Tor', 'Ul', 'Vey'];
+  const SYL_B = { m: ['dor', 'ion', 'ius', 'mir', 'os', 'gar', 'is', 'an', 'rak', 'thas', 'orn', 'ric', 'mar'], f: ['wyn', 'ara', 'iel', 'ra', 'wen', 'ia', 'elle', 'una', 'ys', 'ira', 'ess', 'ana', 'eth'] };
+  const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
+  const randomName = (sex) => pickOne(SYL_A) + pickOne(SYL_B[sex] || SYL_B.m);
+
+  // Propone un nombre que no esté ocupado en el servidor
+  async function suggestName(sex) {
+    const base = V.Config.SERVER_URL.replace(/^ws/, 'http').replace(/\/ws$/, '');
+    let name = randomName(sex);
+    for (let i = 0; i < 6; i++) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 2500);
+        const res = await fetch(`${base}/name-available?name=${encodeURIComponent(name)}`, { signal: ctrl.signal });
+        clearTimeout(t);
+        if ((await res.json()).available) return name;
+      } catch {
+        return name;
+      }
+      name = randomName(sex);
+    }
+    return name;
   }
-  function selectMode(m) {
-    mode = m;
-    for (const b of modeBtns) {
-      const on = b.dataset.mode === m;
+
+  const nameInput = $('nameInput');
+  const creator = { cls: 'guerrero', sex: 'm' };
+  let nameReq = 0;
+  function newRandomName() {
+    const req = ++nameReq;
+    nameInput.value = randomName(creator.sex);
+    delete nameInput.dataset.touched;
+    updateCreatePreview();
+    suggestName(creator.sex).then((n) => {
+      if (req === nameReq && !nameInput.dataset.touched) {
+        nameInput.value = n;
+        updateCreatePreview();
+      }
+    });
+  }
+  function updateCreatePreview() {
+    const c = CLASSES[creator.cls];
+    document.querySelectorAll('.class-pick button').forEach((b) => {
+      const on = b.dataset.cls === creator.cls;
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on);
-    }
-    netMsg.className = 'net-msg ok';
-    netMsg.textContent = m === 'online' ? 'Juega con otros viajeros en el mismo mundo.' : 'Partida solo en tu equipo, sin conexión.';
+      b.querySelector('span').textContent = className(b.dataset.cls, creator.sex);
+    });
+    document.querySelectorAll('.sex-pick button').forEach((b) => {
+      const on = b.dataset.sex === creator.sex;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on);
+    });
+    $('classDesc').textContent = `${c.role}. ${c.desc}`;
+    showPreview({ name: nameInput.value.trim(), cls: creator.cls, sex: creator.sex, level: 1, equip: { weapon: c.start, armor: null } });
   }
-  modeBtns.forEach((b) => b.addEventListener('click', () => selectMode(b.dataset.mode)));
-  selectMode(mode);
+  document.querySelectorAll('.class-pick button').forEach((b) =>
+    b.addEventListener('click', () => {
+      creator.cls = b.dataset.cls;
+      updateCreatePreview();
+    })
+  );
+  document.querySelectorAll('.sex-pick button').forEach((b) =>
+    b.addEventListener('click', () => {
+      const changed = creator.sex !== b.dataset.sex;
+      creator.sex = b.dataset.sex;
+      if (changed && !nameInput.dataset.touched) newRandomName();
+      else updateCreatePreview();
+    })
+  );
+  nameInput.addEventListener('input', () => {
+    nameInput.dataset.touched = '1';
+    updateCreatePreview();
+  });
+  $('btnDice').addEventListener('click', newRandomName);
 
-  let starting = false;
-  async function start() {
-    if (G.started || starting || !G.world) return;
+  function openCreate() {
+    show('create');
+    msg('createMsg', chars.length ? '' : 'Crea tu primer personaje para entrar a Valdoria.', true);
+    $('btnBack').hidden = !chars.length;
+    newRandomName();
+  }
+  $('btnNewChar').addEventListener('click', openCreate);
+  $('btnBack').addEventListener('click', () => openChars());
+
+  $('btnCreate').addEventListener('click', async () => {
+    const btn = $('btnCreate');
+    btn.disabled = true;
+    msg('createMsg', 'Creando personaje…', true);
+    try {
+      await ensureConnected();
+      const r = await Game.createChar(nameInput.value.trim(), creator.cls, creator.sex);
+      chars = r.chars;
+      openChars(r.created);
+      msg('charMsg', '¡Personaje creado! Pulsa «Entrar al mundo».', true);
+    } catch (err) {
+      msg('createMsg', err.message);
+    }
+    btn.disabled = false;
+  });
+
+  // ---------- Entrar al mundo ----------
+
+  let entering = false;
+  async function enterWorld() {
+    if (G.started || entering || !selected) return;
     // Pantalla completa en el mismo toque: después de conectar el navegador ya no lo permite
     if (V.Mobile.isTouch) V.Mobile.enterFullscreen();
-    const name = (nameInput.value || '').trim().slice(0, 16) || 'Viajero';
-    const data = save ? { ...save, name } : Game.newCharacter(name, cls);
+    entering = true;
+    const btn = $('btnPlay');
+    btn.disabled = true;
+    btn.textContent = 'Entrando…';
     try {
-      localStorage.setItem('valdoria-last-class', cls);
-      localStorage.setItem('valdoria-mode', mode);
-    } catch {
-      /* nada */
+      await ensureConnected();
+      await Game.play(selected, {
+        onLost: (text) => {
+          G.keys = {};
+          $('reconnecting').hidden = true;
+          $('netLostMsg').textContent = text || 'No se pudo recuperar la conexión con el servidor. Tu personaje quedó guardado.';
+          $('netLost').hidden = false;
+        },
+        onReconnect: (state) => {
+          $('reconnecting').hidden = state !== 'start';
+          if (state === 'ok') UI.log('Conexión recuperada.', 'sys');
+        },
+      });
+    } catch (err) {
+      entering = false;
+      btn.disabled = false;
+      btn.textContent = 'Entrar al mundo';
+      msg('charMsg', err.message);
+      return;
     }
-
-    if (mode === 'online') {
-      starting = true;
-      btnStart.disabled = true;
-      const label = btnStart.textContent;
-      btnStart.textContent = 'Conectando…';
-      netMsg.className = 'net-msg ok';
-      netMsg.textContent = 'Conectando con el servidor de Valdoria…';
-      try {
-        await Game.startOnline({
-          url: V.Config.SERVER_URL,
-          name,
-          cls,
-          save: data,
-          onSave: (d) => storeSave(d.cls, d),
-          onToken: (token) => storeSave(cls, { ...data, ...(Game.serialize() || {}), name, cls, token }),
-          onLost: () => {
-            G.keys = {};
-            document.getElementById('netLost').hidden = false;
-          },
-        });
-      } catch (err) {
-        starting = false;
-        btnStart.disabled = false;
-        btnStart.textContent = label;
-        netMsg.className = 'net-msg';
-        netMsg.textContent = err.code === 'name_taken' ? err.message : `${err.message} Puedes jugar en modo «Un jugador» mientras tanto.`;
-        if (err.code === 'name_taken') nameInput.focus();
-        return;
-      }
-    } else {
-      Game.createPlayer(data);
-    }
-
+    showPreview(null);
     UI.initUI();
-    Game.spawnMobs();
     V.Mobile.onStart(renderer.domElement);
     G.cam.dist = 15;
     G.cam.pitch = 0.6;
     G.started = true;
-    document.getElementById('start').hidden = true;
-    UI.log(`Bienvenido a Valdoria, ${name}.`, 'sys');
-    if (mode === 'online') UI.log('Estás en línea. Pulsa Enter para hablar con los demás jugadores.', 'sys');
-    UI.log('Clic en el suelo para moverte, clic en un monstruo para atacar. Pulsa H para ver los controles.', 'sys');
+    $('start').hidden = true;
+    const p = G.player;
+    UI.log(`Bienvenido a Valdoria, ${p.name}.`, 'sys');
+    UI.log('Pulsa Enter para hablar. Empieza con # para hablar con tu grupo. Pulsa H para ver los controles.', 'sys');
     UI.log('Habla con la Capitana Brisa si no sabes a dónde ir.', 'sys');
-    UI.banner('Aldea de Brezal', mode === 'online' ? 'En línea · Zona segura' : 'Zona segura');
-    if (mode === 'offline') {
-      setInterval(writeSave, 8000);
-      addEventListener('beforeunload', writeSave);
-      addEventListener('visibilitychange', () => document.hidden && writeSave());
-    }
+    UI.banner('Aldea de Brezal', 'En línea · Zona segura');
   }
-  btnStart.addEventListener('click', start);
+  $('btnPlay').addEventListener('click', enterWorld);
+  document.getElementById('btnRespawn').addEventListener('click', () => Game.respawnPlayer());
   document.getElementById('btnReconnect').addEventListener('click', () => location.reload());
   document.getElementById('btnFull').addEventListener('click', () => V.Mobile.toggleFullscreen());
-  nameInput.addEventListener('keydown', (e) => e.key === 'Enter' && start());
-  document.getElementById('btnRespawn').addEventListener('click', () => Game.respawnPlayer());
+
+  // Al abrir: si hay una sesión guardada, entra directo al selector de personajes
+  async function startScreen() {
+    setTab('login');
+    const saved = store.get(SESSION_KEY);
+    show('auth');
+    if (!saved) return;
+    msg('authMsg', 'Recuperando tu sesión…', true);
+    try {
+      await ensureConnected();
+      const auth = await Game.resume(saved);
+      msg('authMsg', '');
+      gotAuth(auth, !!localStorage.getItem(SESSION_KEY));
+    } catch (err) {
+      store.del(SESSION_KEY);
+      msg('authMsg', err.code === 'session' ? 'Tu sesión expiró. Vuelve a entrar.' : err.message);
+    }
+  }
 
   // ---------- App de escritorio ----------
 
   if (desktop) {
     desktop.getVersion().then((ver) => {
-      document.getElementById('versionTag').textContent = `Versión de escritorio · v${ver}`;
+      $('versionTag').textContent = `Versión de escritorio · v${ver}`;
     });
-    if (desktop.onBeforeQuit) desktop.onBeforeQuit(writeSave);
   }
 
   // ---------- Bucle ----------
@@ -451,6 +688,7 @@
       G.world.crystal.position.y = 1.45 + Math.sin(G.time * 1.6) * 0.08;
     }
     if (G.started) UI.updateUI();
+    else renderPreview(dt);
     renderer.render(scene, camera);
     requestAnimationFrame(loop);
   }

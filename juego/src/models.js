@@ -34,15 +34,30 @@
     const legs = mat(o.legs);
     const dark = mat(0x2a2119);
 
-    rig.add(part(box(0.8, 0.95, 0.46), body, 0, 1.43, 0));
-    rig.add(part(box(0.84, 0.14, 0.5), dark, 0, 0.99, 0));
+    // Figura: las mujeres tienen torso y hombros más estrechos y cintura marcada
+    const fem = !!o.female;
+    const torsoW = fem ? 0.66 : 0.8;
+    const shoulder = fem ? 0.45 : 0.52;
+    rig.add(part(box(torsoW, 0.95, fem ? 0.4 : 0.46), body, 0, 1.43, 0));
+    if (fem) {
+      rig.add(part(box(0.56, 0.22, 0.42), body, 0, 1.62, 0.05)); // busto
+      rig.add(part(box(0.74, 0.3, 0.46), body, 0, 1.06, 0)); // caderas
+    }
+    rig.add(part(box(fem ? 0.7 : 0.84, 0.14, 0.5), dark, 0, 0.99, 0));
 
     const head = new THREE.Group();
     head.position.set(0, 2.13, 0);
     rig.add(head);
     head.add(part(sphere(0.3), skin));
     if (o.hair && !o.hat) head.add(part(box(0.62, 0.2, 0.64), mat(o.hair), 0, 0.17, -0.05));
-    if (o.longHair) head.add(part(box(0.58, 0.66, 0.2), mat(o.hair), 0, -0.14, -0.25));
+    if (o.longHair) {
+      head.add(part(box(0.58, 0.66, 0.2), mat(o.hair), 0, -0.14, -0.25));
+      if (fem) {
+        // mechones a los lados de la cara
+        head.add(part(box(0.1, 0.5, 0.22), mat(o.hair), 0.28, -0.12, -0.04));
+        head.add(part(box(0.1, 0.5, 0.22), mat(o.hair), -0.28, -0.12, -0.04));
+      }
+    }
     if (o.beard) head.add(part(box(0.4, 0.36, 0.16), mat(o.hair), 0, -0.25, 0.2));
     if (o.hat) {
       const hm = mat(o.hat);
@@ -72,12 +87,14 @@
       rig.add(skirt);
     }
 
-    const lArm = limb(rig, -0.52, 1.86, 0, 0.22, 0.82, skin);
-    const rArm = limb(rig, 0.52, 1.86, 0, 0.22, 0.82, skin);
-    lArm.add(part(box(0.3, 0.26, 0.32), body, 0, -0.06, 0));
-    rArm.add(part(box(0.3, 0.26, 0.32), body, 0, -0.06, 0));
-    const lLeg = limb(rig, -0.2, 0.95, 0, 0.27, 0.95, legs);
-    const rLeg = limb(rig, 0.2, 0.95, 0, 0.27, 0.95, legs);
+    const armW = fem ? 0.19 : 0.22;
+    const lArm = limb(rig, -shoulder, 1.86, 0, armW, 0.82, skin);
+    const rArm = limb(rig, shoulder, 1.86, 0, armW, 0.82, skin);
+    lArm.add(part(box(fem ? 0.25 : 0.3, 0.24, fem ? 0.28 : 0.32), body, 0, -0.06, 0));
+    rArm.add(part(box(fem ? 0.25 : 0.3, 0.24, fem ? 0.28 : 0.32), body, 0, -0.06, 0));
+    const legW = fem ? 0.24 : 0.27;
+    const lLeg = limb(rig, fem ? -0.17 : -0.2, 0.95, 0, legW, 0.95, legs);
+    const rLeg = limb(rig, fem ? 0.17 : 0.2, 0.95, 0, legW, 0.95, legs);
 
     const wt = o.weapon === false ? null : o.weaponType || (o.club ? 'club' : 'sword');
     let weapon = null;
@@ -166,8 +183,20 @@
     return { kind: 'quad', root, rig, head, legs, height: 1.5 * s };
   }
 
-  function animateModel(m, t, walk, atk) {
+  function animateModel(m, t, walk, atk, swim = 0) {
     const swing = atk > 0 ? Math.sin(Math.PI * (1 - atk)) : 0;
+    if (m.kind === 'hum' && swim > 0.01) {
+      // Nadar: cuerpo inclinado, brazadas alternas y patada
+      const s = Math.sin(t * 5);
+      m.rig.rotation.x = -1.1 * swim;
+      m.rig.position.y = 1.0 * swim + Math.sin(t * 2.5) * 0.06;
+      m.lArm.rotation.x = -1.6 - s * 1.4;
+      m.rArm.rotation.x = -1.6 + s * 1.4;
+      m.lLeg.rotation.x = Math.sin(t * 10) * 0.4;
+      m.rLeg.rotation.x = -Math.sin(t * 10) * 0.4;
+      return;
+    }
+    if (m.kind === 'hum' && m.rig.rotation.x !== 0 && !m.dying) m.rig.rotation.x = 0;
     if (m.kind === 'hum') {
       const s = Math.sin(t * 9) * 0.75 * walk;
       m.lLeg.rotation.x = s;
@@ -194,6 +223,7 @@
   }
 
   function animateDeath(m, k) {
+    m.dying = k > 0;
     if (m.kind === 'hum') {
       m.rig.rotation.x = (-Math.PI / 2) * k;
       m.rig.position.y = 0.1 * m.height * k;
@@ -210,18 +240,21 @@
       refinado: [0xdfe4ea, 0x0b2a12, 0.4],
       raro: [0x8fb8ff, 0x1a3a90, 0.9],
       epico: [0xc79bff, 0x5a1fa0, 1.4],
+      legendario: [0xffc46b, 0xb05a10, 1.8],
     },
     bow: {
       comun: [0x6b4a2e, 0x000000, 0],
       refinado: [0x7a5a32, 0x1d3a10, 0.5],
       raro: [0xd4dde8, 0x2a4a90, 0.8],
       epico: [0xb88cff, 0x5a1fa0, 1.3],
+      legendario: [0xffc46b, 0xb05a10, 1.7],
     },
     staff: {
       comun: [0x9fc4ff, 0x3a6ad0, 0.6],
       refinado: [0x9fe08a, 0x2f8a2a, 1],
       raro: [0x6a9cff, 0x1f4ad0, 1.5],
       epico: [0xd09bff, 0x7a2ad0, 2],
+      legendario: [0xffd27a, 0xd07a10, 2.4],
     },
   };
 

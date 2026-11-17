@@ -11,7 +11,7 @@ primary_region = "gru" # São Paulo: la región de Fly más cercana a Chile
   PORT = "8080"
   DATA_DIR = "/data"
 
-# Disco persistente: registro de nombres de personajes (sobrevive a reinicios y despliegues)
+# Disco persistente: cuentas y personajes (sobrevive a reinicios y despliegues)
 [mounts]
   source = "valdoria_data"
   destination = "/data"
@@ -36,6 +36,6 @@ primary_region = "gru" # São Paulo: la región de Fly más cercana a Chile
     path = "/status"
 
 [[vm]]
-  memory = "256mb"
+  memory = "512mb"
   cpu_kind = "shared"
   cpus = 1

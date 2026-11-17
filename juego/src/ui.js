@@ -1,7 +1,7 @@
 // Interfaz (HUD) en HTML sobre el canvas 3D. Los botones funcionan con ratón y con toque.
 (function () {
 const G = V.G;
-const { ITEMS, RARITY, CLASSES, shopFor, MAX_LEVEL, xpToNext, sellPrice } = V.Data;
+const { ITEMS, RARITY, CLASSES, MOBS, shopFor, MAX_LEVEL, xpToNext, sellPrice, className, resolveDrop, WEAPON_TIERS } = V.Data;
 const { zoneAt } = V.World;
 // game.js se carga después de este archivo: se llama a través de V.Game en tiempo de ejecución.
 const useSkill = (i) => V.Game.useSkill(i);
@@ -19,6 +19,7 @@ let frame = 0;
 let lastZone;
 const statics = [];
 let myPlate = null;
+let mmR = 80; // radio visible del minimapa (zoom)
 
 function initUI() {
   E = {
@@ -48,13 +49,27 @@ function initUI() {
     inv: $('invPanel'),
     shop: $('shopPanel'),
     help: $('helpPanel'),
+    stats: $('statPanel'),
+    map: $('mapPanel'),
+    drop: $('dropPanel'),
   };
   E.hud.hidden = false;
   E.pName.textContent = G.player.name;
-  $('pClass').textContent = G.player.cdef.name;
+  $('pClass').textContent = className(G.player.cls, G.player.sex);
   buildHotbar();
   $('btnInv').onclick = () => togglePanel('inv');
   $('btnHelp').onclick = () => togglePanel('help');
+  $('btnStats').onclick = () => togglePanel('stats');
+  $('btnMap').onclick = () => togglePanel('map');
+  $('minimap').onclick = () => togglePanel('map', true);
+  $('mmIn').onclick = () => (mmR = Math.max(30, mmR / 1.4));
+  $('mmOut').onclick = () => (mmR = Math.min(200, mmR * 1.4));
+  $('tInfo').onclick = () => G.target && openDrops(G.target);
+  $('btnInvite').onclick = () => G.playerSel && V.Game.invite(G.playerSel.id);
+  $('btnPartyLeave').onclick = () => V.Game.leaveParty();
+  $('inviteYes').onclick = () => answerInvite(true);
+  $('inviteNo').onclick = () => answerInvite(false);
+  bindBigMap();
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => togglePanel(b.dataset.close, false)));
   bindTrade();
   $('tClose').onclick = () => V.Game.setTarget(null);
@@ -69,26 +84,25 @@ function initUI() {
   for (const n of G.world.npcs) addStatic(n.root.position, 2.9, n.name, 'np-npc', 40).npcId = n.id;
   for (const s of G.world.signs) addStatic(s.pos, s.height, s.text, 'np-sign', 26);
 
-  // Chat (solo en línea): Enter abre, Enter envía, Esc cierra
+  // Chat: Enter abre, Enter envía, Esc cierra. "#texto" habla al grupo; "/invitar Nombre" invita.
   const input = $('chatInput');
-  const isOnline = V.Game.online;
-  input.hidden = !isOnline;
-  E.online.hidden = !isOnline;
-  if (V.Mobile && V.Mobile.isTouch) input.placeholder = 'Toca aquí para escribir en el chat';
-  if (isOnline) {
-    input.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter') {
-        const text = input.value.trim();
-        if (text) V.Game.sendChat(text);
-        input.value = '';
-        input.blur();
-      } else if (e.key === 'Escape') {
-        input.value = '';
-        input.blur();
-      }
-    });
-  }
+  E.online.hidden = false;
+  if (V.Mobile && V.Mobile.isTouch) input.placeholder = 'Escribe aquí · #texto para el grupo';
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      const text = input.value.trim();
+      const cmd = text.match(/^\/(invitar|invite)\s+(.+)$/i);
+      if (cmd) V.Game.inviteByName(cmd[2].trim());
+      else if (/^\/(salir|leave)$/i.test(text)) V.Game.leaveParty();
+      else if (text) V.Game.sendChat(text);
+      input.value = '';
+      input.blur();
+    } else if (e.key === 'Escape') {
+      input.value = '';
+      input.blur();
+    }
+  });
 }
 
 // ---------- Barra de acciones ----------
@@ -98,8 +112,8 @@ function buildHotbar() {
   bar.innerHTML = '';
   const defs = [
     ...G.player.skills.map((s, i) => ({ kind: 'skill', i, key: String(i + 1), glyph: s.glyph, title: `${s.name} (nivel ${s.lvl}) · ${s.mp} MP · ${s.cd} s\n${s.desc}` })),
-    { kind: 'pot', id: 'pocion_vida', key: '5', glyph: ITEMS.pocion_vida.glyph, title: `${ITEMS.pocion_vida.name}\n${ITEMS.pocion_vida.desc}` },
-    { kind: 'pot', id: 'pocion_mana', key: '6', glyph: ITEMS.pocion_mana.glyph, title: `${ITEMS.pocion_mana.name}\n${ITEMS.pocion_mana.desc}` },
+    { kind: 'pot', id: 'pocion_vida', key: '7', glyph: ITEMS.pocion_vida.glyph, title: `${ITEMS.pocion_vida.name}\n${ITEMS.pocion_vida.desc}` },
+    { kind: 'pot', id: 'pocion_mana', key: '8', glyph: ITEMS.pocion_mana.glyph, title: `${ITEMS.pocion_mana.name}\n${ITEMS.pocion_mana.desc}` },
   ];
   E.slots = defs.map((d) => {
     const b = document.createElement('button');
@@ -281,7 +295,13 @@ function pushLog(line) {
 function chat(msg) {
   if (!E) return;
   const line = document.createElement('p');
-  if (msg.kind === 'sys') {
+  if (msg.kind === 'party') {
+    line.className = 'chat-party';
+    const who = document.createElement('b');
+    who.textContent = `[Grupo] ${msg.name}: `;
+    line.append(who, msg.text);
+    showBubble(msg.id, msg.text);
+  } else if (msg.kind === 'sys') {
     line.className = 'chat-sys';
     line.textContent = msg.text;
   } else {
@@ -334,6 +354,7 @@ function showDeath(show) {
 // ---------- Paneles ----------
 
 function togglePanel(name, force) {
+  if (name === 'map' && E.map.hidden && force !== false) mapView.center = null; // al abrir, centrado en ti
   const el = E[name];
   el.hidden = force === undefined ? !el.hidden : !force;
   if (name === 'shop' && el.hidden && trade) closeTrade();
@@ -427,7 +448,11 @@ function closeAll() {
     closeTrade();
     return true;
   }
-  for (const k of ['shop', 'inv', 'help']) {
+  if (!$('invitePanel').hidden) {
+    answerInvite(false);
+    return true;
+  }
+  for (const k of ['drop', 'map', 'stats', 'shop', 'inv', 'help']) {
     if (!E[k].hidden) {
       E[k].hidden = true;
       closed = true;
@@ -578,21 +603,6 @@ function refreshPanels() {
   const p = G.player;
   closeItemMenu(); // el inventario cambió: la ficha abierta podría apuntar a otra casilla
   if (!E.inv.hidden) {
-    const s = p.stats;
-    $('invStats').innerHTML = '';
-    const stats = [
-      ['Ataque', Math.round(s.atk * (1 + (p.buffT > 0 ? p.buffPct : 0)))],
-      ['Defensa', Math.round(s.def)],
-      ['Vida', s.maxHp],
-      ['Maná', s.maxMp],
-    ];
-    for (const [k, val] of stats) {
-      const dt = document.createElement('dt');
-      dt.textContent = k;
-      const dd = document.createElement('dd');
-      dd.textContent = val;
-      $('invStats').append(dt, dd);
-    }
     const eq = $('invEquip');
     eq.innerHTML = '';
     for (const [key, label] of [
@@ -626,6 +636,7 @@ function refreshPanels() {
         ? 'Toca un objeto para ver sus opciones: equipar, usar o quitar.'
         : 'Clic en un objeto para ver sus opciones. Clic derecho o doble clic: equipar o usar al instante.';
   }
+  if (!E.stats.hidden) renderStats();
   if (!E.shop.hidden) {
     const list = $('shopList');
     list.innerHTML = '';
@@ -657,7 +668,7 @@ function drawMinimap() {
   const c = E.mm;
   const W = c.canvas.width;
   const half = W / 2;
-  const R = 80;
+  const R = mmR;
   const s = half / R;
   const p = G.player;
   const tx = (x) => half + (x - p.pos.x) * s;
@@ -703,12 +714,13 @@ function drawMinimap() {
     c.arc(tx(np.x), tz(np.z), 3, 0, Math.PI * 2);
     c.fill();
   }
-  // Otros jugadores (en línea)
-  c.fillStyle = '#7fb6ff';
-  for (const s of statics) {
-    if (!s.ent || s.ent.dead) continue;
+  // Otros jugadores: azul; miembros de tu grupo: verde
+  const ally = new Set(p.party ? p.party.members.map((m) => m.id) : []);
+  for (const st of statics) {
+    if (!st.ent || st.ent.dead) continue;
+    c.fillStyle = ally.has(st.ent.id) ? '#7fe08a' : '#7fb6ff';
     c.beginPath();
-    c.arc(tx(s.ent.pos.x), tz(s.ent.pos.z), 2.6, 0, Math.PI * 2);
+    c.arc(tx(st.ent.pos.x), tz(st.ent.pos.z), ally.has(st.ent.id) ? 3.4 : 2.6, 0, Math.PI * 2);
     c.fill();
   }
   c.translate(half, half);
@@ -762,9 +774,24 @@ function updateUI() {
 
   const t = G.target;
   const npc = G.npcSel;
+  const ply = G.playerSel;
   const tBar = E.tHp.parentElement;
   const tTitle = $('tTitle');
-  if (npc) {
+  $('tActions').hidden = !ply;
+  $('tInfo').hidden = !!(npc || ply);
+  if (ply) {
+    E.tFrame.hidden = false;
+    E.tFrame.dataset.lv = 'player';
+    E.tLvl.textContent = ply.level || '?';
+    E.tName.textContent = ply.name;
+    const inParty = p.party && p.party.members.some((m) => m.id === ply.id);
+    tTitle.textContent = `${className(ply.cls, ply.sex)}${inParty ? ' · De tu grupo' : ''}`;
+    tTitle.hidden = false;
+    tBar.hidden = false;
+    bar(E.tHp, E.tHpT, ply.hp, ply.stats.maxHp);
+    $('btnInvite').hidden = !!inParty || !!(p.party && p.party.leader !== p.id);
+    $('tActions').hidden = $('btnInvite').hidden;
+  } else if (npc) {
     // NPC seleccionado: nombre y oficio, sin barra de vida
     E.tFrame.hidden = false;
     E.tFrame.dataset.lv = 'npc';
@@ -785,9 +812,21 @@ function updateUI() {
     }
   }
 
+  // Aire: visible en aguas profundas o mientras se recupera
+  const air = $('pAir');
+  const showAir = p.deep || (p.breath !== undefined && p.breath < 30);
+  air.hidden = !showAir;
+  if (showAir) {
+    $('pAirFill').style.transform = `scaleX(${Math.max(0, p.breath / 30).toFixed(3)})`;
+    $('pAirTxt').textContent = p.breath <= 0 ? '¡Sin aire!' : `Aire ${Math.ceil(p.breath)} s`;
+  }
+
   updateHotbar();
   updateNameplates();
   if (frame % 3 === 0) drawMinimap();
+  if (frame % 6 === 0) renderParty();
+  if (frame % 20 === 0 && !E.stats.hidden) renderStats();
+  if (!E.map.hidden && frame % 2 === 0) drawBigMap();
   if (frame % 15 === 0) {
     const z = zoneAt(p.pos);
     if (z !== lastZone) {
@@ -801,9 +840,271 @@ function updateUI() {
   }
 }
 
+// ---------- Estado del personaje ----------
+
+function renderStats() {
+  const p = G.player;
+  const s = p.stats;
+  $('stLvl').textContent = p.level;
+  $('stName').textContent = p.name;
+  $('stClass').textContent = `${className(p.cls, p.sex)} · Nivel ${p.level}`;
+  const atk = s.atk * (1 + (p.buffT > 0 ? p.buffPct : 0));
+  const crit = s.crit + (p.buffT > 0 ? p.buffCrit || 0 : 0);
+  const need = p.level >= MAX_LEVEL ? 0 : xpToNext(p.level);
+  const rows = [
+    ['Vida', `${Math.round(p.hp)} / ${s.maxHp}`],
+    ['Maná', `${Math.round(p.mp)} / ${s.maxMp}`],
+    ['Experiencia', need ? `${p.xp.toLocaleString('es')} / ${need.toLocaleString('es')}` : 'Nivel máximo'],
+    ['Ataque', Math.round(atk), p.buffT > 0 && p.buffPct, 'sep'],
+    ['Defensa', Math.round(s.def)],
+    ['Prob. de crítico', `${(crit * 100).toFixed(1)}%`, p.buffT > 0 && p.buffCrit],
+    ['Daño crítico', `×${(s.critMult || 1.8).toFixed(1)}`],
+    ['Vel. de ataque', `${(1 / s.atkSpeed).toFixed(2)} golpes/s`],
+    ['Vel. de movimiento', `${(s.speed || 7.2).toFixed(1)} m/s${p.swimming ? ' (nadando: 60%)' : ''}`],
+    ['Alcance', s.range > 3 ? `${s.range} m` : 'Cuerpo a cuerpo'],
+    ['Arma', p.equip.weapon ? ITEMS[p.equip.weapon].name : 'Ninguna', false, 'sep'],
+    ['Armadura', p.equip.armor ? ITEMS[p.equip.armor].name : 'Ninguna'],
+    ['Oro', p.gold.toLocaleString('es')],
+  ];
+  const dl = $('statList');
+  dl.innerHTML = '';
+  for (const [k, val, up, cls] of rows) {
+    const dt = document.createElement('dt');
+    dt.textContent = k;
+    const dd = document.createElement('dd');
+    dd.textContent = val;
+    if (up) dd.classList.add('up');
+    if (cls) {
+      dt.classList.add(cls);
+      dd.classList.add(cls);
+    }
+    dl.append(dt, dd);
+  }
+}
+
+// ---------- Grupo ----------
+
+let partyKey = '';
+function renderParty() {
+  const p = G.player;
+  const box = $('partyFrame');
+  const party = p.party;
+  box.hidden = !party;
+  if (!party) {
+    partyKey = '';
+    return;
+  }
+  const list = $('partyList');
+  const key = party.members.map((m) => m.id).join(',') + party.leader;
+  if (key !== partyKey) {
+    partyKey = key;
+    list.innerHTML = '';
+    for (const m of party.members) {
+      const el = document.createElement('div');
+      el.className = 'pm';
+      el.dataset.id = m.id;
+      el.innerHTML = '<div class="nm"><span class="who"></span><b></b></div><div class="bar hp"><i></i></div><div class="bar mp"><i></i></div>';
+      el.querySelector('.who').textContent = `${party.leader === m.id ? '★ ' : ''}${m.name}`;
+      if (party.leader === p.id && m.id !== p.id) {
+        const kick = document.createElement('button');
+        kick.className = 'kick';
+        kick.title = 'Expulsar del grupo';
+        kick.textContent = '✕';
+        kick.onclick = (e) => {
+          e.stopPropagation();
+          V.Game.kickFromParty(m.id);
+        };
+        el.querySelector('.nm').append(kick);
+      }
+      el.onclick = () => {
+        const q = statics.find((st) => st.ent && st.ent.id === m.id);
+        if (q) V.Game.selectPlayer(q.ent);
+      };
+      list.append(el);
+    }
+  }
+  for (const m of party.members) {
+    const el = list.querySelector(`[data-id="${m.id}"]`);
+    if (!el) continue;
+    el.classList.toggle('dead', m.dead);
+    el.querySelector('.nm b').textContent = `Nv ${m.level}`;
+    const [hp, mp] = el.querySelectorAll('.bar i');
+    hp.style.transform = `scaleX(${Math.max(0, m.hp / m.maxHp).toFixed(3)})`;
+    mp.style.transform = `scaleX(${Math.max(0, m.mp / m.maxMp).toFixed(3)})`;
+  }
+}
+
+function showInvite(name) {
+  $('inviteText').textContent = `${name} te invita a su grupo. La experiencia se repartirá entre todos.`;
+  $('invitePanel').hidden = false;
+  clearTimeout(showInvite.t);
+  showInvite.t = setTimeout(() => !$('invitePanel').hidden && answerInvite(false), 28000);
+}
+function answerInvite(accept) {
+  $('invitePanel').hidden = true;
+  V.Game.answerInvite(accept);
+}
+
+// ---------- Botín posible de un monstruo (Shift + clic) ----------
+
+function openDrops(m) {
+  if (!m || !m.def) return;
+  const p = G.player;
+  $('dropTitle').textContent = `Botín · ${m.def.name}`;
+  const list = $('dropList');
+  list.innerHTML = '';
+  for (const [raw, chance] of m.def.drops) {
+    const id = resolveDrop(raw, p.cls);
+    const it = ITEMS[id];
+    const li = document.createElement('li');
+    const ic = document.createElement('span');
+    ic.className = 'islot filled';
+    ic.style.setProperty('--r', RARITY[it.rarity].color);
+    ic.textContent = it.glyph;
+    const nm = document.createElement('div');
+    const strong = document.createElement('strong');
+    strong.textContent = it.name;
+    strong.style.color = RARITY[it.rarity].color;
+    const small = document.createElement('small');
+    small.style.cssText = 'display:block;color:var(--muted);font-size:12px';
+    small.textContent = it.type === 'weapon' || it.type === 'armor' ? `${RARITY[it.rarity].name} · Nivel ${it.lvl}` : RARITY[it.rarity].name;
+    nm.append(strong, small);
+    const pct = document.createElement('span');
+    pct.className = 'pct';
+    pct.textContent = chance >= 1 ? '100%' : `${+(chance * 100).toFixed(1)}%`;
+    li.append(ic, nm, pct);
+    list.append(li);
+  }
+  togglePanel('drop', true);
+}
+
+// ---------- Mapa grande: arrastrar para mover, rueda o +/− para acercar ----------
+
+const mapView = { center: null, scale: 1.6 };
+function bindBigMap() {
+  const cv = $('bigmap');
+  let drag = null;
+  cv.addEventListener('pointerdown', (e) => {
+    cv.setPointerCapture(e.pointerId);
+    drag = { x: e.clientX, y: e.clientY };
+    cv.style.cursor = 'grabbing';
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const k = cv.width / cv.clientWidth / mapView.scale;
+    const c = mapView.center || { x: G.player.pos.x, z: G.player.pos.z };
+    mapView.center = { x: c.x - (e.clientX - drag.x) * k, z: c.z - (e.clientY - drag.y) * k };
+    drag = { x: e.clientX, y: e.clientY };
+  });
+  const end = () => {
+    drag = null;
+    cv.style.cursor = 'grab';
+  };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+  cv.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      mapView.scale = Math.min(8, Math.max(0.9, mapView.scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+    },
+    { passive: false }
+  );
+  $('mapIn').onclick = () => (mapView.scale = Math.min(8, mapView.scale * 1.3));
+  $('mapOut').onclick = () => (mapView.scale = Math.max(0.9, mapView.scale / 1.3));
+  $('mapCenter').onclick = () => (mapView.center = null);
+}
+
+function drawBigMap() {
+  const cv = $('bigmap');
+  const c = cv.getContext('2d');
+  const W = cv.width;
+  const p = G.player;
+  const ctr = mapView.center || { x: p.pos.x, z: p.pos.z };
+  const s = mapView.scale;
+  const tx = (x) => W / 2 + (x - ctr.x) * s;
+  const tz = (z) => W / 2 + (z - ctr.z) * s;
+  c.fillStyle = '#1d251a';
+  c.fillRect(0, 0, W, W);
+  // Borde del mundo
+  c.fillStyle = '#26301f';
+  c.beginPath();
+  c.arc(tx(0), tz(0), 188 * s, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = 'rgba(176,146,98,.6)';
+  c.lineWidth = Math.max(2, 3 * s * 0.6);
+  for (const { x, z } of G.world.zones) {
+    c.beginPath();
+    c.moveTo(tx(0), tz(0));
+    c.lineTo(tx(x), tz(z));
+    c.stroke();
+  }
+  for (const z of G.world.zones) {
+    c.fillStyle = `rgba(${z.tint.map((t) => Math.round(t * 255)).join(',')},.6)`;
+    c.beginPath();
+    c.arc(tx(z.x), tz(z.z), z.r * s, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.fillStyle = 'rgba(217,181,106,.4)';
+  c.beginPath();
+  c.arc(tx(0), tz(0), 22 * s, 0, Math.PI * 2);
+  c.fill();
+  // Nombres de zonas
+  c.font = `700 ${Math.round(11 + s * 2)}px Cinzel, Georgia, serif`;
+  c.textAlign = 'center';
+  for (const z of [V.Data.ZONES[0], ...G.world.zones]) {
+    const label = z.lvl ? `${z.name} · ${z.lvl}` : z.name;
+    c.lineWidth = 4;
+    c.strokeStyle = 'rgba(0,0,0,.7)';
+    c.strokeText(label, tx(z.x), tz(z.z) - (z.safe ? 0 : z.r * s * 0.15));
+    c.fillStyle = '#f3e7cc';
+    c.fillText(label, tx(z.x), tz(z.z) - (z.safe ? 0 : z.r * s * 0.15));
+  }
+  for (const m of G.mobs) {
+    if (m.dead || m.hidden) continue;
+    c.fillStyle = m.def.boss ? '#c895ff' : m.aggro ? '#ff5a4a' : '#f2cf5b';
+    c.fillRect(tx(m.pos.x) - 2, tz(m.pos.z) - 2, 4, 4);
+  }
+  const ally = new Set(p.party ? p.party.members.map((m) => m.id) : []);
+  for (const st of statics) {
+    if (!st.ent || st.ent.dead) continue;
+    c.fillStyle = ally.has(st.ent.id) ? '#7fe08a' : '#7fb6ff';
+    c.beginPath();
+    c.arc(tx(st.ent.pos.x), tz(st.ent.pos.z), 5, 0, Math.PI * 2);
+    c.fill();
+  }
+  // Miembros del grupo lejanos (no visibles en la escena)
+  if (p.party) {
+    c.fillStyle = '#7fe08a';
+    for (const m of p.party.members) {
+      if (m.id === p.id || statics.some((st) => st.ent && st.ent.id === m.id)) continue;
+      c.beginPath();
+      c.arc(tx(m.x), tz(m.z), 5, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+  c.fillStyle = '#d9b56a';
+  for (const n of G.world.npcs) c.fillRect(tx(n.x) - 3, tz(n.z) - 3, 6, 6);
+  c.save();
+  c.translate(tx(p.pos.x), tz(p.pos.z));
+  c.rotate(-p.facing);
+  c.fillStyle = '#ffffff';
+  c.strokeStyle = '#111';
+  c.lineWidth = 1.5;
+  c.beginPath();
+  c.moveTo(0, 11);
+  c.lineTo(-7, -8);
+  c.lineTo(0, -4);
+  c.lineTo(7, -8);
+  c.closePath();
+  c.fill();
+  c.stroke();
+  c.restore();
+}
+
 V.UI = {
   initUI, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
-  floatText, log, logLoot, banner, showDeath,
+  floatText, log, logLoot, banner, showDeath, showInvite, openDrops,
   togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI, openTrade,
 };
 })();

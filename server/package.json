@@ -1,6 +1,6 @@
 {
   "name": "ecos-de-valdoria-servidor",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Servidor de juego de Ecos de Valdoria: ejecuta la simulación (juego/src/sim.js) para todos los jugadores",
   "main": "index.js",

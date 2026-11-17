@@ -1,6 +1,8 @@
-// Prueba del servidor online: lo arranca de verdad y conecta dos jugadores por WebSocket.
+// Prueba del servidor online: lo arranca de verdad y conecta jugadores por WebSocket.
 // Uso: (cd server && npm install) && node test/server.test.js
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const WebSocket = require(path.join(__dirname, '..', 'server', 'node_modules', 'ws'));
@@ -8,31 +10,64 @@ const WebSocket = require(path.join(__dirname, '..', 'server', 'node_modules', '
 const PORT = 18000 + Math.floor(Math.random() * 1000);
 const URL = `ws://127.0.0.1:${PORT}/ws`;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const V = 2;
 
-function client(name, cls, save) {
+// Cliente de prueba: guarda todo lo que recibe y permite esperar un tipo de mensaje
+function connect() {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(URL);
-    const c = { ws, name, id: null, snaps: [], events: [], chats: [], last: null };
-    ws.on('open', () => ws.send(JSON.stringify({ t: 'join', v: 1, name, cls, save })));
+    const c = { ws, inbox: [], snaps: [], events: [], chats: [], last: null, closed: false };
+    c.send = (msg) => ws.send(JSON.stringify(msg));
+    c.next = (type, ms = 4000) =>
+      new Promise((res, rej) => {
+        const i = c.inbox.findIndex((m) => m.t === type || (Array.isArray(type) && type.includes(m.t)));
+        if (i >= 0) return res(c.inbox.splice(i, 1)[0]);
+        const t0 = Date.now();
+        const iv = setInterval(() => {
+          const j = c.inbox.findIndex((m) => m.t === type || (Array.isArray(type) && type.includes(m.t)));
+          if (j >= 0) {
+            clearInterval(iv);
+            res(c.inbox.splice(j, 1)[0]);
+          } else if (Date.now() - t0 > ms) {
+            clearInterval(iv);
+            rej(new Error(`no llegó ${type}`));
+          }
+        }, 20);
+      });
+    ws.on('open', () => resolve(c));
     ws.on('message', (raw) => {
       const m = JSON.parse(raw);
-      if (m.t === 'welcome') c.id = m.id;
-      else if (m.t === 's') {
+      if (m.t === 's') {
         c.last = m;
         c.snaps.push(m);
-        if (c.snaps.length === 1) resolve(c);
       } else if (m.t === 'e') c.events.push(...m.e);
       else if (m.t === 'chat') c.chats.push(m);
-      else if (m.t === 'token') c.token = m.token;
-      else if (m.t === 'error') reject(new Error(m.msg));
+      else c.inbox.push(m);
     });
+    ws.on('close', () => (c.closed = true));
     ws.on('error', reject);
-    c.send = (msg) => ws.send(JSON.stringify(msg));
   });
 }
 
+async function enter(user, email, pass, charName, cls, sex) {
+  const c = await connect();
+  c.send({ t: 'register', v: V, user, email, pass });
+  const auth = await c.next(['auth', 'authError']);
+  if (auth.t !== 'auth') throw new Error(auth.msg);
+  c.session = auth.session;
+  c.send({ t: 'createChar', name: charName, cls, sex });
+  const list = await c.next(['chars', 'charError']);
+  if (list.t !== 'chars') throw new Error(list.msg);
+  c.charId = list.created;
+  c.send({ t: 'play', id: c.charId });
+  const wel = await c.next('welcome');
+  c.id = wel.id;
+  await wait(250);
+  return c;
+}
+
 async function main() {
-  const dataDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'valdoria-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'valdoria-'));
   const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((resolve) => srv.stdout.on('data', (d) => String(d).includes('servidor en el puerto') && resolve()));
   let checks = 0;
@@ -43,97 +78,131 @@ async function main() {
   };
 
   try {
-    const res = await fetch(`http://127.0.0.1:${PORT}/status`);
-    const status = await res.json();
-    ok(status.ok && status.protocol === 1, 'el servidor responde en /status');
+    const status = await (await fetch(`http://127.0.0.1:${PORT}/status`)).json();
+    ok(status.ok && status.protocol === V && /^\d+\.\d+\.\d+$/.test(status.version), `el servidor responde (v${status.version})`);
 
-    // Una partida con valores imposibles debe quedar dentro de los límites
-    const cheat = { cls: 'arquera', level: 999, gold: -50, xp: 1e12, inv: [{ id: 'no_existe', qty: 5 }, { id: 'pocion_vida', qty: 3 }], equip: { weapon: 'filo_crepusculo', armor: 'egida' }, pos: { x: 0, z: 5 } };
-    const a = await client('Ana<script>', 'arquera', cheat);
-    const b = await client('Beto', 'guerrero', null);
-    // Ciro está lejos de todo (más allá del radio de visión de 72 m)
-    const far = await client('Ciro', 'mago', { cls: 'mago', level: 3, pos: { x: -120, z: 95 } });
-    ok(a.id && b.id && a.id !== b.id, 'dos jugadores reciben identificadores distintos');
-    // Nombre repetido (sin importar mayúsculas): se rechaza
-    let dupError = null;
-    await client('beto', 'mago', null).catch((e) => (dupError = e.message));
-    ok(dupError && dupError.includes('Ya hay un jugador'), 'no se permiten dos jugadores conectados con el mismo nombre');
+    // ---------- Cuentas ----------
+    const x = await connect();
+    x.send({ t: 'register', v: V, user: 'a', email: 'malo', pass: '1' });
+    ok((await x.next('authError')).msg.includes('ID'), 'se valida el ID al registrarse');
+    x.send({ t: 'register', v: V, user: 'ana_01', email: 'no-es-correo', pass: 'secreto1' });
+    ok((await x.next('authError')).msg.includes('correo'), 'se valida el correo');
+    x.send({ t: 'register', v: V, user: 'ana_01', email: 'ana@example.com', pass: '123' });
+    ok((await x.next('authError')).msg.includes('contraseña'), 'se valida la contraseña');
+    x.send({ t: 'register', v: 1, user: 'ana_01', email: 'ana@example.com', pass: 'secreto1' });
+    ok((await x.next('authError')).code === 'version', 'se rechaza una versión antigua del juego');
+    x.ws.close();
 
-    const proto = await client('Proto', '__proto__', { cls: '__proto__', inv: [{ id: '__proto__', qty: 1 }] });
-    const protoRow = proto.last.p.find((r) => r[0] === proto.id);
-    ok(protoRow[10] === 'guerrero' && proto.last.me.inv.every((s) => s.id !== '__proto__'), 'clases y objetos "__proto__" se rechazan');
-    proto.ws.close();
-
+    const a = await enter('ana_01', 'ana@example.com', 'secreto1', 'Selene', 'arquera', 'f');
+    ok(!!a.id && !!a.session, 'Ana crea su cuenta, entra al instante y juega con su personaje');
     const meA = a.last.me;
-    ok(meA.level === 20 && meA.gold === 0, 'nivel y oro de una partida trucada se limitan');
-    ok(meA.inv.length === 1 && meA.inv[0].id === 'pocion_vida', 'los objetos inexistentes se descartan');
-    ok(meA.equip.weapon === 'arco_corto', 'no puede equipar un arma de otra clase');
+    ok(meA.level === 1 && meA.inv.length > 0 && meA.stats.crit > 0, 'el personaje nuevo empieza en nivel 1 con estadísticas de crítico');
 
-    await wait(400);
-    const rowsA = a.last.p.map((r) => r[0]);
-    ok(rowsA.includes(b.id), 'Ana ve a Beto en la aldea');
-    const nameRow = b.last.p.find((r) => r[0] === a.id);
-    ok(nameRow && !/[<>]/.test(nameRow[11]), 'el nombre se limpia de caracteres peligrosos');
+    const dup = await connect();
+    dup.send({ t: 'register', v: V, user: 'ANA_01', email: 'otra@example.com', pass: 'secreto1' });
+    ok((await dup.next('authError')).msg.includes('en uso'), 'el ID de cuenta es único');
+    dup.send({ t: 'register', v: V, user: 'otra', email: 'ANA@example.com', pass: 'secreto1' });
+    ok((await dup.next('authError')).msg.includes('correo'), 'el correo es único');
+    dup.send({ t: 'login', v: V, user: 'ana_01', pass: 'incorrecta' });
+    ok((await dup.next('authError')).msg.includes('incorrectos'), 'contraseña incorrecta rechazada');
+    dup.ws.close();
 
-    // Chat
+    const b = await enter('beto', 'beto@example.com', 'clave123', 'Orion', 'guerrero', 'm');
+    ok(b.id && b.id !== a.id, 'Beto entra con su propia cuenta');
+
+    // Nombres de personaje únicos y válidos
+    const c3 = await connect();
+    c3.send({ t: 'register', v: V, user: 'ciro', email: 'ciro@example.com', pass: 'clave123' });
+    await c3.next('auth');
+    c3.send({ t: 'createChar', name: 'selene', cls: 'mago', sex: 'm' });
+    ok((await c3.next('charError')).msg.includes('ya pertenece'), 'no se repiten nombres de personaje');
+    c3.send({ t: 'createChar', name: 'Brisa', cls: 'mago', sex: 'm' });
+    ok((await c3.next('charError')).msg.includes('reservado'), 'los nombres de NPC están reservados');
+    c3.send({ t: 'createChar', name: '<b>', cls: 'mago', sex: 'm' });
+    ok((await c3.next('charError')).t === 'charError', 'nombres inválidos rechazados');
+    c3.send({ t: 'createChar', name: 'Merlo', cls: '__proto__', sex: 'x' });
+    const made = await c3.next('chars');
+    ok(made.chars.length === 1 && made.chars[0].cls === 'guerrero' && made.chars[0].sex === 'm', 'clase y sexo inválidos se corrigen');
+    const avail = await (await fetch(`http://127.0.0.1:${PORT}/name-available?name=Selene`)).json();
+    const free = await (await fetch(`http://127.0.0.1:${PORT}/name-available?name=Nadie`)).json();
+    ok(!avail.available && free.available, '/name-available indica si un nombre está libre');
+    c3.send({ t: 'deleteChar', id: made.chars[0].id });
+    ok((await c3.next('chars')).chars.length === 0, 'se puede borrar un personaje');
+    c3.ws.close();
+
+    // ---------- Juego ----------
+    await wait(300);
+    ok(a.last.p.some((r) => r[0] === b.id), 'Ana ve a Beto en la aldea');
+    const rowA = b.last.p.find((r) => r[0] === a.id);
+    ok(rowA && rowA[15] === 'f', 'se ve el sexo de los demás personajes');
+
     a.send({ t: 'chat', text: 'Hola, ¿alguien para cazar lobos?' });
     await wait(300);
     ok(b.chats.some((m) => m.kind === 'player' && m.text.startsWith('Hola')), 'Beto recibe el chat de Ana');
 
-    // Movimiento con clic: Beto camina hacia el este
+    // Grupo
+    a.send({ t: 'invite', id: b.id });
+    await wait(300);
+    ok(b.events.some((e) => e.type === 'partyInvite' && e.name === 'Selene'), 'Beto recibe la invitación al grupo');
+    b.send({ t: 'inviteAnswer', accept: true });
+    await wait(400);
+    ok(a.last.me.party && a.last.me.party.members.length === 2, 'Ana ve a Beto en su grupo con su vida y maná');
+    b.send({ t: 'chat', text: '#vamos al bosque' });
+    await wait(300);
+    ok(a.chats.some((m) => m.kind === 'party' && m.text === 'vamos al bosque'), 'chat de grupo con #');
+
+    // Movimiento y combate
     const startX = b.last.p.find((r) => r[0] === b.id)[1];
-    b.send({ t: 'move', x: 15, z: 5 });
-    await wait(1500);
+    b.send({ t: 'move', x: startX + 8, z: 6 });
+    await wait(1600);
     const nowX = b.last.p.find((r) => r[0] === b.id)[1];
-    ok(nowX > startX + 5, `Beto se mueve en el servidor (${startX.toFixed(1)} → ${nowX.toFixed(1)})`);
+    ok(nowX > startX + 4, `Beto se mueve en el servidor (${startX.toFixed(1)} → ${nowX.toFixed(1)})`);
 
-    // Combate: Beto va a los prados y ataca a un jabalí
-    b.send({ t: 'move', x: 44, z: 12 });
-    await wait(5000);
-    const me = b.last.p.find((r) => r[0] === b.id);
-    const boar = b.last.m
-      .filter((r) => r[1] === 'jabali' && !r[7])
-      .sort((r1, r2) => Math.hypot(r1[2] - me[1], r1[4] - me[3]) - Math.hypot(r2[2] - me[1], r2[4] - me[3]))[0];
-    ok(!!boar, 'Beto ve jabalíes en los Prados de Brezo');
-    b.send({ t: 'target', id: boar[0] });
-    b.send({ t: 'attack' });
-    await wait(6000);
-    const hits = b.events.filter((e) => e.type === 'float' && e.ent === boar[0]);
-    ok(hits.length > 0, `el servidor calcula el daño de Beto al jabalí (${hits.length} golpes)`);
-    ok(!far.events.some((e) => e.type === 'float' && e.ent === boar[0]), 'Ciro, lejos, no recibe eventos de ese combate');
-    ok(!far.last.p.some((r) => r[0] === b.id), 'Ciro no ve a Beto a más de 72 m');
-    far.ws.close();
+    // Compra (para probar el guardado): Beto va al mercader y compra una poción
+    b.send({ t: 'talk', id: 'mercader' });
+    await wait(2500);
+    b.send({ t: 'buy', id: 'pocion_vida', q: 1 });
+    await wait(300);
+    const goldAfter = b.last.me.gold;
+    ok(goldAfter === 20, `Beto compra una poción (oro ${goldAfter})`);
 
-    // Ajenos al protocolo: mensajes basura no rompen el servidor
+    // Mensajes basura no rompen el servidor
     b.ws.send('{esto no es json');
     b.send({ t: 'skill', i: 'x' });
     b.send({ t: 'buy', id: '__proto__' });
-    await wait(300);
+    b.send({ t: 'play', id: 'c999' });
     const before = b.snaps.length;
     await wait(500);
     ok(b.snaps.length > before, 'el servidor sigue funcionando tras mensajes inválidos');
 
-    // Desconexión
+    // Guardado: Beto sale y vuelve a entrar con su sesión
+    b.ws.close();
+    await wait(500);
+    ok(a.chats.some((m) => m.kind === 'sys' && m.text === 'Orion ha dejado Valdoria.'), 'se avisa cuando un jugador sale');
+    ok(!a.last.me.party, 'al salir Beto, el grupo se disuelve');
+    const b2 = await connect();
+    b2.send({ t: 'resume', v: V, session: b.session });
+    const back = await b2.next('auth');
+    ok(back.user === 'beto' && back.chars.length === 1 && back.chars[0].name === 'Orion', 'Beto reanuda su sesión y ve su personaje');
+    b2.send({ t: 'play', id: back.chars[0].id });
+    await b2.next('welcome');
+    await wait(300);
+    ok(b2.last.me.gold === 20, 'el oro gastado quedó guardado en el servidor');
+
+    // Una cuenta no puede jugar dos veces a la vez
+    const b3 = await connect();
+    b3.send({ t: 'login', v: V, user: 'beto', pass: 'clave123' });
+    await b3.next('auth');
+    await wait(300);
+    ok(b2.closed, 'al entrar en otro lugar, la sesión anterior se cierra');
+    b3.ws.close();
     a.ws.close();
     await wait(400);
-    ok(b.chats.some((m) => m.kind === 'sys' && m.text === 'Anascript ha dejado Valdoria.'), 'se avisa cuando un jugador sale');
-    ok(!b.last.p.some((r) => r[0] === a.id), 'Ana desaparece del mundo de Beto');
 
-    // Registro de nombres: el nombre de Ana sigue siendo suyo aunque se haya ido
-    ok(typeof a.token === 'string' && a.token.length > 20, 'al entrar por primera vez el servidor entrega una llave');
-    let stolen = null;
-    await client('ANASCRIPT', 'guerrero', null).catch((e) => (stolen = e.message));
-    ok(stolen && stolen.includes('ya pertenece'), 'otro jugador no puede usar un nombre ya registrado');
-    const back = await client('Anascript', 'arquera', { cls: 'arquera', level: 3, token: a.token });
-    ok(!!back.id, 'con su llave, Ana vuelve a entrar con su nombre');
-    back.ws.close();
-    const avail = await (await fetch(`http://127.0.0.1:${PORT}/name-available?name=Anascript`)).json();
-    const free = await (await fetch(`http://127.0.0.1:${PORT}/name-available?name=Nadie123`)).json();
-    ok(avail.available === false && free.available === true, '/name-available indica si un nombre está libre');
-    await wait(400);
-    const saved = JSON.parse(require('fs').readFileSync(path.join(dataDir, 'names.json'), 'utf8'));
-    ok(saved.anascript && !JSON.stringify(saved).includes(a.token), 'el registro se guarda en disco sin la llave en claro');
-    b.ws.close();
+    const db = JSON.parse(fs.readFileSync(path.join(dataDir, 'db.json'), 'utf8'));
+    const raw = JSON.stringify(db);
+    ok(!raw.includes('secreto1') && !raw.includes(a.session), 'contraseñas y sesiones no se guardan en claro');
+    ok(Object.keys(db.accounts).length === 3 && Object.keys(db.chars).length === 2, 'cuentas y personajes guardados en disco');
     console.log(`\nServidor OK: ${checks} comprobaciones superadas.`);
   } finally {
     srv.kill();

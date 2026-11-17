@@ -2,7 +2,8 @@
 *
 !server/package.json
 !server/index.js
-!server/names.js
+!server/db.js
 !juego/src/data.js
 !juego/src/terrain.js
 !juego/src/sim.js
+!juego/src/version.js
