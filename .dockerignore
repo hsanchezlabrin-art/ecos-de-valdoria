@@ -1,0 +1,7 @@
+# La imagen del servidor solo necesita estos archivos
+*
+!server/package.json
+!server/index.js
+!juego/src/data.js
+!juego/src/terrain.js
+!juego/src/sim.js

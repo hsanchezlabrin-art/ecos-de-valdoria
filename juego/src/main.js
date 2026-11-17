@@ -23,13 +23,16 @@
       return null;
     }
   }
-  function writeSave() {
-    if (!G.started) return;
+  function storeSave(cls, data) {
+    if (!data) return;
     try {
-      localStorage.setItem(saveKey(G.player.cls), JSON.stringify(Game.serialize()));
+      localStorage.setItem(saveKey(cls), JSON.stringify(data));
     } catch {
       /* almacenamiento no disponible */
     }
+  }
+  function writeSave() {
+    if (G.started) storeSave(G.player.cls, Game.serialize());
   }
 
   // ---------- Pantalla de carga ----------
@@ -171,6 +174,13 @@
 
     addEventListener('keydown', (e) => {
       if (!G.started || e.target.tagName === 'INPUT') return;
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+        if (UI.focusChat()) {
+          e.preventDefault();
+          G.keys = {};
+        }
+        return;
+      }
       G.keys[e.code] = true;
       switch (e.code) {
         case 'Tab':
@@ -281,16 +291,71 @@
     selectClass(cls);
   });
 
-  function start() {
-    if (G.started || !G.world) return;
+  // ---------- Modo: en línea o un jugador ----------
+  const modeBtns = [...document.querySelectorAll('.mode-pick button')];
+  const netMsg = document.getElementById('netMsg');
+  let mode = 'online';
+  try {
+    if (localStorage.getItem('valdoria-mode') === 'offline') mode = 'offline';
+  } catch {
+    /* nada */
+  }
+  function selectMode(m) {
+    mode = m;
+    for (const b of modeBtns) {
+      const on = b.dataset.mode === m;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on);
+    }
+    netMsg.className = 'net-msg ok';
+    netMsg.textContent = m === 'online' ? 'Juega con otros viajeros en el mismo mundo.' : 'Partida solo en tu equipo, sin conexión.';
+  }
+  modeBtns.forEach((b) => b.addEventListener('click', () => selectMode(b.dataset.mode)));
+  selectMode(mode);
+
+  let starting = false;
+  async function start() {
+    if (G.started || starting || !G.world) return;
     const name = (nameInput.value || '').trim().slice(0, 16) || 'Viajero';
     const data = save ? { ...save, name } : Game.newCharacter(name, cls);
     try {
       localStorage.setItem('valdoria-last-class', cls);
+      localStorage.setItem('valdoria-mode', mode);
     } catch {
       /* nada */
     }
-    Game.createPlayer(data);
+
+    if (mode === 'online') {
+      starting = true;
+      btnStart.disabled = true;
+      const label = btnStart.textContent;
+      btnStart.textContent = 'Conectando…';
+      netMsg.className = 'net-msg ok';
+      netMsg.textContent = 'Conectando con el servidor de Valdoria…';
+      try {
+        await Game.startOnline({
+          url: V.Config.SERVER_URL,
+          name,
+          cls,
+          save: data,
+          onSave: (d) => storeSave(d.cls, d),
+          onLost: () => {
+            G.keys = {};
+            document.getElementById('netLost').hidden = false;
+          },
+        });
+      } catch (err) {
+        starting = false;
+        btnStart.disabled = false;
+        btnStart.textContent = label;
+        netMsg.className = 'net-msg';
+        netMsg.textContent = `${err.message} Puedes jugar en modo «Un jugador» mientras tanto.`;
+        return;
+      }
+    } else {
+      Game.createPlayer(data);
+    }
+
     UI.initUI();
     Game.spawnMobs();
     G.cam.dist = 15;
@@ -298,14 +363,18 @@
     G.started = true;
     document.getElementById('start').hidden = true;
     UI.log(`Bienvenido a Valdoria, ${name}.`, 'sys');
+    if (mode === 'online') UI.log('Estás en línea. Pulsa Enter para hablar con los demás jugadores.', 'sys');
     UI.log('Clic en el suelo para moverte, clic en un monstruo para atacar. Pulsa H para ver los controles.', 'sys');
     UI.log('Habla con la Capitana Brisa si no sabes a dónde ir.', 'sys');
-    UI.banner('Aldea de Brezal', 'Zona segura');
-    setInterval(writeSave, 8000);
-    addEventListener('beforeunload', writeSave);
-    addEventListener('visibilitychange', () => document.hidden && writeSave());
+    UI.banner('Aldea de Brezal', mode === 'online' ? 'En línea · Zona segura' : 'Zona segura');
+    if (mode === 'offline') {
+      setInterval(writeSave, 8000);
+      addEventListener('beforeunload', writeSave);
+      addEventListener('visibilitychange', () => document.hidden && writeSave());
+    }
   }
   btnStart.addEventListener('click', start);
+  document.getElementById('btnReconnect').addEventListener('click', () => location.reload());
   nameInput.addEventListener('keydown', (e) => e.key === 'Enter' && start());
   document.getElementById('btnRespawn').addEventListener('click', () => Game.respawnPlayer());
 

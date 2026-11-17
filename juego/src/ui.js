@@ -38,7 +38,8 @@ function initUI() {
     tHpT: $('tHpTxt'),
     zone: $('zoneName'),
     gold: $('goldTxt'),
-    log: $('log'),
+    log: $('logLines'),
+    online: $('onlineTxt'),
     labels: $('labels'),
     floats: $('floats'),
     banner: $('banner'),
@@ -58,6 +59,26 @@ function initUI() {
   addStatic(G.player.pos, G.player.model.height + 0.5, G.player.name, 'np-player', 40);
   for (const n of G.world.npcs) addStatic(n.root.position, 2.9, n.name, 'np-npc', 40);
   for (const s of G.world.signs) addStatic(s.pos, s.height, s.text, 'np-sign', 26);
+
+  // Chat (solo en línea): Enter abre, Enter envía, Esc cierra
+  const input = $('chatInput');
+  const isOnline = V.Game.online;
+  input.hidden = !isOnline;
+  E.online.hidden = !isOnline;
+  if (isOnline) {
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        const text = input.value.trim();
+        if (text) V.Game.sendChat(text);
+        input.value = '';
+        input.blur();
+      } else if (e.key === 'Escape') {
+        input.value = '';
+        input.blur();
+      }
+    });
+  }
 }
 
 // ---------- Barra de acciones ----------
@@ -146,7 +167,22 @@ function addStatic(pos, height, text, cls, maxDist) {
   el.hidden = true;
   el.textContent = text;
   $('labels').append(el);
-  statics.push({ pos, height, el, maxDist });
+  const s = { pos, height, el, maxDist };
+  statics.push(s);
+  return s;
+}
+
+// Nombres sobre otros jugadores (modo en línea)
+function addPlayerPlate(q) {
+  const s = addStatic(q.pos, 2.95, q.name, 'np-player np-other', 40);
+  s.ent = q;
+  q.plate = s;
+}
+function removePlayerPlate(q) {
+  if (!q.plate) return;
+  q.plate.el.remove();
+  statics.splice(statics.indexOf(q.plate), 1);
+  q.plate = null;
 }
 
 function project(pos, h) {
@@ -168,7 +204,7 @@ function updateNameplates() {
   const p = G.player;
   const cam = G.camera.position;
   for (const m of G.mobs) {
-    const show = !m.dead && Math.hypot(m.pos.x - cam.x, m.pos.z - cam.z) < 42;
+    const show = !m.dead && !m.hidden && Math.hypot(m.pos.x - cam.x, m.pos.z - cam.z) < 42;
     place(m.np.el, show ? project(m.pos, m.model.height + 0.45) : null);
     if (!show) continue;
     const cls = levelClass(m.lvl - p.level) + (G.target === m ? ' is-target' : '');
@@ -182,7 +218,8 @@ function updateNameplates() {
   }
   for (const s of statics) {
     const d = Math.hypot(s.pos.x - cam.x, s.pos.z - cam.z);
-    place(s.el, d < s.maxDist && !(s.pos === p.pos && p.dead) ? project(s.pos, s.height) : null);
+    const gone = (s.pos === p.pos && p.dead) || (s.ent && s.ent.dead);
+    place(s.el, d < s.maxDist && !gone ? project(s.pos, s.height) : null);
   }
 }
 
@@ -225,8 +262,32 @@ function logLoot(id, qty, verb = 'Obtienes') {
 
 function pushLog(line) {
   E.log.append(line);
-  while (E.log.children.length > 40) E.log.firstChild.remove();
+  while (E.log.children.length > 60) E.log.firstChild.remove();
   E.log.scrollTop = E.log.scrollHeight;
+}
+
+// Mensajes del chat en línea: { kind: 'player' | 'sys', name, cls, text }
+function chat(msg) {
+  if (!E) return;
+  const line = document.createElement('p');
+  if (msg.kind === 'sys') {
+    line.className = 'chat-sys';
+    line.textContent = msg.text;
+  } else {
+    line.className = 'chat';
+    const who = document.createElement('b');
+    who.className = `who-${msg.cls}`;
+    who.textContent = `${msg.name}: `;
+    line.append(who, msg.text);
+  }
+  pushLog(line);
+}
+
+function focusChat() {
+  const input = $('chatInput');
+  if (!input || input.hidden) return false;
+  input.focus();
+  return true;
 }
 
 function banner(title, sub = '') {
@@ -408,7 +469,7 @@ function drawMinimap() {
   c.arc(tx(0), tz(0), 22 * s, 0, Math.PI * 2);
   c.fill();
   for (const m of G.mobs) {
-    if (m.dead) continue;
+    if (m.dead || m.hidden) continue;
     const x = tx(m.pos.x);
     const y = tz(m.pos.z);
     if (x < 0 || y < 0 || x > W || y > W) continue;
@@ -421,6 +482,14 @@ function drawMinimap() {
     const np = n.root.position;
     c.beginPath();
     c.arc(tx(np.x), tz(np.z), 3, 0, Math.PI * 2);
+    c.fill();
+  }
+  // Otros jugadores (en línea)
+  c.fillStyle = '#7fb6ff';
+  for (const s of statics) {
+    if (!s.ent || s.ent.dead) continue;
+    c.beginPath();
+    c.arc(tx(s.ent.pos.x), tz(s.ent.pos.z), 2.6, 0, Math.PI * 2);
     c.fill();
   }
   c.translate(half, half);
@@ -461,6 +530,10 @@ function updateUI() {
   }
   E.pLvl.textContent = p.level;
   E.gold.textContent = p.gold.toLocaleString('es');
+  if (V.Game.online && frame % 30 === 0) {
+    const n = V.Game.onlineCount;
+    E.online.textContent = `● ${n} ${n === 1 ? 'jugador' : 'jugadores'} en línea`;
+  }
   const parts = [];
   if (p.buffT > 0) parts.push(`${p.buffName} · ${Math.ceil(p.buffT)} s`);
   if (p.shield > 0) parts.push(`Escudo ${Math.ceil(p.shield)} · ${Math.ceil(p.shieldT)} s`);
@@ -469,8 +542,8 @@ function updateUI() {
   E.buffs.hidden = !buff;
 
   const t = G.target;
-  E.tFrame.hidden = !t || t.dead;
-  if (t && !t.dead) {
+  E.tFrame.hidden = !t || t.dead || t.hidden;
+  if (t && !t.dead && !t.hidden) {
     E.tLvl.textContent = t.lvl;
     E.tName.textContent = t.def.name;
     E.tFrame.dataset.lv = levelClass(t.lvl - p.level);
@@ -494,7 +567,8 @@ function updateUI() {
 }
 
 V.UI = {
-  initUI, createNameplate, refreshNameplate, floatText, log, logLoot, banner, showDeath,
+  initUI, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
+  floatText, log, logLoot, banner, showDeath,
   togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI,
 };
 })();

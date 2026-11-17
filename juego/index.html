@@ -73,7 +73,30 @@
   .gold b { color: var(--gold); }
 
   /* Registro */
-  #log { left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: min(380px, 40vw); height: 168px; padding: 8px 10px; overflow-y: auto; font-size: 13px; line-height: 1.35; background: rgba(10, 12, 15, .62); scrollbar-width: thin; }
+  #log { left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: min(400px, 40vw); height: 190px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.35; background: rgba(10, 12, 15, .62); }
+  #logLines { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  #chatInput { font: 13px var(--body); color: var(--parch); background: rgba(0,0,0,.55); border: 1px solid var(--edge-soft); border-radius: 2px; padding: 5px 8px; user-select: text; }
+  #chatInput:focus { border-color: var(--gold); outline: none; }
+  #log p.chat { color: #f1e9d6; }
+  #log p.chat b { font-weight: 700; }
+  #log p.chat .who-guerrero { color: #8fb8ff; }
+  #log p.chat .who-arquera { color: #9fe08a; }
+  #log p.chat .who-mago { color: #d0a8ff; }
+  #log p.chat-sys { color: #7fb6ff; font-style: italic; }
+  .online { font-size: 12px; color: #7fe08a; font-variant-numeric: tabular-nums; }
+  .np.np-other { color: #a9cbff; }
+  .mode-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mode-pick button { padding: 9px 8px; background: rgba(0,0,0,.45); border: 1px solid var(--edge-soft); border-radius: 3px; font: 700 14px var(--display); letter-spacing: .04em; color: var(--muted); }
+  .mode-pick button b { color: #7fe08a; font-size: 11px; vertical-align: 2px; }
+  .mode-pick button:hover { border-color: var(--edge); color: var(--parch); }
+  .mode-pick button.on { border-color: var(--gold); color: var(--parch); background: rgba(217,181,106,.14); }
+  .net-msg { margin: 0; min-height: 1.2em; font-size: 14px; color: #ff8b78; }
+  .net-msg.ok { color: var(--muted); }
+  #btnStart:disabled { filter: grayscale(.6); opacity: .7; cursor: wait; }
+  #netLost { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; background: rgba(0,0,0,.72); }
+  #netLost div { text-align: center; display: grid; gap: 14px; justify-items: center; max-width: 420px; padding: 0 16px; }
+  #netLost h2 { margin: 0; font: 700 36px var(--display); color: var(--gold); }
+  #netLost p { margin: 0; color: var(--parch); }
   #log p { margin: 0 0 2px; color: #d7ccb5; }
   #log p.sys { color: #bdb3a0; }
   #log p.warn { color: #ff8b78; }
@@ -236,9 +259,13 @@
     <div class="zone" id="zoneName">Aldea de Brezal</div>
     <canvas id="minimap" width="180" height="180"></canvas>
     <div class="gold"><b id="goldTxt">0</b> oro</div>
+    <div class="online" id="onlineTxt" hidden></div>
   </section>
 
-  <section class="frame" id="log" aria-live="polite"></section>
+  <section class="frame" id="log">
+    <div id="logLines" aria-live="polite"></div>
+    <input id="chatInput" maxlength="160" placeholder="Pulsa Enter para escribir en el chat" autocomplete="off" spellcheck="false" hidden>
+  </section>
   <nav id="hotbar" aria-label="Habilidades"></nav>
   <div class="menu-btns">
     <button id="btnInv">Inventario <kbd>I</kbd></button>
@@ -284,6 +311,13 @@
       <button class="btn" id="btnRespawn">Volver a la aldea</button>
     </div>
   </div>
+  <div id="netLost" hidden>
+    <div>
+      <h2>Conexión perdida</h2>
+      <p>Se cortó la conexión con el servidor de Valdoria. Tu progreso hasta el último guardado está a salvo.</p>
+      <button class="btn" id="btnReconnect">Volver al inicio</button>
+    </div>
+  </div>
   <div id="labels"></div>
   <div id="floats"></div>
 </div>
@@ -303,6 +337,12 @@
       <button type="button" data-cls="mago"><b>✺</b>Mago</button>
     </div>
     <p class="class-desc" id="classDesc"></p>
+    <span class="pick-label">Modo</span>
+    <div class="mode-pick" role="group" aria-label="Modo de juego">
+      <button type="button" data-mode="online"><b>●</b> En línea</button>
+      <button type="button" data-mode="offline">Un jugador</button>
+    </div>
+    <p class="net-msg" id="netMsg" role="status"></p>
     <button id="btnStart">Entrar al mundo</button>
     <button id="btnReset" hidden>Borrar personaje</button>
     <p class="start-keys">Clic para moverte y atacar · Arrastra para girar la cámara · 1–4 habilidades · I inventario · H ayuda</p>
@@ -321,6 +361,7 @@
 
 <script src="./vendor/three.min.js"></script>
 <script src="./src/state.js"></script>
+<script src="./src/config.js"></script>
 <script src="./src/data.js"></script>
 <script src="./src/terrain.js"></script>
 <script src="./src/models.js"></script>

@@ -1,0 +1,34 @@
+# Servidor de juego en Fly.io. Se despliega solo desde GitHub Actions (servidor.yml).
+# El mundo vive en memoria: debe haber exactamente UNA máquina encendida siempre.
+app = "ecos-de-valdoria"
+primary_region = "gru" # São Paulo: la región de Fly más cercana a Chile
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 150
+    hard_limit = 200
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/status"
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

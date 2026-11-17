@@ -1,5 +1,4 @@
-# Ejecuta la simulación del juego en Node (sin gráficos) en cada push.
-# Garantiza que la lógica sigue funcionando fuera del navegador, como la usará el servidor online.
+# Ejecuta la simulación del juego en Node y el servidor online en cada push.
 name: Pruebas
 
 on:
@@ -18,3 +17,8 @@ jobs:
           node-version: 20
       - name: Simulación sin gráficos
         run: node test/sim.test.js
+      - name: Instalar dependencias del servidor
+        working-directory: server
+        run: npm install --no-audit --no-fund
+      - name: Servidor online con dos jugadores
+        run: node test/server.test.js

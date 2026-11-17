@@ -1,6 +1,9 @@
 # La web solo muestra el juego y las guías: el juego jugable se descarga, no se sirve aquí.
 juego/index.html
 desktop
-.github
+server
 test
+.github
+fly.toml
+.dockerignore
 README.md
