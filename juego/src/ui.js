@@ -1,8 +1,15 @@
 // Interfaz (HUD) en HTML sobre el canvas 3D. Los botones funcionan con ratón y con toque.
-import { G } from './state.js';
-import { ITEMS, SKILLS, RARITY, SHOP, MAX_LEVEL, xpToNext, sellPrice } from './data.js';
-import { zoneAt } from './world.js';
-import { useSkill, usePotion, clickInventory, unequip, buyItem, countItem } from './game.js';
+(function () {
+const G = V.G;
+const { ITEMS, RARITY, CLASSES, shopFor, MAX_LEVEL, xpToNext, sellPrice } = V.Data;
+const { zoneAt } = V.World;
+// game.js se carga después de este archivo: se llama a través de V.Game en tiempo de ejecución.
+const useSkill = (i) => V.Game.useSkill(i);
+const usePotion = (id) => V.Game.usePotion(id);
+const clickInventory = (i) => V.Game.clickInventory(i);
+const unequip = (k) => V.Game.unequip(k);
+const buyItem = (id) => V.Game.buyItem(id);
+const countItem = (id) => V.Game.countItem(id);
 
 const THREE = window.THREE;
 const $ = (id) => document.getElementById(id);
@@ -12,7 +19,7 @@ let frame = 0;
 let lastZone;
 const statics = [];
 
-export function initUI() {
+function initUI() {
   E = {
     hud: $('hud'),
     pName: $('pName'),
@@ -42,13 +49,14 @@ export function initUI() {
   };
   E.hud.hidden = false;
   E.pName.textContent = G.player.name;
+  $('pClass').textContent = G.player.cdef.name;
   buildHotbar();
   $('btnInv').onclick = () => togglePanel('inv');
   $('btnHelp').onclick = () => togglePanel('help');
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => togglePanel(b.dataset.close, false)));
 
   addStatic(G.player.pos, G.player.model.height + 0.5, G.player.name, 'np-player', 40);
-  addStatic(G.world.merchant.root.position, 2.9, 'Mercader Orlen', 'np-npc', 40);
+  for (const n of G.world.npcs) addStatic(n.root.position, 2.9, n.name, 'np-npc', 40);
   for (const s of G.world.signs) addStatic(s.pos, s.height, s.text, 'np-sign', 26);
 }
 
@@ -58,7 +66,7 @@ function buildHotbar() {
   const bar = $('hotbar');
   bar.innerHTML = '';
   const defs = [
-    ...SKILLS.map((s, i) => ({ kind: 'skill', i, key: String(i + 1), glyph: s.glyph, title: `${s.name} (nivel ${s.lvl}) · ${s.mp} MP · ${s.cd} s\n${s.desc}` })),
+    ...G.player.skills.map((s, i) => ({ kind: 'skill', i, key: String(i + 1), glyph: s.glyph, title: `${s.name} (nivel ${s.lvl}) · ${s.mp} MP · ${s.cd} s\n${s.desc}` })),
     { kind: 'pot', id: 'pocion_vida', key: '5', glyph: ITEMS.pocion_vida.glyph, title: `${ITEMS.pocion_vida.name}\n${ITEMS.pocion_vida.desc}` },
     { kind: 'pot', id: 'pocion_mana', key: '6', glyph: ITEMS.pocion_mana.glyph, title: `${ITEMS.pocion_mana.name}\n${ITEMS.pocion_mana.desc}` },
   ];
@@ -82,7 +90,7 @@ function updateHotbar() {
     let low = false;
     let qty = '';
     if (s.d.kind === 'skill') {
-      const sk = SKILLS[s.d.i];
+      const sk = p.skills[s.d.i];
       cd = p.cds[sk.id] || 0;
       total = sk.cd;
       locked = p.level < sk.lvl;
@@ -106,7 +114,7 @@ function updateHotbar() {
 
 // ---------- Etiquetas sobre las cabezas ----------
 
-export function createNameplate(m) {
+function createNameplate(m) {
   const el = document.createElement('div');
   el.className = 'np';
   el.hidden = true;
@@ -116,7 +124,7 @@ export function createNameplate(m) {
   refreshNameplate(m);
 }
 
-export function refreshNameplate(m) {
+function refreshNameplate(m) {
   m.np.name.innerHTML = '';
   const b = document.createElement('b');
   b.textContent = m.lvl;
@@ -180,7 +188,7 @@ function updateNameplates() {
 
 // ---------- Textos flotantes, registro y avisos ----------
 
-export function floatText(pos, h, text, cls) {
+function floatText(pos, h, text, cls) {
   if (!E) return;
   const xy = project(pos, h);
   if (!xy) return;
@@ -195,7 +203,7 @@ export function floatText(pos, h, text, cls) {
   setTimeout(done, 1600);
 }
 
-export function log(text, cls = '') {
+function log(text, cls = '') {
   if (!E) return;
   const line = document.createElement('p');
   line.className = cls;
@@ -203,7 +211,7 @@ export function log(text, cls = '') {
   pushLog(line);
 }
 
-export function logLoot(id, qty, verb = 'Obtienes') {
+function logLoot(id, qty, verb = 'Obtienes') {
   if (!E) return;
   const it = ITEMS[id];
   const line = document.createElement('p');
@@ -221,7 +229,7 @@ function pushLog(line) {
   E.log.scrollTop = E.log.scrollHeight;
 }
 
-export function banner(title, sub = '') {
+function banner(title, sub = '') {
   if (!E) return;
   E.banner.innerHTML = '<strong></strong><span></span>';
   E.banner.firstChild.textContent = title;
@@ -231,28 +239,28 @@ export function banner(title, sub = '') {
   E.banner.classList.add('show');
 }
 
-export function showDeath(show) {
+function showDeath(show) {
   $('death').hidden = !show;
 }
 
 // ---------- Paneles ----------
 
-export function togglePanel(name, force) {
+function togglePanel(name, force) {
   const el = E[name];
   el.hidden = force === undefined ? !el.hidden : !force;
   if (name === 'shop' && el.hidden) refreshPanels();
   refreshPanels();
 }
 
-export const shopOpen = () => E && !E.shop.hidden;
+const shopOpen = () => !!E && !E.shop.hidden;
 
-export function openShop() {
+function openShop() {
   togglePanel('shop', true);
   togglePanel('inv', true);
   log('Orlen: «Pociones frescas y acero honrado. ¿Qué necesitas?»', 'npc');
 }
 
-export function closeAll() {
+function closeAll() {
   let closed = false;
   for (const k of ['shop', 'inv', 'help']) {
     if (!E[k].hidden) {
@@ -267,6 +275,7 @@ function itemTitle(it) {
   const lines = [`${it.name} · ${RARITY[it.rarity].name}`];
   if (it.atk) lines.push(`Ataque +${it.atk}`);
   if (it.def) lines.push(`Defensa +${it.def} · Vida +${it.hp}`);
+  if (it.cls) lines.push(`Clase: ${CLASSES[it.cls].name}`);
   if (it.lvl) lines.push(`Requiere nivel ${it.lvl}`);
   lines.push(it.desc);
   return lines.join('\n');
@@ -289,14 +298,14 @@ function slotEl(id, qty, onClick, extraCls = '') {
   return b;
 }
 
-export function refreshPanels() {
+function refreshPanels() {
   if (!E) return;
   const p = G.player;
   if (!E.inv.hidden) {
     const s = p.stats;
     $('invStats').innerHTML = '';
     const stats = [
-      ['Ataque', Math.round(s.atk * (p.buffT > 0 ? 1.3 : 1))],
+      ['Ataque', Math.round(s.atk * (1 + (p.buffT > 0 ? p.buffPct : 0)))],
       ['Defensa', Math.round(s.def)],
       ['Vida', s.maxHp],
       ['Maná', s.maxMp],
@@ -341,7 +350,7 @@ export function refreshPanels() {
   if (!E.shop.hidden) {
     const list = $('shopList');
     list.innerHTML = '';
-    for (const id of SHOP) {
+    for (const id of shopFor(p.cls)) {
       const it = ITEMS[id];
       const row = document.createElement('li');
       const ic = slotEl(id, 1, () => buyItem(id));
@@ -408,11 +417,13 @@ function drawMinimap() {
     const r = m.def.boss ? 4 : 2;
     c.fillRect(x - r / 2, y - r / 2, r, r);
   }
-  const mp = G.world.merchant.root.position;
   c.fillStyle = '#d9b56a';
-  c.beginPath();
-  c.arc(tx(mp.x), tz(mp.z), 3, 0, Math.PI * 2);
-  c.fill();
+  for (const n of G.world.npcs) {
+    const np = n.root.position;
+    c.beginPath();
+    c.arc(tx(np.x), tz(np.z), 3, 0, Math.PI * 2);
+    c.fill();
+  }
   c.translate(half, half);
   c.rotate(-p.facing);
   c.fillStyle = '#f4ead4';
@@ -436,7 +447,7 @@ const bar = (fill, txt, cur, max) => {
   txt.textContent = `${Math.round(cur)} / ${max}`;
 };
 
-export function updateUI() {
+function updateUI() {
   const p = G.player;
   frame++;
   bar(E.pHp, E.pHpT, p.hp, p.stats.maxHp);
@@ -451,7 +462,10 @@ export function updateUI() {
   }
   E.pLvl.textContent = p.level;
   E.gold.textContent = p.gold.toLocaleString('es');
-  const buff = p.buffT > 0 ? `Grito de Guerra · ${Math.ceil(p.buffT)} s` : '';
+  const parts = [];
+  if (p.buffT > 0) parts.push(`${p.buffName} · ${Math.ceil(p.buffT)} s`);
+  if (p.shield > 0) parts.push(`Escudo ${Math.ceil(p.shield)} · ${Math.ceil(p.shieldT)} s`);
+  const buff = parts.join('  ·  ');
   if (E.buffs.textContent !== buff) E.buffs.textContent = buff;
   E.buffs.hidden = !buff;
 
@@ -479,3 +493,9 @@ export function updateUI() {
     }
   }
 }
+
+V.UI = {
+  initUI, createNameplate, refreshNameplate, floatText, log, logLoot, banner, showDeath,
+  togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI,
+};
+})();

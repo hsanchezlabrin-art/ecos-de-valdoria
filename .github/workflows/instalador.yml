@@ -1,0 +1,65 @@
+# Compila el instalador de Windows y lo publica como Release.
+# Se ejecuta al subir una etiqueta de versión (git tag v0.2.0 && git push --tags)
+# o a mano desde la pestaña Actions de GitHub.
+name: Instalador de Windows
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Copiar el juego dentro de la app
+        shell: pwsh
+        run: |
+          Copy-Item -Recurse juego desktop/app
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $v = "${{ github.ref_name }}".TrimStart('v')
+            Push-Location desktop
+            npm version $v --no-git-tag-version --allow-same-version
+            Pop-Location
+          }
+
+      - name: Instalar dependencias
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Compilar instalador
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --win --publish never
+
+      - name: Guardar instalador como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: EcosDeValdoria-Setup
+          path: desktop/dist/EcosDeValdoria-Setup.exe
+
+      - name: Publicar Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Ecos de Valdoria ${{ github.ref_name }}
+          files: desktop/dist/EcosDeValdoria-Setup.exe
+          make_latest: true
+          body: |
+            Instalador para Windows 10 y 11 (64 bits). No requiere permisos de administrador.
+
+            1. Descarga **EcosDeValdoria-Setup.exe**.
+            2. Si Windows muestra "Windows protegió su PC", pulsa **Más información → Ejecutar de todas formas** (el instalador aún no está firmado).
+            3. Sigue el asistente y abre el juego desde el acceso directo del escritorio.
+
+            Guía del juego: https://ecos-de-valdoria.vercel.app/guia.html

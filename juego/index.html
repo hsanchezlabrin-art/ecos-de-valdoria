@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ecos de Valdoria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Alegreya+Sans:wght@400;500;700&display=swap">
+<style>
+  /* Interfaz de juego: paneles de pizarra oscura con filo de bronce sobre el mundo 3D. */
+  :root {
+    --panel: rgba(17, 20, 24, 0.84);
+    --panel-solid: #15181d;
+    --edge: #8a6d3b;
+    --edge-soft: rgba(138, 109, 59, 0.45);
+    --gold: #d9b56a;
+    --parch: #ecdfc4;
+    --muted: #a39a86;
+    --hp: #c2413a;
+    --mp: #3d6fc2;
+    --xp: #c9a54a;
+    --bg: #0e1013;
+    --display: 'Cinzel', 'Trajan Pro', Georgia, serif;
+    --body: 'Alegreya Sans', 'Segoe UI', system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  #labels, #floats { z-index: 1; }
+  .frame, #hotbar, .menu-btns { z-index: 2; }
+  .panel { z-index: 5; }
+  #banner { z-index: 6; }
+  #death { z-index: 8; }
+  #start { z-index: 10; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--parch); font-family: var(--body); font-size: 15px; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  #game, #game canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  .frame { position: fixed; background: var(--panel); border: 1px solid var(--edge); box-shadow: inset 0 0 0 1px rgba(0,0,0,.6), 0 8px 24px rgba(0,0,0,.35); border-radius: 3px; }
+
+  /* Marco del jugador */
+  .player-frame { top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: 268px; padding: 10px 12px 12px; display: grid; gap: 6px; }
+  .pf-head, .tf-head { display: flex; align-items: center; gap: 8px; }
+  .lvl { min-width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--edge); background: #0b0d10; color: var(--gold); font-family: var(--display); font-weight: 700; font-size: 14px; border-radius: 50%; font-variant-numeric: tabular-nums; }
+  .pname { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: .04em; }
+  .pclass { margin-left: auto; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
+  .bar { position: relative; height: 16px; background: #07080a; border: 1px solid #000; box-shadow: 0 0 0 1px var(--edge-soft); overflow: hidden; }
+  .bar i { position: absolute; inset: 0; transform-origin: left; transition: transform .15s linear; }
+  .bar.hp i { background: linear-gradient(#e0574d, var(--hp) 55%, #7d231d); }
+  .bar.mp i { background: linear-gradient(#5f8ee0, var(--mp) 55%, #23427d); }
+  .bar.xp { height: 9px; }
+  .bar.xp i { background: linear-gradient(#e6c773, var(--xp)); }
+  .bar span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; font-weight: 700; text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
+  .bar.xp span { font-size: 9px; line-height: 1; }
+  #buffs { justify-self: start; padding: 2px 8px; font-size: 12px; color: #1a1408; background: var(--gold); border-radius: 2px; font-weight: 700; }
+
+  /* Marco del objetivo */
+  .target-frame { top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(300px, 46vw); padding: 8px 12px 10px; display: grid; gap: 6px; }
+  .target-frame #tName { font-family: var(--display); font-weight: 700; font-size: 14px; }
+  .target-frame[data-lv="lv-red"] .lvl { color: #ff6b5a; border-color: #ff6b5a; }
+  .target-frame[data-lv="lv-yellow"] .lvl { color: #f2cf5b; }
+  .target-frame[data-lv="lv-green"] .lvl { color: #8fd37a; border-color: #8fd37a; }
+  .target-frame[data-lv="lv-grey"] .lvl { color: #8d8a84; border-color: #8d8a84; }
+
+  /* Minimapa */
+  .mapbox { top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); padding: 8px; display: grid; gap: 6px; justify-items: center; }
+  .zone { font-family: var(--display); font-size: 13px; font-weight: 700; color: var(--gold); letter-spacing: .05em; text-align: center; max-width: 180px; }
+  #minimap { width: 170px; height: 170px; border-radius: 50%; box-shadow: 0 0 0 1px var(--edge), 0 0 0 4px #0b0d10, 0 0 0 5px var(--edge-soft); }
+  .gold { font-size: 13px; color: var(--parch); font-variant-numeric: tabular-nums; }
+  .gold b { color: var(--gold); }
+
+  /* Registro */
+  #log { left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: min(380px, 40vw); height: 168px; padding: 8px 10px; overflow-y: auto; font-size: 13px; line-height: 1.35; background: rgba(10, 12, 15, .62); scrollbar-width: thin; }
+  #log p { margin: 0 0 2px; color: #d7ccb5; }
+  #log p.sys { color: #bdb3a0; }
+  #log p.warn { color: #ff8b78; }
+  #log p.lvl { color: var(--gold); font-weight: 700; }
+  #log p.npc { color: #c9b8e8; }
+
+  /* Barra de acciones */
+  #hotbar { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 6px; padding: 6px; background: var(--panel); border: 1px solid var(--edge); border-radius: 3px; }
+  .slot { --p: 0; position: relative; width: 54px; height: 54px; border: 1px solid var(--edge); background: radial-gradient(circle at 50% 35%, #2a2f38, #101216); border-radius: 3px; display: grid; place-items: center; padding: 0; transition: transform .08s; }
+  .slot:hover { border-color: var(--gold); }
+  .slot:active { transform: scale(.94); }
+  .slot .glyph { font-size: 25px; line-height: 1; color: var(--parch); text-shadow: 0 0 10px rgba(217,181,106,.35); }
+  .slot.pot.pocion_vida .glyph { color: #ff6b5f; }
+  .slot.pot.pocion_mana .glyph { color: #73a2ff; }
+  .slot .key { position: absolute; top: 2px; left: 4px; font-size: 11px; color: var(--muted); font-weight: 700; }
+  .slot .qty { position: absolute; bottom: 2px; right: 4px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
+  .slot .cd { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; font-size: 17px; background: conic-gradient(rgba(0,0,0,.7) calc(var(--p) * 360deg), transparent 0); border-radius: 2px; pointer-events: none; }
+  .slot.low .glyph { opacity: .45; }
+  .slot.locked { filter: grayscale(1); opacity: .55; }
+  .slot .lock { position: absolute; bottom: 2px; left: 0; right: 0; font-size: 10px; color: var(--parch); text-align: center; }
+
+  .menu-btns { position: fixed; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 6px; }
+  .menu-btns button, .btn { background: var(--panel); border: 1px solid var(--edge); padding: 8px 14px; border-radius: 3px; font-weight: 700; letter-spacing: .03em; }
+  .menu-btns button:hover, .btn:hover { border-color: var(--gold); color: #fff; }
+  kbd { font: 700 11px var(--body); padding: 1px 5px; border: 1px solid var(--edge-soft); border-radius: 2px; color: var(--gold); }
+
+  /* Paneles */
+  .panel { position: fixed; top: 50%; transform: translateY(-50%); max-height: calc(100% - 40px); overflow: auto; background: var(--panel-solid); border: 1px solid var(--edge); box-shadow: inset 0 0 0 1px #000, 0 20px 60px rgba(0,0,0,.55); border-radius: 3px; padding: 14px 16px 16px; }
+  .panel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .panel h2 { margin: 0; font: 700 18px var(--display); color: var(--gold); letter-spacing: .06em; }
+  .x { background: none; border: 1px solid var(--edge-soft); width: 28px; height: 28px; border-radius: 3px; }
+  #invPanel { right: calc(12px + env(safe-area-inset-right, 0px)); width: 330px; }
+  #shopPanel { right: calc(354px + env(safe-area-inset-right, 0px)); width: 330px; }
+  #helpPanel { left: 50%; transform: translate(-50%, -50%); width: min(480px, calc(100% - 32px)); }
+  #invStats { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 4px 12px; margin: 0 0 12px; font-size: 14px; }
+  #invStats dt { color: var(--muted); }
+  #invStats dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+  #invEquip { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .eq { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .eq small { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+  .eq span { font-size: 13px; font-weight: 700; }
+  #invGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+  .islot { --r: var(--edge-soft); position: relative; aspect-ratio: 1; min-width: 0; border: 1px solid #2c2a26; background: #0c0e11; border-radius: 2px; padding: 0; display: grid; place-items: center; }
+  .islot.filled { border-color: var(--r); box-shadow: inset 0 0 12px color-mix(in srgb, var(--r) 22%, transparent); }
+  .islot.filled:hover { background: #1a1d22; }
+  .islot.equipped { width: 46px; height: 46px; flex: none; }
+  .islot .glyph { font-size: 20px; color: var(--r); }
+  .islot .qty { position: absolute; right: 3px; bottom: 1px; font-size: 11px; font-weight: 700; }
+  .hint { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+  #shopList { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  #shopList li { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 10px; padding: 6px; border: 1px solid #23211d; border-radius: 2px; }
+  #shopList .islot { width: 44px; }
+  #shopList strong { display: block; font-size: 14px; }
+  #shopList small { color: var(--muted); font-size: 12px; }
+  .buy { background: #1d1a12; border: 1px solid var(--edge); padding: 6px 10px; border-radius: 2px; font-weight: 700; color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .buy:disabled { opacity: .4; cursor: not-allowed; }
+  .keys { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
+  .keys dt { color: var(--gold); font-weight: 700; white-space: nowrap; }
+  .keys dd { margin: 0; color: #d7ccb5; }
+
+  /* Etiquetas y textos flotantes */
+  #labels, #floats { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .np { position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 2px; font-size: 12px; font-weight: 700; white-space: nowrap; color: #efe6d2; text-shadow: 0 0 3px #000, 0 1px 2px #000; will-change: transform; }
+  .np b { font-weight: 700; margin-right: 2px; }
+  .np.lv-grey { color: #8d8a84; } .np.lv-green { color: #8fd37a; } .np.lv-yellow { color: #f2cf5b; } .np.lv-red { color: #ff6b5a; }
+  .np.is-target .np-name { text-decoration: underline; text-underline-offset: 3px; }
+  .np-hp { width: 64px; height: 5px; background: #000; border: 1px solid rgba(0,0,0,.8); }
+  .np-hp i { display: block; height: 100%; background: var(--hp); transform-origin: left; }
+  .np-player { color: #f6f0e1; font-family: var(--display); }
+  .np-npc { color: #c9b8e8; }
+  .np-sign { color: var(--gold); font-size: 11px; letter-spacing: .03em; }
+  .ft { position: absolute; transform: translate(-50%, -100%); font-weight: 700; font-size: 18px; text-shadow: 0 0 3px #000, 0 2px 2px #000; animation: rise 1.1s ease-out forwards; }
+  .ft.dmg { color: #fff6e0; }
+  .ft.crit { color: #ffcf4a; font-size: 26px; }
+  .ft.hurt { color: #ff5a4a; }
+  .ft.heal { color: #7fe08a; }
+  .ft.mana { color: #7fb0ff; }
+  .ft.xp { color: #d7b6ff; font-size: 15px; }
+  @keyframes rise { 0% { opacity: 0; margin-top: 6px; } 12% { opacity: 1; } 100% { opacity: 0; margin-top: -54px; } }
+
+  #banner { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; opacity: 0; display: grid; gap: 4px; }
+  #banner strong { font: 700 clamp(26px, 4vw, 44px) var(--display); color: var(--gold); letter-spacing: .08em; text-shadow: 0 2px 18px rgba(0,0,0,.8), 0 0 2px #000; }
+  #banner span { font-size: 15px; color: var(--parch); text-shadow: 0 1px 4px #000; letter-spacing: .08em; text-transform: uppercase; }
+  #banner.show { animation: banner 3s ease forwards; }
+  @keyframes banner { 0% { opacity: 0; transform: translate(-50%, 8px); } 12%, 72% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+
+  #death { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(60,0,0,.35), rgba(0,0,0,.75)); }
+  #death div { text-align: center; display: grid; gap: 14px; justify-items: center; }
+  #death h2 { margin: 0; font: 700 48px var(--display); color: #e05a4d; letter-spacing: .1em; }
+  #death p { margin: 0; color: var(--parch); }
+
+  /* Pantalla de inicio */
+  #start { position: fixed; inset: 0; display: flex; align-items: center; padding-inline: max(16px, 6vw); background: linear-gradient(90deg, rgba(8,9,11,.92) 0%, rgba(8,9,11,.7) 38%, rgba(8,9,11,0) 70%); }
+  .start-card { width: min(440px, 100%); display: grid; gap: 14px; }
+  .eyebrow { margin: 0; font-size: 12px; letter-spacing: .24em; text-transform: uppercase; color: var(--muted); }
+  #start h1 { margin: 0; font: 700 clamp(40px, 6vw, 68px)/1 var(--display); color: var(--gold); letter-spacing: .04em; text-shadow: 0 4px 30px rgba(0,0,0,.6); text-wrap: balance; }
+  .lead { margin: 0; font-size: 17px; line-height: 1.5; color: #ddd1b8; max-width: 38ch; }
+  #start label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+  #nameInput { font: 700 18px var(--display); color: var(--parch); background: rgba(0,0,0,.5); border: 1px solid var(--edge); padding: 10px 12px; border-radius: 3px; user-select: text; }
+  .pick-label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+  .class-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .class-pick button { display: grid; justify-items: center; gap: 4px; padding: 10px 8px; background: rgba(0,0,0,.45); border: 1px solid var(--edge-soft); border-radius: 3px; font: 700 14px var(--display); letter-spacing: .04em; color: var(--muted); transition: border-color .15s, background .15s, color .15s; }
+  .class-pick button b { font-size: 22px; line-height: 1; color: var(--muted); font-family: var(--body); }
+  .class-pick button:hover { border-color: var(--edge); color: var(--parch); }
+  .class-pick button.on { border-color: var(--gold); color: var(--parch); background: rgba(217,181,106,.14); box-shadow: inset 0 0 18px rgba(217,181,106,.12); }
+  .class-pick button.on b { color: var(--gold); text-shadow: 0 0 12px rgba(217,181,106,.5); }
+  .class-desc { margin: 0; min-height: 3em; font-size: 14px; line-height: 1.45; color: #cfc3aa; }
+
+  /* Pantalla de carga: misma estética que el splash de la app */
+  #loading { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, #1d2128 0%, #0b0d10 70%); transition: opacity .6s ease; }
+  #loading.done { opacity: 0; pointer-events: none; }
+  .load-card { display: grid; justify-items: center; gap: 6px; width: min(360px, calc(100% - 32px)); text-align: center; }
+  .load-emblem { width: 76px; height: 76px; display: grid; place-items: center; margin-bottom: 8px; border: 1px solid var(--edge); border-radius: 50%; background: radial-gradient(circle at 50% 35%, #2a2f38, #101216); box-shadow: 0 0 0 4px #0b0d10, 0 0 0 5px var(--edge-soft), 0 0 40px rgba(217,181,106,.18); font: 700 38px var(--display); color: var(--gold); }
+  .load-card .eyebrow { margin: 0; }
+  .load-card h2 { margin: 0 0 14px; font: 700 40px/1 var(--display); color: var(--gold); letter-spacing: .06em; }
+  .load-track { width: 100%; height: 8px; background: #07080a; border: 1px solid #000; box-shadow: 0 0 0 1px var(--edge-soft); overflow: hidden; }
+  .load-track i { display: block; height: 100%; transform: scaleX(0); transform-origin: left; background: linear-gradient(#e6c773, var(--xp)); transition: transform .35s ease; }
+  #loadTxt { margin: 6px 0 0; font-size: 14px; color: var(--muted); font-style: italic; }
+  #btnStart { background: linear-gradient(#c79f52, #8a6d3b); color: #15110a; border: 1px solid #e6c77d; padding: 12px 18px; font: 700 17px var(--display); letter-spacing: .08em; border-radius: 3px; }
+  #btnStart:hover { filter: brightness(1.1); }
+  #btnReset { background: none; border: none; color: var(--muted); text-decoration: underline; justify-self: start; padding: 0; font-size: 13px; }
+  #saveInfo { margin: 0; font-size: 14px; color: var(--gold); }
+  .start-keys { margin: 4px 0 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  #updateStatus { position: fixed; z-index: 20; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 6px 14px; background: var(--panel-solid); border: 1px solid var(--edge); border-radius: 3px; font-size: 13px; color: var(--gold); }
+  @media (max-width: 900px) {
+    #shopPanel { right: auto; left: calc(12px + env(safe-area-inset-left, 0px)); }
+    #log { display: none; }
+  }
+  @media (max-width: 560px) {
+    .player-frame { width: 200px; }
+    #minimap { width: 110px; height: 110px; }
+    .target-frame { top: auto; bottom: 90px; }
+    .slot { width: 44px; height: 44px; }
+    #invPanel, #shopPanel { left: 12px; right: 12px; width: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) { .ft, #banner.show { animation-duration: .01s; } }
+</style>
+</head>
+<body>
+
+<div id="game"></div>
+<div id="updateStatus" hidden></div>
+
+<div id="hud" hidden>
+  <section class="frame player-frame" aria-label="Personaje">
+    <div class="pf-head"><span class="lvl" id="pLvl">1</span><span class="pname" id="pName"></span><span class="pclass" id="pClass">Guerrero</span></div>
+    <div class="bar hp"><i id="pHpFill"></i><span id="pHpTxt"></span></div>
+    <div class="bar mp"><i id="pMpFill"></i><span id="pMpTxt"></span></div>
+    <div class="bar xp"><i id="pXpFill"></i><span id="pXpTxt"></span></div>
+    <div id="buffs" hidden></div>
+  </section>
+
+  <section class="frame target-frame" id="tFrame" hidden aria-label="Objetivo">
+    <div class="tf-head"><span class="lvl" id="tLvl"></span><span id="tName"></span></div>
+    <div class="bar hp"><i id="tHpFill"></i><span id="tHpTxt"></span></div>
+  </section>
+
+  <section class="frame mapbox" aria-label="Mapa">
+    <div class="zone" id="zoneName">Aldea de Brezal</div>
+    <canvas id="minimap" width="180" height="180"></canvas>
+    <div class="gold"><b id="goldTxt">0</b> oro</div>
+  </section>
+
+  <section class="frame" id="log" aria-live="polite"></section>
+  <nav id="hotbar" aria-label="Habilidades"></nav>
+  <div class="menu-btns">
+    <button id="btnInv">Inventario <kbd>I</kbd></button>
+    <button id="btnHelp">Controles <kbd>H</kbd></button>
+  </div>
+
+  <section class="panel" id="invPanel" hidden>
+    <header><h2>Inventario</h2><button class="x" data-close="inv" aria-label="Cerrar">✕</button></header>
+    <dl id="invStats"></dl>
+    <div id="invEquip"></div>
+    <div id="invGrid"></div>
+    <p class="hint" id="invHint"></p>
+  </section>
+
+  <section class="panel" id="shopPanel" hidden>
+    <header><h2>Mercader Orlen</h2><button class="x" data-close="shop" aria-label="Cerrar">✕</button></header>
+    <ul id="shopList"></ul>
+    <p class="hint">Vende el botín haciendo clic en tu inventario mientras la tienda está abierta.</p>
+  </section>
+
+  <section class="panel" id="helpPanel" hidden>
+    <header><h2>Controles</h2><button class="x" data-close="help" aria-label="Cerrar">✕</button></header>
+    <dl class="keys">
+      <dt>Clic izquierdo</dt><dd>Moverte al punto o atacar al monstruo</dd>
+      <dt>Arrastrar</dt><dd>Girar la cámara (botón izquierdo o derecho)</dd>
+      <dt>Rueda</dt><dd>Acercar o alejar la cámara</dd>
+      <dt>W A S D</dt><dd>Caminar respecto a la cámara</dd>
+      <dt>Tab</dt><dd>Seleccionar el monstruo más cercano</dd>
+      <dt>F</dt><dd>Atacar al objetivo</dd>
+      <dt>1 – 4</dt><dd>Habilidades (se desbloquean en los niveles 1, 3, 5 y 8)</dd>
+      <dt>5 · 6</dt><dd>Poción de vida · Poción de maná</dd>
+      <dt>I · H</dt><dd>Inventario · Esta ayuda</dd>
+      <dt>Esc</dt><dd>Cerrar ventanas o soltar el objetivo</dd>
+    </dl>
+    <p class="hint">En la aldea: el Mercader Orlen compra y vende, la Sanadora Ilwen te cura gratis y la Capitana Brisa te dice a qué zona ir. Haz clic sobre ellos para hablar. Los nombres en rojo son monstruos muy superiores a ti.</p>
+  </section>
+
+  <div id="banner"></div>
+  <div id="death" hidden>
+    <div>
+      <h2>Has caído</h2>
+      <p>Perderás un 5% de la experiencia del nivel.</p>
+      <button class="btn" id="btnRespawn">Volver a la aldea</button>
+    </div>
+  </div>
+  <div id="labels"></div>
+  <div id="floats"></div>
+</div>
+
+<div id="start">
+  <div class="start-card">
+    <p class="eyebrow" id="versionTag">Prototipo jugable · v0.2</p>
+    <h1>Ecos de Valdoria</h1>
+    <p class="lead">Siete tierras rodean la Aldea de Brezal. Caza, sube de nivel, consigue mejor equipo y enfréntate a Tharmok en el pantano.</p>
+    <p id="saveInfo"></p>
+    <label for="nameInput">Nombre del personaje</label>
+    <input id="nameInput" maxlength="16" value="Viajero" autocomplete="off" spellcheck="false">
+    <span class="pick-label">Clase</span>
+    <div class="class-pick" role="group" aria-label="Clase">
+      <button type="button" data-cls="guerrero"><b>⚔︎</b>Guerrero</button>
+      <button type="button" data-cls="arquera"><b>➶</b>Arquera</button>
+      <button type="button" data-cls="mago"><b>✺</b>Mago</button>
+    </div>
+    <p class="class-desc" id="classDesc"></p>
+    <button id="btnStart">Entrar al mundo</button>
+    <button id="btnReset" hidden>Borrar personaje</button>
+    <p class="start-keys">Clic para moverte y atacar · Arrastra para girar la cámara · 1–4 habilidades · I inventario · H ayuda</p>
+  </div>
+</div>
+
+<div id="loading" role="status" aria-live="polite">
+  <div class="load-card">
+    <div class="load-emblem" aria-hidden="true">V</div>
+    <p class="eyebrow">Ecos de</p>
+    <h2>Valdoria</h2>
+    <div class="load-track"><i id="loadBar"></i></div>
+    <p id="loadTxt">Cargando…</p>
+  </div>
+</div>
+
+<script src="./vendor/three.min.js"></script>
+<script src="./src/state.js"></script>
+<script src="./src/data.js"></script>
+<script src="./src/models.js"></script>
+<script src="./src/world.js"></script>
+<script src="./src/ui.js"></script>
+<script src="./src/game.js"></script>
+<script src="./src/main.js"></script>
+
+</body></html>

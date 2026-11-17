@@ -1,0 +1,58 @@
+{
+  "name": "ecos-de-valdoria",
+  "productName": "Ecos de Valdoria",
+  "version": "0.2.0",
+  "description": "RPG de fantasía en 3D",
+  "author": "hsanchezlabrin-art",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.ecosdevaldoria.juego",
+    "productName": "Ecos de Valdoria",
+    "copyright": "Ecos de Valdoria",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "splash-preload.js",
+      "splash.html",
+      "build/icon.png",
+      "app/**/*"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.png",
+      "artifactName": "EcosDeValdoria-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ecos de Valdoria",
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerLanguages": ["es_ES"],
+      "language": "3082"
+    }
+  }
+}

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guía · Ecos de Valdoria</title>
+<meta name="description" content="Guía de Ecos de Valdoria: controles, clases y habilidades, niveles, zonas, monstruos, equipo y NPCs.">
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="mark">V</span>Ecos de Valdoria</a>
+    <nav class="nav" aria-label="Principal">
+      <a href="./#clases">Clases</a>
+      <a href="./#mundo">Mundo</a>
+      <a href="guia.html" aria-current="page">Guía</a>
+    </nav>
+    <a class="btn btn-gold" href="./#descargar">Descargar</a>
+  </div>
+</header>
+
+<div class="guide-hero">
+  <div class="wrap">
+    <p class="eyebrow">Guía del viajero</p>
+    <h1>Cómo jugar a Ecos de Valdoria</h1>
+    <p class="lead">Todo lo que necesitas para tu primera aventura: controles, clases, habilidades, niveles, zonas, equipo y los personajes de la aldea.</p>
+  </div>
+</div>
+
+<div class="wrap guide">
+  <nav class="toc" aria-label="Contenido de la guía">
+    <a href="#primeros-pasos">Primeros pasos</a>
+    <a href="#controles">Controles</a>
+    <a href="#clases">Clases y habilidades</a>
+    <a href="#niveles">Niveles y experiencia</a>
+    <a href="#zonas">Zonas y monstruos</a>
+    <a href="#equipo">Equipo y objetos</a>
+    <a href="#npcs">Personajes de la aldea</a>
+    <a href="#consejos">Consejos</a>
+  </nav>
+
+  <article>
+    <section id="primeros-pasos">
+      <h2>Primeros pasos</h2>
+      <p>Al abrir el juego eliges un nombre y una clase: <strong>Guerrero</strong>, <strong>Arquera</strong> o <strong>Mago</strong>. Puedes tener un personaje de cada clase; cada uno guarda su progreso por separado y de forma automática.</p>
+      <p>Empiezas en la <strong>Aldea de Brezal</strong>, en el centro del mapa. Es zona segura: los monstruos no entran y tu vida y maná se recuperan rápido. Desde la aldea salen seis caminos, cada uno hacia una tierra más peligrosa que la anterior. Los postes al inicio de cada camino indican el nivel recomendado.</p>
+      <ul class="plain">
+        <li>Habla con la <strong>Capitana Brisa</strong> para saber a qué zona ir según tu nivel.</li>
+        <li>Empieza en los <strong>Prados de Brezo</strong> (nivel 1–2): los jabalíes no atacan si no los provocas.</li>
+        <li>Vende el botín al <strong>Mercader Orlen</strong> y compra pociones y mejor equipo.</li>
+        <li>Si caes, despiertas en la aldea con el 70% de vida y pierdes el 5% de la experiencia del nivel.</li>
+      </ul>
+    </section>
+
+    <section id="controles">
+      <h2>Controles</h2>
+      <div class="keys">
+        <div class="key"><kbd>Clic</kbd><span>Moverte al punto, atacar a un monstruo o hablar con un personaje</span></div>
+        <div class="key"><kbd>Arrastrar</kbd><span>Girar la cámara</span></div>
+        <div class="key"><kbd>Rueda</kbd><span>Acercar o alejar la cámara</span></div>
+        <div class="key"><kbd>W A S D</kbd><span>Caminar respecto a la cámara</span></div>
+        <div class="key"><kbd>Q</kbd> <kbd>E</kbd><span>Girar la cámara a saltos</span></div>
+        <div class="key"><kbd>Tab</kbd><span>Seleccionar el monstruo más cercano</span></div>
+        <div class="key"><kbd>F</kbd><span>Atacar al objetivo</span></div>
+        <div class="key"><kbd>1</kbd> – <kbd>4</kbd><span>Habilidades de tu clase</span></div>
+        <div class="key"><kbd>5</kbd> <kbd>6</kbd><span>Poción de vida · Poción de maná</span></div>
+        <div class="key"><kbd>I</kbd><span>Inventario y equipo</span></div>
+        <div class="key"><kbd>H</kbd><span>Ayuda de controles</span></div>
+        <div class="key"><kbd>Esc</kbd><span>Cerrar ventanas o soltar el objetivo</span></div>
+        <div class="key"><kbd>F11</kbd><span>Pantalla completa</span></div>
+      </div>
+      <p class="callout">El color del nombre de un monstruo indica su dificultad: <span style="color:#8d8a84">gris</span> (muy fácil, casi no da experiencia), <span style="color:#8fd37a">verde</span>, blanco (tu nivel), <span style="color:#f2cf5b">amarillo</span> y <span style="color:#ff6b5a">rojo</span> (muy superior a ti).</p>
+    </section>
+
+    <section id="clases">
+      <h2>Clases y habilidades</h2>
+      <p>Cada clase aprende cuatro habilidades: la primera desde el nivel 1 y las demás en los niveles 3, 5 y 8. Las habilidades gastan maná y tienen un tiempo de recarga. Las armas son exclusivas de cada clase; las armaduras sirven a todas.</p>
+      <div id="guideClasses" style="display:grid;gap:18px"></div>
+    </section>
+
+    <section id="niveles">
+      <h2>Niveles y experiencia</h2>
+      <p>Ganas experiencia al derrotar monstruos. Los que están 3 o más niveles por encima de ti dan un 20% extra; los que están 4 o más por debajo dan mucho menos. El nivel máximo es <strong>20</strong>. Al subir de nivel recuperas toda la vida y el maná, y aumentan tus estadísticas.</p>
+      <div id="guideLevels"></div>
+    </section>
+
+    <section id="zonas">
+      <h2>Zonas y monstruos</h2>
+      <p>Los monstruos reaparecen unos segundos después de morir (Tharmok tarda 3 minutos). Si te alejas mucho de su zona dejan de perseguirte y vuelven a su sitio. Nunca te siguen dentro de la aldea.</p>
+      <div id="guideZones"></div>
+    </section>
+
+    <section id="equipo">
+      <h2>Equipo y objetos</h2>
+      <p>Haz clic en un objeto del inventario para equiparlo o usarlo, y en tu equipo para quitártelo. Hay cuatro rarezas: <span class="rar" style="color:#cfc6b2">Común</span>, <span class="rar" style="color:#8fd37a">Refinado</span>, <span class="rar" style="color:#74aaff">Raro</span> y <span class="rar" style="color:#c895ff">Épico</span>. Cuando un monstruo suelta un arma, siempre es para tu clase.</p>
+      <h3>Armas por clase</h3>
+      <div id="guideWeapons"></div>
+      <h3>Armaduras</h3>
+      <div id="guideArmor"></div>
+      <h3>Pociones y botín</h3>
+      <div id="guideMisc"></div>
+    </section>
+
+    <section id="npcs">
+      <h2>Personajes de la aldea</h2>
+      <p>Haz clic sobre un personaje para caminar hasta él y hablarle.</p>
+      <div class="npcs" id="guideNpcs"></div>
+    </section>
+
+    <section id="consejos">
+      <h2>Consejos</h2>
+      <ul class="plain">
+        <li><strong>Guerrero:</strong> entra en grupos y usa Torbellino. Guarda Segundo Aliento para cuando tu vida baje de la mitad.</li>
+        <li><strong>Arquera:</strong> ataca desde el máximo alcance. Si un monstruo te alcanza, usa Salto de Retirada y sigue disparando mientras está ralentizado.</li>
+        <li><strong>Mago:</strong> activa el Escudo Arcano antes de entrar en combate. La Nova de Escarcha ralentiza a todo lo que te rodea y te da tiempo de alejarte.</li>
+        <li>Lleva siempre pociones: las teclas <kbd>5</kbd> y <kbd>6</kbd> las usan al instante.</li>
+        <li>La Sanadora Ilwen te cura gratis: vuelve a la aldea en lugar de gastar pociones si no hay prisa.</li>
+        <li>Tharmok tiene seis veces la vida de un monstruo normal y golpea muy fuerte. Llega al nivel 15 con equipo raro antes de intentarlo.</li>
+      </ul>
+    </section>
+  </article>
+</div>
+
+<footer class="foot">
+  <div class="wrap">
+    <span>Ecos de Valdoria · Prototipo 0.2</span>
+    <nav aria-label="Pie"><a href="./">Inicio</a><a href="./#descargar">Descargar</a><a href="https://github.com/hsanchezlabrin-art/ecos-de-valdoria">GitHub</a></nav>
+  </div>
+</footer>
+
+<script src="juego/src/state.js"></script>
+<script src="juego/src/data.js"></script>
+<script>window.THREE = window.THREE || null;</script>
+<script>
+  // La guía no necesita 3D: se cargan solo los datos del juego.
+  V.World = V.World || {};
+  V.Models = V.Models || {};
+</script>
+<script src="site.js"></script>
+</body>
+</html>

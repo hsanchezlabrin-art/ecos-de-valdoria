@@ -1,13 +1,14 @@
 // Mundo: terreno, vegetación, aldea, campamentos y cielo.
-import { ZONES } from './data.js';
-import { buildHumanoid, mat } from './models.js';
+(function () {
+const { ZONES, NPCS } = V.Data;
+const { buildHumanoid, mat } = V.Models;
 
 const THREE = window.THREE;
 
-export const WORLD = 440;
-export const WORLD_LIMIT = 188;
-export const VILLAGE_R = 22;
-export const WATER_Y = -1.7;
+const WORLD = 440;
+const WORLD_LIMIT = 188;
+const VILLAGE_R = 22;
+const WATER_Y = -1.7;
 
 const ss = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -33,13 +34,13 @@ function distSeg(px, pz, ax, az, bx, bz) {
   const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz)));
   return Math.hypot(px - (ax + dx * t), pz - (az + dz * t));
 }
-export function pathDist(x, z) {
+function pathDist(x, z) {
   let d = Infinity;
   for (const zn of FIELD_ZONES) d = Math.min(d, distSeg(x, z, 0, 0, zn.x, zn.z));
   return d;
 }
 
-export function heightAt(x, z) {
+function heightAt(x, z) {
   let h =
     Math.sin(x * 0.021 + 0.4) * Math.cos(z * 0.018) * 5.5 +
     Math.sin(x * 0.055 + 1.3) * Math.sin(z * 0.049 + 0.7) * 1.8 +
@@ -57,9 +58,9 @@ export function heightAt(x, z) {
   return h;
 }
 
-export const inVillage = (p) => Math.hypot(p.x, p.z) < VILLAGE_R;
+const inVillage = (p) => Math.hypot(p.x, p.z) < VILLAGE_R;
 
-export function zoneAt(p) {
+function zoneAt(p) {
   if (inVillage(p)) return ZONES[0];
   for (const z of FIELD_ZONES) if (Math.hypot(p.x - z.x, p.z - z.z) < z.r * 1.1) return z;
   return null;
@@ -326,11 +327,30 @@ function buildVillage(scene) {
   stall.traverse((o) => (o.castShadow = true));
   scene.add(stall);
 
-  const merchant = buildHumanoid({ skin: 0xd9a77e, body: 0x6a4c7a, legs: 0x3a2e40, hair: 0xbfb8ab, robe: true, weapon: false });
-  merchant.root.position.set(sx, 0, sz);
-  merchant.root.rotation.y = Math.atan2(-sx, -sz);
-  merchant.root.traverse((o) => (o.userData.npc = 'merchant'));
-  scene.add(merchant.root);
+  // Santuario de la sanadora: piedra con un cristal que brilla
+  const sn = NPCS.find((n) => n.id === 'sanadora');
+  const shrine = new THREE.Group();
+  shrine.position.set(sn.x * 1.22, heightAt(sn.x, sn.z), sn.z * 1.22);
+  const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 0.9, 7), mat(0x8a8478));
+  stone.position.y = 0.45;
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), mat(0xbff0d8, { emissive: 0x5ad0a0, emissiveIntensity: 1.2 }));
+  crystal.position.y = 1.45;
+  const glow = new THREE.PointLight(0x7fe0b0, 1.2, 10, 2);
+  glow.position.y = 1.6;
+  shrine.add(stone, crystal, glow);
+  stone.castShadow = true;
+  scene.add(shrine);
+
+  // NPCs de la aldea
+  const npcs = NPCS.map((def) => {
+    const model = buildHumanoid(def.look);
+    model.root.position.set(def.x, heightAt(def.x, def.z), def.z);
+    model.root.rotation.y = Math.atan2(-def.x, -def.z);
+    model.root.traverse((o) => (o.userData.npc = def.id));
+    scene.add(model.root);
+    return { ...def, model, root: model.root };
+  });
+  const merchant = npcs.find((n) => n.id === 'mercader');
 
   // Postes indicadores al inicio de cada camino
   const signs = FIELD_ZONES.map((zn) => {
@@ -348,7 +368,7 @@ function buildVillage(scene) {
     return { pos: new THREE.Vector3(x, y, z), height: 2.6, text: `${zn.name} · Nv ${zn.lvl}` };
   });
 
-  return { fires, merchant, signs };
+  return { fires, merchant, npcs, signs, crystal };
 }
 
 function buildCamps(scene) {
@@ -390,7 +410,7 @@ function buildCamps(scene) {
   return fires;
 }
 
-export function buildWorld(scene) {
+function buildWorld(scene) {
   const sky = buildSky(scene);
   const terrain = buildTerrain();
   scene.add(terrain);
@@ -404,5 +424,16 @@ export function buildWorld(scene) {
   buildVegetation(scene);
   const village = buildVillage(scene);
   const campFires = buildCamps(scene);
-  return { sky, terrain, merchant: village.merchant, signs: village.signs, fires: [...village.fires, ...campFires] };
+  return {
+    sky,
+    terrain,
+    merchant: village.merchant,
+    npcs: village.npcs,
+    crystal: village.crystal,
+    signs: village.signs,
+    fires: [...village.fires, ...campFires],
+  };
 }
+
+V.World = { WORLD, WORLD_LIMIT, VILLAGE_R, WATER_Y, pathDist, heightAt, inVillage, zoneAt, buildWorld };
+})();

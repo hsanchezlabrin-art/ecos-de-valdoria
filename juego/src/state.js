@@ -1,5 +1,9 @@
 // Estado compartido del cliente. Cuando haya servidor, gran parte de esto vendrá de la red.
-export const G = {
+// Los archivos usan scripts clásicos (sin módulos ES) para que el juego funcione abriéndolo
+// desde el disco, dentro de la app de escritorio. Cada archivo publica su parte en window.V.
+window.V = window.V || {};
+
+V.G = {
   started: false,
   scene: null,
   camera: null,
