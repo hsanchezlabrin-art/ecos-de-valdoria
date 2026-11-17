@@ -22,6 +22,7 @@
       <a href="#clases">Clases</a>
       <a href="#mundo">Mundo</a>
       <a href="guia.html">Guía</a>
+      <a href="cambios.html">Novedades</a>
     </nav>
     <a class="btn btn-gold" href="jugar">Jugar</a>
   </div>
@@ -45,7 +46,7 @@
         </a>
         <a class="btn" href="guia.html">Guía</a>
       </div>
-      <p class="meta">Versión 0.3 · Gratis · En línea con otros viajeros o en solitario · Navegador, Windows y macOS</p>
+      <p class="meta"><span data-version>Versión</span> · Gratis · En línea con otros viajeros · Navegador, Windows y macOS</p>
     </div>
   </section>
 
@@ -87,7 +88,7 @@
       <div class="features">
         <div class="feature"><span class="ic">⚔︎</span><h3>Combate en tiempo real</h3><p>Haz clic para atacar, encadena habilidades y bebe pociones en el momento justo.</p></div>
         <div class="feature"><span class="ic">◆</span><h3>Botín por rareza</h3><p>Armas y armaduras comunes, refinadas, raras y épicas. Las épicas solo las suelta el jefe.</p></div>
-        <div class="feature"><span class="ic">✚</span><h3>Aldea viva</h3><p>Un mercader, una sanadora que te cura gratis y una capitana que te orienta.</p></div>
+        <div class="feature"><span class="ic">✚</span><h3>Grupos</h3><p>Invita a otros jugadores a tu grupo, mira su vida y maná y comparte la experiencia de cada caza.</p></div>
         <div class="feature"><span class="ic">●</span><h3>En línea</h3><p>Caza junto a otros jugadores en el mismo mundo y habla con ellos por el chat. También puedes jugar en solitario.</p></div>
       </div>
     </div>
@@ -157,12 +158,14 @@
 
 <footer class="foot">
   <div class="wrap">
-    <span>Ecos de Valdoria · Prototipo 0.3</span>
-    <nav aria-label="Pie"><a href="guia.html">Guía</a><a href="#descargar">Descargar</a><a href="https://github.com/hsanchezlabrin-art/ecos-de-valdoria">GitHub</a></nav>
+    <span>Ecos de Valdoria · <span data-version>Prototipo</span></span>
+    <nav aria-label="Pie"><a href="guia.html">Guía</a><a href="cambios.html">Novedades</a><a href="#descargar">Descargar</a><a href="https://github.com/hsanchezlabrin-art/ecos-de-valdoria">GitHub</a></nav>
   </div>
 </footer>
 
 <script src="juego/vendor/three.min.js"></script>
+<script src="juego/src/version.js"></script>
+<script src="juego/src/changelog.js"></script>
 <script src="juego/src/state.js"></script>
 <script src="juego/src/data.js"></script>
 <script src="juego/src/terrain.js"></script>

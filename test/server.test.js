@@ -95,7 +95,7 @@ async function main() {
 
     const a = await enter('ana_01', 'ana@example.com', 'secreto1', 'Selene', 'arquera', 'f');
     ok(!!a.id && !!a.session, 'Ana crea su cuenta, entra al instante y juega con su personaje');
-    const meA = a.last.me;
+    const meA = { ...a.last.me, ...a.snaps.find((x) => x.me && x.me.inv).me }; // el inventario llega solo cuando cambia
     ok(meA.level === 1 && meA.inv.length > 0 && meA.stats.crit > 0, 'el personaje nuevo empieza en nivel 1 con estadísticas de crítico');
 
     const dup = await connect();

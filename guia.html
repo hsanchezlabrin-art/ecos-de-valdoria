@@ -20,6 +20,7 @@
       <a href="./#clases">Clases</a>
       <a href="./#mundo">Mundo</a>
       <a href="guia.html" aria-current="page">Guía</a>
+      <a href="cambios.html">Novedades</a>
     </nav>
     <a class="btn btn-gold" href="jugar">Jugar</a>
   </div>
@@ -36,20 +37,22 @@
 <div class="wrap guide">
   <nav class="toc" aria-label="Contenido de la guía">
     <a href="#primeros-pasos">Primeros pasos</a>
+    <a href="#cuenta">Cuenta y personajes</a>
     <a href="#controles">Controles</a>
     <a href="#clases">Clases y habilidades</a>
     <a href="#niveles">Niveles y experiencia</a>
     <a href="#zonas">Zonas y monstruos</a>
     <a href="#equipo">Equipo y objetos</a>
     <a href="#npcs">Personajes de la aldea</a>
+    <a href="#grupos">Grupos</a>
+    <a href="#mundo">Agua y caminos</a>
     <a href="#consejos">Consejos</a>
   </nav>
 
   <article>
     <section id="primeros-pasos">
       <h2>Primeros pasos</h2>
-      <p>Al abrir el juego eliges un nombre y una clase: <strong>Guerrero</strong>, <strong>Arquera</strong> o <strong>Mago</strong>. Puedes tener un personaje de cada clase; cada uno guarda su progreso por separado y de forma automática.</p>
-      <p>Luego eliges el modo: <strong>En línea</strong> te lleva al mundo compartido, donde ves a los demás jugadores, cazas en las mismas zonas y hablas con ellos por el chat. <strong>Un jugador</strong> funciona sin conexión. Tu personaje es el mismo en ambos modos.</p>
+      <p>Ecos de Valdoria es un juego en línea: todos los jugadores comparten el mismo mundo. Para entrar necesitas una <a href="#cuenta">cuenta</a>; tus personajes quedan guardados en el servidor y puedes seguir jugando desde el navegador, Windows o Mac.</p>
       <p>Empiezas en la <strong>Aldea de Brezal</strong>, en el centro del mapa. Es zona segura: los monstruos no entran y tu vida y maná se recuperan rápido. Desde la aldea salen seis caminos, cada uno hacia una tierra más peligrosa que la anterior. Los postes al inicio de cada camino indican el nivel recomendado.</p>
       <ul class="plain">
         <li>Habla con la <strong>Capitana Brisa</strong> para saber a qué zona ir según tu nivel.</li>
@@ -59,22 +62,37 @@
       </ul>
     </section>
 
+    <section id="cuenta">
+      <h2>Cuenta y personajes</h2>
+      <p>Crea tu cuenta desde la pantalla de inicio con un <strong>ID</strong> (3 a 16 letras o números), tu <strong>correo</strong> y una <strong>contraseña</strong> de al menos 6 caracteres. Entras al instante, sin confirmar el correo. Si marcas «Recordarme», el juego abre tu sesión solo la próxima vez.</p>
+      <ul class="plain">
+        <li>Cada cuenta puede tener hasta <strong>7 personajes</strong>. En el selector ves a cada uno en 3D con su equipo.</li>
+        <li>Al crear un personaje eliges <strong>nombre</strong>, <strong>sexo</strong> (hombre o mujer, cambia su apariencia) y <strong>clase</strong>. El dado 🎲 propone un nombre libre al azar.</li>
+        <li>Los nombres son únicos: nadie más puede usar el de tu personaje.</li>
+        <li>Solo puedes jugar con un personaje a la vez por cuenta. Si entras desde otro equipo, la sesión anterior se cierra.</li>
+        <li>Si se corta la conexión, el juego se reconecta solo y vuelves donde estabas.</li>
+      </ul>
+    </section>
+
     <section id="controles">
       <h2>Controles</h2>
       <div class="keys">
-        <div class="key"><kbd>Clic</kbd><span>Moverte al punto, atacar a un monstruo o hablar con un personaje</span></div>
+        <div class="key"><kbd>Clic</kbd><span>Moverte, atacar a un monstruo, hablar con un NPC o seleccionar a un jugador</span></div>
+        <div class="key"><kbd>Shift</kbd> + <kbd>Clic</kbd><span>Ver el botín que puede soltar un monstruo</span></div>
         <div class="key"><kbd>Arrastrar</kbd><span>Girar la cámara</span></div>
         <div class="key"><kbd>Rueda</kbd><span>Acercar o alejar la cámara</span></div>
         <div class="key"><kbd>W A S D</kbd><span>Caminar respecto a la cámara</span></div>
         <div class="key"><kbd>Q</kbd> <kbd>E</kbd><span>Girar la cámara a saltos</span></div>
         <div class="key"><kbd>Tab</kbd><span>Seleccionar el monstruo más cercano</span></div>
         <div class="key"><kbd>F</kbd><span>Atacar al objetivo</span></div>
-        <div class="key"><kbd>1</kbd> – <kbd>4</kbd><span>Habilidades de tu clase</span></div>
-        <div class="key"><kbd>5</kbd> <kbd>6</kbd><span>Poción de vida · Poción de maná</span></div>
+        <div class="key"><kbd>1</kbd> – <kbd>6</kbd><span>Habilidades de tu clase</span></div>
+        <div class="key"><kbd>7</kbd> <kbd>8</kbd><span>Poción de vida · Poción de maná</span></div>
         <div class="key"><kbd>I</kbd><span>Inventario y equipo</span></div>
+        <div class="key"><kbd>C</kbd><span>Estado: ataque, defensa, crítico, velocidades</span></div>
+        <div class="key"><kbd>M</kbd><span>Mapa grande (arrastra para moverlo, rueda para acercar)</span></div>
         <div class="key"><kbd>H</kbd><span>Ayuda de controles</span></div>
         <div class="key"><kbd>Esc</kbd><span>Cerrar ventanas o soltar el objetivo</span></div>
-        <div class="key"><kbd>Enter</kbd><span>Escribir en el chat (en línea). Enter envía, Esc cancela</span></div>
+        <div class="key"><kbd>Enter</kbd><span>Chat. Empieza con <b>#</b> para hablar con tu grupo; <b>/invitar Nombre</b> invita a alguien</span></div>
         <div class="key"><kbd>F11</kbd><span>Pantalla completa (en Mac: Ctrl + Cmd + F)</span></div>
       </div>
       <h3>En celular o tablet (navegador)</h3>
@@ -91,7 +109,7 @@
 
     <section id="clases">
       <h2>Clases y habilidades</h2>
-      <p>Cada clase aprende cuatro habilidades: la primera desde el nivel 1 y las demás en los niveles 3, 5 y 8. Las habilidades gastan maná y tienen un tiempo de recarga. Las armas son exclusivas de cada clase; las armaduras sirven a todas.</p>
+      <p>Cada clase aprende seis habilidades, en los niveles 1, 3, 5, 8, 11 y 15. Las habilidades gastan maná y tienen un tiempo de recarga. Las armas son exclusivas de cada clase; las armaduras sirven a todas.</p>
       <div id="guideClasses" style="display:grid;gap:18px"></div>
     </section>
 
@@ -109,7 +127,7 @@
 
     <section id="equipo">
       <h2>Equipo y objetos</h2>
-      <p>Haz clic en un objeto del inventario para equiparlo o usarlo, y en tu equipo para quitártelo. Hay cuatro rarezas: <span class="rar" style="color:#cfc6b2">Común</span>, <span class="rar" style="color:#8fd37a">Refinado</span>, <span class="rar" style="color:#74aaff">Raro</span> y <span class="rar" style="color:#c895ff">Épico</span>. Cuando un monstruo suelta un arma, siempre es para tu clase.</p>
+      <p>Haz clic en un objeto del inventario para equiparlo o usarlo, y en tu equipo para quitártelo. Hay cinco rarezas: <span class="rar" style="color:#cfc6b2">Común</span>, <span class="rar" style="color:#8fd37a">Refinado</span>, <span class="rar" style="color:#74aaff">Raro</span>, <span class="rar" style="color:#c895ff">Épico</span> y <span class="rar" style="color:#ffb347">Legendario</span>. Las armas de rareza alta también aumentan tu probabilidad de crítico. Cuando un monstruo suelta un arma, siempre es para tu clase.</p>
       <h3>Armas por clase</h3>
       <div id="guideWeapons"></div>
       <h3>Armaduras</h3>
@@ -124,13 +142,36 @@
       <div class="npcs" id="guideNpcs"></div>
     </section>
 
+
+    <section id="grupos">
+      <h2>Grupos</h2>
+      <p>Como en los MMORPG clásicos, puedes formar un grupo de hasta <strong>7 jugadores</strong>:</p>
+      <ul class="plain">
+        <li>Haz clic sobre otro jugador para seleccionarlo y pulsa <strong>«Invitar al grupo»</strong>, o escribe <kbd>/invitar Nombre</kbd> en el chat.</li>
+        <li>Quien recibe la invitación puede aceptarla o rechazarla. El líder (★) es quien invita y puede expulsar miembros.</li>
+        <li>La experiencia de cada monstruo se reparte entre los miembros que estén cerca (45 m), según su nivel, con un <strong>10% extra por cada miembro</strong>. El oro y el botín son para quien da el golpe final.</li>
+        <li>Bajo tu marco ves la vida y el maná de tu grupo; en el mapa aparecen en verde.</li>
+        <li>Empieza un mensaje con <kbd>#</kbd> para hablar solo con tu grupo.</li>
+      </ul>
+    </section>
+
+    <section id="mundo">
+      <h2>Agua y caminos</h2>
+      <ul class="plain">
+        <li>Árboles, rocas grandes, casas, tiendas y empalizadas bloquean el paso: tu personaje los rodea para llegar a donde hiciste clic.</li>
+        <li>En aguas profundas tu personaje <strong>nada</strong>, más despacio. Si el agua es muy profunda, aparece una barra de <strong>aire</strong>: al vaciarse empiezas a perder vida. Vuelve a la orilla para recuperarlo.</li>
+        <li>Los monstruos te persiguen hasta 50 m de su sitio; luego vuelven y se curan poco a poco, no de golpe.</li>
+      </ul>
+    </section>
+
     <section id="consejos">
       <h2>Consejos</h2>
       <ul class="plain">
         <li><strong>Guerrero:</strong> entra en grupos y usa Torbellino. Guarda Segundo Aliento para cuando tu vida baje de la mitad.</li>
         <li><strong>Arquera:</strong> ataca desde el máximo alcance. Si un monstruo te alcanza, usa Salto de Retirada y sigue disparando mientras está ralentizado.</li>
         <li><strong>Mago:</strong> activa el Escudo Arcano antes de entrar en combate. La Nova de Escarcha ralentiza a todo lo que te rodea y te da tiempo de alejarte.</li>
-        <li>Lleva siempre pociones: las teclas <kbd>5</kbd> y <kbd>6</kbd> las usan al instante.</li>
+        <li>Lleva siempre pociones: las teclas <kbd>7</kbd> y <kbd>8</kbd> las usan al instante.</li>
+        <li>Cazar en grupo da más experiencia que cazar solo.</li>
         <li>La Sanadora Ilwen te cura gratis: vuelve a la aldea en lugar de gastar pociones si no hay prisa.</li>
         <li>Tharmok tiene seis veces la vida de un monstruo normal y golpea muy fuerte. Llega al nivel 15 con equipo raro antes de intentarlo.</li>
       </ul>
@@ -140,11 +181,13 @@
 
 <footer class="foot">
   <div class="wrap">
-    <span>Ecos de Valdoria · Prototipo 0.3</span>
-    <nav aria-label="Pie"><a href="./">Inicio</a><a href="./#descargar">Descargar</a><a href="https://github.com/hsanchezlabrin-art/ecos-de-valdoria">GitHub</a></nav>
+    <span>Ecos de Valdoria · <span data-version>Prototipo</span></span>
+    <nav aria-label="Pie"><a href="./">Inicio</a><a href="cambios.html">Novedades</a><a href="./#descargar">Descargar</a><a href="https://github.com/hsanchezlabrin-art/ecos-de-valdoria">GitHub</a></nav>
   </div>
 </footer>
 
+<script src="juego/src/version.js"></script>
+<script src="juego/src/changelog.js"></script>
 <script src="juego/src/state.js"></script>
 <script src="juego/src/data.js"></script>
 <script>window.THREE = window.THREE || null;</script>

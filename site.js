@@ -241,6 +241,8 @@
     buff: 'Mejora temporal',
     shield: 'Escudo',
     leap: 'Movilidad',
+    charge: 'Carga y aturdimiento',
+    chain: 'Rayo en cadena',
   };
 
   function guideClasses() {
@@ -267,7 +269,7 @@
         el(
           'div',
           { class: 'class-guide', id: `clase-${id}` },
-          el('header', {}, el('h3', {}, c.name), el('span', { class: 'role' }, c.role)),
+          el('header', {}, el('h3', {}, c.names ? `${c.names.m} / ${c.names.f}` : c.name), el('span', { class: 'role' }, c.role)),
           el('p', {}, c.desc),
           el(
             'div',
@@ -276,6 +278,7 @@
             el('span', {}, 'Maná ', el('b', {}, `${s1.maxMp} → ${s20.maxMp}`)),
             el('span', {}, 'Alcance ', el('b', {}, c.range > 3 ? `${c.range} m` : 'cuerpo a cuerpo')),
             el('span', {}, 'Ataque cada ', el('b', {}, `${c.atkSpeed} s`)),
+            el('span', {}, 'Crítico ', el('b', {}, `${Math.round(c.crit * 100)}%`)),
             el('span', {}, 'Arma inicial ', el('b', {}, D.ITEMS[c.start].name))
           ),
           table([['Nivel', 'num'], ['Habilidad'], ['Tipo'], ['Maná', 'num'], ['Recarga', 'num'], ['Alcance', 'num'], ['Efecto']], rows)
@@ -329,7 +332,7 @@
             el('td', {}, m.boss ? el('span', { style: 'color:#c895ff;font-weight:700' }, m.name) : m.name),
             el('td', { class: 'num' }, m.lvl[0] === m.lvl[1] ? `${m.lvl[0]}` : `${m.lvl[0]}–${m.lvl[1]}`),
             el('td', {}, m.aggressive ? 'Te ataca al verte' : 'Solo si lo atacas'),
-            el('td', {}, m.drops.map(([id]) => (id[0] === '@' ? `Arma de tu clase (${['común', 'refinada', 'rara', 'épica'][+id.slice(2)]})` : D.ITEMS[id].name)).join(', '))
+            el('td', {}, m.drops.map(([id, ch]) => `${id[0] === '@' ? `Arma de tu clase (nivel ${D.ITEMS[D.resolveDrop(id, 'guerrero')].lvl})` : D.ITEMS[id].name} ${+(ch * 100).toFixed(1)}%`).join(', '))
           )
         );
       }
@@ -340,7 +343,7 @@
   function guideItems() {
     const w = $('#guideWeapons');
     if (w) {
-      const rows = [0, 1, 2, 3].map((tier) => {
+      const rows = D.WEAPON_TIERS.guerrero.map((_, tier) => {
         const ids = D.CLASS_IDS.map((c) => D.WEAPON_TIERS[c][tier]);
         const first = D.ITEMS[ids[0]];
         return el(
@@ -350,7 +353,7 @@
           el('td', {}, rarity(first.rarity)),
           ids.map((id) => el('td', {}, D.ITEMS[id].name)),
           el('td', { class: 'num' }, `+${first.atk}`),
-          el('td', {}, tier < 2 ? `Tienda (${first.price} oro) o botín` : tier === 2 ? 'Botín de orcos y gólems' : 'Solo Tharmok')
+          el('td', {}, tier <= 2 ? `Tienda (${first.price} oro) o botín` : tier === 3 ? 'Botín de gólems y sapos' : 'Solo Tharmok')
         );
       });
       w.append(table([['Nivel', 'num'], ['Rareza'], ['Guerrero'], ['Arquera'], ['Mago'], ['Ataque', 'num'], ['Dónde']], rows));
@@ -416,7 +419,27 @@
     if (heroBtn) heroBtn.href = card.querySelector('.dl-link').href;
   }
 
+  // Versión completa en todas las páginas (una sola fuente: juego/src/version.js)
+  for (const n of document.querySelectorAll('[data-version]')) n.textContent = `Versión ${V.VERSION}`;
+
+  // Página de novedades
+  function changelog() {
+    const box = $('#changelog');
+    if (!box || !V.CHANGELOG) return;
+    for (const e of V.CHANGELOG) {
+      box.append(
+        el(
+          'article',
+          { class: 'release', id: `v${e.version}` },
+          el('header', {}, el('h2', {}, `v${e.version}`), el('span', { class: 'rel-title' }, e.title), el('time', { datetime: e.date }, new Date(`${e.date}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' }))),
+          el('ul', { class: 'plain' }, e.items.map((it) => el('li', {}, it)))
+        )
+      );
+    }
+  }
+
   detectOS();
+  changelog();
   hero();
   classCards();
   worldMap();
