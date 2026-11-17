@@ -100,6 +100,13 @@ for (const cls of Data.CLASS_IDS) {
   ok(p.gold === 480, 'se compra junto al mercader');
   C.buyItem(w, p, 'espada_larga');
   ok(p.gold === 480, 'un mago no puede comprar armas de guerrero');
+  C.buyItem(w, p, 'pocion_mana', 4);
+  ok(p.gold === 380 && Sim.countItem(p, 'pocion_mana') === 8, 'se compran varias pociones de una vez');
+  C.buyItem(w, p, 'pocion_vida', 500);
+  ok(p.gold === 380, 'no se compra más de lo que alcanza el oro');
+  const idx = p.inv.findIndex((s) => s.id === 'pocion_mana');
+  C.sellItem(w, p, idx, 3);
+  ok(Sim.countItem(p, 'pocion_mana') === 5 && p.gold === 380 + 3 * Data.sellPrice(Data.ITEMS.pocion_mana), 'se venden varias unidades de una vez');
   const save = Sim.serialize(p);
   ok(save.cls === 'mago' && save.inv.length === p.inv.length, 'la partida se serializa');
 }

@@ -423,9 +423,11 @@
   const useSkill = (i) => act(() => C.useSkill(W, P, i), { t: 'skill', i });
   const usePotion = (id) => act(() => C.usePotion(W, P, id), { t: 'potion', id });
   const countItem = (id) => Sim.countItem(P, id);
-  const clickInventory = (i) => (UI.shopOpen() ? act(() => C.sellItem(W, P, i), { t: 'sell', i }) : act(() => C.useItem(W, P, i), { t: 'use', i }));
+  // Con la tienda abierta, el clic en el inventario abre el diálogo de venta (confirmación y cantidad)
+  const clickInventory = (i) => (UI.shopOpen() ? UI.openTrade('sell', i) : act(() => C.useItem(W, P, i), { t: 'use', i }));
+  const sellItem = (i, q) => act(() => C.sellItem(W, P, i, q), { t: 'sell', i, q });
   const unequip = (k) => act(() => C.unequip(W, P, k), { t: 'unequip', k });
-  const buyItem = (id) => act(() => C.buyItem(W, P, id), { t: 'buy', id });
+  const buyItem = (id, q) => act(() => C.buyItem(W, P, id, q), { t: 'buy', id, q });
   const respawnPlayer = () => act(() => C.respawn(W, P), { t: 'respawn' });
   const sendChat = (text) => online && send({ t: 'chat', text });
 
@@ -713,7 +715,7 @@
   V.Game = {
     newCharacter, createPlayer, serialize, spawnMobs, startOnline, sendChat,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, useSkill, countItem, usePotion,
-    clickInventory, unequip, buyItem, respawnPlayer, update,
+    clickInventory, sellItem, unequip, buyItem, respawnPlayer, update,
     get online() {
       return online;
     },

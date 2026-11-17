@@ -162,6 +162,23 @@
   #shopList small { color: var(--muted); font-size: 12px; }
   .buy { background: #1d1a12; border: 1px solid var(--edge); padding: 6px 10px; border-radius: 2px; font-weight: 700; color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .buy:disabled { opacity: .4; cursor: not-allowed; }
+  /* Diálogo de compra / venta */
+  #tradePanel { z-index: 7; left: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100% - 24px)); box-shadow: inset 0 0 0 1px #000, 0 0 0 100vmax rgba(0,0,0,.45), 0 20px 60px rgba(0,0,0,.55); }
+  .tr-item { display: grid; grid-template-columns: 52px 1fr; gap: 12px; align-items: center; margin-bottom: 14px; }
+  .tr-item .islot { width: 52px; font-size: 24px; color: var(--r); }
+  .tr-item strong { display: block; font-size: 16px; }
+  .tr-item small { display: block; color: var(--muted); font-size: 13px; line-height: 1.35; margin-top: 2px; }
+  .tr-qty { display: grid; gap: 8px; margin-bottom: 12px; }
+  .tr-label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .tr-controls { display: grid; grid-template-columns: 44px 1fr 44px auto; gap: 6px; }
+  .tr-controls button, .tr-controls input { height: 40px; border: 1px solid var(--edge); border-radius: 3px; background: #0c0e11; color: var(--parch); font: 700 18px var(--body); }
+  .tr-controls input { width: 100%; text-align: center; font-variant-numeric: tabular-nums; user-select: text; }
+  .tr-controls #trMax { padding: 0 12px; font-size: 14px; color: var(--gold); }
+  #trRange { width: 100%; accent-color: var(--gold); }
+  .tr-total { margin: 0 0 14px; font: 700 17px var(--display); color: var(--gold); font-variant-numeric: tabular-nums; }
+  .tr-total.poor { color: #ff8b78; }
+  .tr-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .tr-actions .buy { padding: 11px; font-size: 15px; }
   .keys { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
   .keys dt { color: var(--gold); font-weight: 700; white-space: nowrap; }
   .keys dd { margin: 0; color: #d7ccb5; }
@@ -265,6 +282,53 @@
   @keyframes turn { 0%, 20% { transform: rotate(0); } 55%, 80% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
   @media (orientation: portrait) { body.touch #rotate { display: grid; } }
 
+  .tclose { margin-left: auto; width: 26px; height: 26px; font-size: 13px; }
+  .touch-only { display: none; }
+
+  /* ---------- HUD táctil al estilo de los MMORPG móviles ----------
+     Derecha: botón Atacar con habilidades (arco interior) y pociones (arco exterior).
+     Arriba a la derecha: minimapa y columna de menú. Izquierda: joystick y chat. */
+  body.touch #hotbar { left: auto; right: calc(8px + env(safe-area-inset-right, 0px)); bottom: calc(6px + env(safe-area-inset-bottom, 0px)); transform: none; width: 300px; height: 300px; padding: 0; background: none; border: 0; display: block; pointer-events: none; }
+  body.touch #hotbar .slot { position: absolute; width: 52px; height: 52px; border-radius: 50%; pointer-events: auto; background: radial-gradient(circle at 50% 35%, rgba(42,47,56,.92), rgba(16,18,22,.92)); box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+  body.touch #hotbar .slot .cd { border-radius: 50%; }
+  body.touch #hotbar .slot .glyph { font-size: 23px; }
+  body.touch #hotbar .slot .lock { bottom: 6px; font-size: 9px; }
+  body.touch #hotbar .slot .qty { right: 50%; transform: translateX(50%); bottom: -4px; padding: 0 5px; background: #0b0d10; border: 1px solid var(--edge-soft); border-radius: 8px; font-size: 11px; }
+  body.touch #hotbar .slot:nth-child(1) { left: 104px; top: 209px; }
+  body.touch #hotbar .slot:nth-child(2) { left: 118px; top: 156px; }
+  body.touch #hotbar .slot:nth-child(3) { left: 156px; top: 118px; }
+  body.touch #hotbar .slot:nth-child(4) { left: 209px; top: 104px; }
+  body.touch #hotbar .slot:nth-child(5) { left: 43px; top: 164px; }
+  body.touch #hotbar .slot:nth-child(6) { left: 164px; top: 43px; }
+  body.touch .touch-only { display: grid; place-items: center; position: fixed; z-index: 2; touch-action: manipulation; }
+  body.touch #btnAttack { right: calc(27px + env(safe-area-inset-right, 0px)); bottom: calc(25px + env(safe-area-inset-bottom, 0px)); width: 92px; height: 92px; border-radius: 50%; border: 2px solid #e8a090; background: radial-gradient(circle at 45% 35%, #d8584a, #a4271f 60%, #6e1712); color: #fff3e6; font: 700 17px var(--display); letter-spacing: .03em; text-shadow: 0 1px 3px rgba(0,0,0,.6); box-shadow: 0 0 0 4px rgba(11,13,16,.55), 0 6px 20px rgba(0,0,0,.55); }
+  body.touch #btnAttack:active, body.touch #btnTarget:active, body.touch #btnChat:active { transform: scale(.94); }
+  body.touch #btnTarget { right: calc(318px + env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 9px 14px; border: 1px solid var(--edge); border-radius: 4px; background: var(--panel); color: var(--parch); font: 700 14px var(--display); }
+  body.touch #btnChat { left: calc(12px + min(330px, 36vw) + 8px); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 8px 14px; border: 1px solid var(--edge); border-radius: 4px; background: var(--panel); color: var(--parch); font: 700 14px var(--display); }
+  body.touch #btnChat[hidden] { display: none; }
+
+  body.touch .menu-btns { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; right: calc(8px + env(safe-area-inset-right, 0px)); gap: 6px; }
+  body.touch .menu-btns button { width: 56px; height: 54px; padding: 4px 2px; display: grid; place-items: center; align-content: center; gap: 2px; font-size: 9px; font-weight: 700; letter-spacing: 0; line-height: 1.1; }
+  body.touch .menu-btns button::before { content: attr(data-icon); font-size: 20px; color: var(--gold); line-height: 1; }
+  body.touch .menu-btns button[hidden] { display: none; }
+  body.touch .mapbox { right: calc(72px + env(safe-area-inset-right, 0px)); }
+
+  body.touch #joystick { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  body.touch #log { top: auto; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: min(330px, 36vw); height: 84px; padding: 0; gap: 4px; background: none; border: 0; box-shadow: none; }
+  body.touch #logLines { scrollbar-width: none; text-shadow: 0 1px 2px #000, 0 0 4px rgba(0,0,0,.9); }
+  body.touch #log p.sys { color: #d8cfbd; }
+  body.touch #chatInput { position: fixed; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); width: min(420px, 60vw); z-index: 6; }
+  body.touch #chatInput:not(.open) { display: none; }
+  /* Teléfonos más bajos (≤ 400 px de alto en horizontal): todo el grupo de acción un 20% más pequeño */
+  @media (max-height: 400px) {
+    body.touch #hotbar { transform: scale(.8); transform-origin: bottom right; }
+    body.touch #btnAttack { right: calc(23px + env(safe-area-inset-right, 0px)); bottom: calc(21px + env(safe-area-inset-bottom, 0px)); width: 74px; height: 74px; font-size: 14px; }
+    body.touch #btnTarget { right: calc(258px + env(safe-area-inset-right, 0px)); }
+    body.touch #joystick { width: 112px; height: 112px; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+    body.touch #joyKnob { width: 50px; height: 50px; }
+    body.touch #log { height: 76px; }
+  }
+
   @media (max-height: 520px) {
     #start { align-items: flex-start; overflow-y: auto; padding-block: 16px; }
     .start-card { gap: 8px; }
@@ -304,7 +368,7 @@
   </section>
 
   <section class="frame target-frame" id="tFrame" hidden aria-label="Objetivo">
-    <div class="tf-head"><span class="lvl" id="tLvl"></span><span id="tName"></span></div>
+    <div class="tf-head"><span class="lvl" id="tLvl"></span><span id="tName"></span><button class="x tclose" id="tClose" aria-label="Soltar objetivo">✕</button></div>
     <div class="bar hp"><i id="tHpFill"></i><span id="tHpTxt"></span></div>
   </section>
 
@@ -321,9 +385,9 @@
   </section>
   <nav id="hotbar" aria-label="Habilidades"></nav>
   <div class="menu-btns">
-    <button id="btnInv">Inventario <kbd>I</kbd></button>
-    <button id="btnHelp">Controles <kbd>H</kbd></button>
-    <button id="btnFull" hidden>Pantalla completa <kbd>⛶</kbd></button>
+    <button id="btnInv" data-icon="▣">Inventario <kbd>I</kbd></button>
+    <button id="btnHelp" data-icon="?">Controles <kbd>H</kbd></button>
+    <button id="btnFull" data-icon="⛶" hidden>Pantalla completa <kbd>⛶</kbd></button>
   </div>
 
   <section class="panel" id="invPanel" hidden>
@@ -338,6 +402,29 @@
     <header><h2>Mercader Orlen</h2><button class="x" data-close="shop" aria-label="Cerrar">✕</button></header>
     <ul id="shopList"></ul>
     <p class="hint">Vende el botín haciendo clic en tu inventario mientras la tienda está abierta.</p>
+  </section>
+
+  <section class="panel" id="tradePanel" hidden role="dialog" aria-modal="true" aria-labelledby="trTitle">
+    <header><h2 id="trTitle">Comprar</h2><button class="x" id="trCancelX" aria-label="Cancelar" onclick="document.getElementById('trCancel').click()">✕</button></header>
+    <div class="tr-item">
+      <span class="islot filled" id="trIcon"></span>
+      <div><strong id="trName"></strong><small id="trDesc"></small></div>
+    </div>
+    <div class="tr-qty" id="trQtyRow">
+      <span class="tr-label">Cantidad</span>
+      <div class="tr-controls">
+        <button type="button" id="trMinus" aria-label="Menos">−</button>
+        <input type="number" id="trNum" min="1" value="1" inputmode="numeric" aria-label="Cantidad">
+        <button type="button" id="trPlus" aria-label="Más">+</button>
+        <button type="button" id="trMax">Máx</button>
+      </div>
+      <input type="range" id="trRange" min="1" value="1" aria-label="Cantidad">
+    </div>
+    <p class="tr-total" id="trTotal"></p>
+    <div class="tr-actions">
+      <button type="button" class="buy" id="trOk">Confirmar</button>
+      <button type="button" class="btn" id="trCancel">Cancelar</button>
+    </div>
   </section>
 
   <section class="panel" id="helpPanel" hidden>
@@ -373,6 +460,9 @@
     </div>
   </div>
   <div id="joystick" hidden aria-label="Joystick de movimiento"><div id="joyKnob"></div></div>
+  <button id="btnAttack" class="touch-only" aria-label="Atacar">Atacar</button>
+  <button id="btnTarget" class="touch-only" aria-label="Siguiente objetivo">Objetivo</button>
+  <button id="btnChat" class="touch-only" hidden aria-label="Escribir en el chat">Chat</button>
   <div id="labels"></div>
   <div id="floats"></div>
 </div>

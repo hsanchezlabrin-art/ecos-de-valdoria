@@ -140,11 +140,32 @@
   }
 
   // Al entrar al mundo en un dispositivo táctil: joystick, zoom y pantalla completa persistente
+  function initButtons() {
+    const Game = V.Game;
+    // Atacar: si no hay objetivo, elige el monstruo más cercano y lo ataca
+    $('btnAttack').addEventListener('click', () => {
+      const t = G.target;
+      if (!t || t.dead || t.hidden) Game.targetNearest();
+      Game.attackTarget();
+    });
+    $('btnTarget').addEventListener('click', () => Game.targetNearest());
+    // Chat: el botón abre el campo de texto (en celular no hay tecla Enter a mano)
+    const chatBtn = $('btnChat');
+    const input = $('chatInput');
+    chatBtn.hidden = !Game.online;
+    chatBtn.addEventListener('click', () => {
+      input.classList.add('open');
+      input.focus();
+    });
+    input.addEventListener('blur', () => input.classList.remove('open'));
+  }
+
   function onStart(canvas) {
     syncFsButton();
     if (!isTouch) return;
     initJoystick();
     initPinch(canvas);
+    initButtons();
     // Si el jugador sale de pantalla completa (gesto atrás), el siguiente toque la recupera
     canvas.addEventListener('pointerdown', () => {
       if (!inFullscreen()) enterFullscreen();

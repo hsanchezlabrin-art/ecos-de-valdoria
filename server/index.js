@@ -243,9 +243,9 @@ function onCommand(c, msg) {
     case 'use':
       return C.useItem(world, p, int(msg.i, 0, 29, 0));
     case 'sell':
-      return C.sellItem(world, p, int(msg.i, 0, 29, 0));
+      return C.sellItem(world, p, int(msg.i, 0, 29, 0), int(msg.q, 1, 999, 1));
     case 'buy':
-      if (isItem(msg.id)) C.buyItem(world, p, msg.id);
+      if (isItem(msg.id)) C.buyItem(world, p, msg.id, int(msg.q, 1, Sim.MAX_TRADE, 1));
       return;
     case 'unequip':
       if (msg.k === 'weapon' || msg.k === 'armor') C.unequip(world, p, msg.k);

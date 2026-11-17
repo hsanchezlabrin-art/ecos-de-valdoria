@@ -8,7 +8,7 @@ const useSkill = (i) => V.Game.useSkill(i);
 const usePotion = (id) => V.Game.usePotion(id);
 const clickInventory = (i) => V.Game.clickInventory(i);
 const unequip = (k) => V.Game.unequip(k);
-const buyItem = (id) => V.Game.buyItem(id);
+const buyItem = (id) => openTrade('buy', id);
 const countItem = (id) => V.Game.countItem(id);
 
 const THREE = window.THREE;
@@ -56,6 +56,8 @@ function initUI() {
   $('btnInv').onclick = () => togglePanel('inv');
   $('btnHelp').onclick = () => togglePanel('help');
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => togglePanel(b.dataset.close, false)));
+  bindTrade();
+  $('tClose').onclick = () => V.Game.setTarget(null);
 
   myPlate = addStatic(G.player.pos, G.player.model.height + 0.5, G.player.name, 'np-player', 40);
   myPlate.id = G.player.id;
@@ -328,7 +330,7 @@ function showDeath(show) {
 function togglePanel(name, force) {
   const el = E[name];
   el.hidden = force === undefined ? !el.hidden : !force;
-  if (name === 'shop' && el.hidden) refreshPanels();
+  if (name === 'shop' && el.hidden && trade) closeTrade();
   refreshPanels();
 }
 
@@ -339,8 +341,82 @@ function openShop() {
   togglePanel('inv', true);
 }
 
+// ---------- Diálogo de compra / venta: confirmación y cantidad ----------
+
+let trade = null;
+
+function openTrade(mode, ref) {
+  const p = G.player;
+  const id = mode === 'buy' ? ref : p.inv[ref] && p.inv[ref].id;
+  if (!id) return;
+  const it = ITEMS[id];
+  const unit = mode === 'buy' ? it.price : sellPrice(it);
+  const have = mode === 'sell' ? p.inv[ref].qty : 0;
+  const max = mode === 'buy' ? (it.stack ? Math.max(1, Math.min(99, Math.floor(p.gold / unit))) : 1) : have;
+  trade = { mode, ref, id, unit, max, qty: 1 };
+
+  const box = $('tradePanel');
+  $('trTitle').textContent = mode === 'buy' ? 'Comprar' : 'Vender';
+  const icon = $('trIcon');
+  icon.style.setProperty('--r', RARITY[it.rarity].color);
+  icon.textContent = it.glyph;
+  $('trName').textContent = it.name;
+  $('trName').style.color = RARITY[it.rarity].color;
+  $('trDesc').textContent = mode === 'sell' && have > 1 ? `Tienes ${have}. ${it.desc}` : it.desc;
+  const range = $('trRange');
+  range.max = max;
+  $('trQtyRow').hidden = max <= 1;
+  setTradeQty(1);
+  box.hidden = false;
+  $('trOk').focus();
+}
+
+function setTradeQty(q) {
+  if (!trade) return;
+  trade.qty = Math.max(1, Math.min(trade.max, Math.floor(Number(q)) || 1));
+  $('trRange').value = trade.qty;
+  $('trNum').value = trade.qty;
+  const total = trade.unit * trade.qty;
+  const poor = trade.mode === 'buy' && G.player.gold < total;
+  $('trTotal').textContent = `${trade.mode === 'buy' ? 'Total' : 'Recibes'}: ${total.toLocaleString('es')} oro`;
+  $('trTotal').classList.toggle('poor', poor);
+  $('trOk').disabled = poor;
+  $('trOk').textContent = trade.mode === 'buy' ? `Comprar ${trade.qty > 1 ? `×${trade.qty}` : ''}` : `Vender ${trade.qty > 1 ? `×${trade.qty}` : ''}`;
+}
+
+function closeTrade() {
+  trade = null;
+  $('tradePanel').hidden = true;
+}
+
+function confirmTrade() {
+  if (!trade) return;
+  if (trade.mode === 'buy') V.Game.buyItem(trade.id, trade.qty);
+  else V.Game.sellItem(trade.ref, trade.qty);
+  closeTrade();
+}
+
+function bindTrade() {
+  $('trMinus').onclick = () => setTradeQty(trade.qty - 1);
+  $('trPlus').onclick = () => setTradeQty(trade.qty + 1);
+  $('trMax').onclick = () => setTradeQty(trade.max);
+  $('trRange').oninput = (e) => setTradeQty(e.target.value);
+  $('trNum').oninput = (e) => setTradeQty(e.target.value);
+  $('trOk').onclick = confirmTrade;
+  $('trCancel').onclick = closeTrade;
+  $('tradePanel').addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') closeTrade();
+    if (e.key === 'Enter' && !$('trOk').disabled) confirmTrade();
+  });
+}
+
 function closeAll() {
   let closed = false;
+  if (trade) {
+    closeTrade();
+    return true;
+  }
   for (const k of ['shop', 'inv', 'help']) {
     if (!E[k].hidden) {
       E[k].hidden = true;
@@ -588,6 +664,6 @@ function updateUI() {
 V.UI = {
   initUI, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
   floatText, log, logLoot, banner, showDeath,
-  togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI,
+  togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI, openTrade,
 };
 })();

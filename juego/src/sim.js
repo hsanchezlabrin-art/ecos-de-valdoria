@@ -637,26 +637,32 @@
     emit(w, { type: 'inventory', to: p.id });
   }
 
-  function sellItem(w, p, index) {
+  const MAX_TRADE = 99;
+  const tradeQty = (q, max) => Math.max(1, Math.min(max, Math.floor(Number(q)) || 1));
+
+  function sellItem(w, p, index, qty = 1) {
     const slot = p.inv[index];
     if (!slot) return;
     if (!nearMerchant(p)) return log(w, p, 'Acércate al Mercader Orlen para vender.', 'warn');
     const it = ITEMS[slot.id];
-    const price = sellPrice(it);
-    p.gold += price;
-    removeAt(p, index);
-    log(w, p, `Vendes ${it.name} por ${price} oro.`, 'sys');
+    const n = tradeQty(qty, slot.qty);
+    const total = sellPrice(it) * n;
+    p.gold += total;
+    removeAt(p, index, n);
+    log(w, p, `Vendes ${it.name}${n > 1 ? ` ×${n}` : ''} por ${total} oro.`, 'sys');
     emit(w, { type: 'inventory', to: p.id });
   }
 
-  function buyItem(w, p, id) {
+  function buyItem(w, p, id, qty = 1) {
     const it = ITEMS[id];
     if (!it || !shopFor(p.cls).includes(id)) return;
     if (!nearMerchant(p)) return log(w, p, 'Acércate al Mercader Orlen para comprar.', 'warn');
-    if (p.gold < it.price) return log(w, p, 'No tienes oro suficiente.', 'warn');
-    if (!addItem(p, id, 1)) return log(w, p, 'No hay espacio en el inventario.', 'warn');
-    p.gold -= it.price;
-    emit(w, { type: 'loot', to: p.id, id, qty: 1, verb: 'Compras' });
+    const n = it.stack ? tradeQty(qty, MAX_TRADE) : 1;
+    const total = it.price * n;
+    if (p.gold < total) return log(w, p, 'No tienes oro suficiente.', 'warn');
+    if (!addItem(p, id, n)) return log(w, p, 'No hay espacio en el inventario.', 'warn');
+    p.gold -= total;
+    emit(w, { type: 'loot', to: p.id, id, qty: n, verb: 'Compras' });
     emit(w, { type: 'inventory', to: p.id });
   }
 
@@ -825,6 +831,7 @@
 
   return {
     SPAWN,
+    MAX_TRADE,
     createWorld,
     drainEvents,
     newCharacter,
