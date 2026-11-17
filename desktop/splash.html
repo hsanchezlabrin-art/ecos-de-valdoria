@@ -78,6 +78,13 @@
   .track { width: 340px; height: 9px; background: #07080a; border: 1px solid #000; box-shadow: 0 0 0 1px var(--edge-soft); overflow: hidden; }
   .track i { display: block; height: 100%; transform: scaleX(.03); transform-origin: left; background: linear-gradient(#e6c773, var(--xp) 55%, #8a6d3b); transition: transform .4s ease; }
   #status { margin: 10px 0 0; min-height: 1.4em; font-size: 15px; font-style: italic; color: var(--muted); }
+  .update { display: none; gap: 10px; justify-items: center; margin-top: 12px; -webkit-app-region: no-drag; }
+  .update.show { display: grid; }
+  .update p { margin: 0; font-size: 15px; color: var(--parch); }
+  .update div { display: flex; gap: 10px; }
+  .update button { font: 700 13px var(--display); letter-spacing: .06em; padding: 9px 16px; border-radius: 3px; cursor: pointer; border: 1px solid var(--edge); background: rgba(21,24,29,.9); color: var(--parch); }
+  .update button.gold { background: linear-gradient(#c79f52, #8a6d3b); color: #15110a; border-color: #e6c77d; }
+  .update button:hover { filter: brightness(1.12); }
   footer { position: absolute; left: 22px; right: 22px; bottom: 16px; display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: rgba(163,154,134,.7); }
 </style>
 </head>
@@ -90,6 +97,10 @@
     <h1>Valdoria</h1>
     <div class="track"><i id="bar"></i></div>
     <p id="status">Abriendo las puertas de Brezal…</p>
+    <div class="update" id="update">
+      <p id="updText">Hay una versión nueva de Ecos de Valdoria.</p>
+      <div><button class="gold" id="updGet">Descargar</button><button id="updPlay">Jugar igual</button></div>
+    </div>
   </main>
   <footer><span>Aldea de Brezal</span><span id="ver"></span></footer>
 <script>
@@ -110,6 +121,17 @@
       status.textContent = text;
       bar.style.transform = `scaleX(${Math.max(0.03, Math.min(1, pct))})`;
     });
+    const upd = document.getElementById('update');
+    window.splash.onUpdatePrompt(({ version }) => {
+      document.getElementById('updText').textContent = `Hay una versión nueva: ${version}. Para jugar en línea conviene actualizar.`;
+      status.textContent = '';
+      upd.classList.add('show');
+    });
+    document.getElementById('updGet').onclick = () => window.splash.choose('download');
+    document.getElementById('updPlay').onclick = () => {
+      upd.classList.remove('show');
+      window.splash.choose('play');
+    };
   }
 </script>
 </body>

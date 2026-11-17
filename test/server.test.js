@@ -52,6 +52,11 @@ async function main() {
     // Ciro está lejos de todo (más allá del radio de visión de 72 m)
     const far = await client('Ciro', 'mago', { cls: 'mago', level: 3, pos: { x: -120, z: 95 } });
     ok(a.id && b.id && a.id !== b.id, 'dos jugadores reciben identificadores distintos');
+    // Nombre repetido (sin importar mayúsculas): se rechaza
+    let dupError = null;
+    await client('beto', 'mago', null).catch((e) => (dupError = e.message));
+    ok(dupError && dupError.includes('Ya hay un jugador'), 'no se permiten dos jugadores conectados con el mismo nombre');
+
     const proto = await client('Proto', '__proto__', { cls: '__proto__', inv: [{ id: '__proto__', qty: 1 }] });
     const protoRow = proto.last.p.find((r) => r[0] === proto.id);
     ok(protoRow[10] === 'guerrero' && proto.last.me.inv.every((s) => s.id !== '__proto__'), 'clases y objetos "__proto__" se rechazan');

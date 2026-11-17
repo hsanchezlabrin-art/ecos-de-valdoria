@@ -199,6 +199,11 @@ function onJoin(c, msg) {
   if (world.players.size >= MAX_PLAYERS) return send(c, { t: 'error', msg: 'El servidor está lleno. Inténtalo en unos minutos.' }), c.ws.close();
   const cls = isClass(msg.cls) ? msg.cls : 'guerrero';
   const name = cleanName(msg.name);
+  const taken = [...world.players.values()].some((q) => q.name.toLowerCase() === name.toLowerCase());
+  if (taken) {
+    send(c, { t: 'error', code: 'name_taken', msg: `Ya hay un jugador conectado con el nombre «${name}». Elige otro nombre.` });
+    return c.ws.close();
+  }
   c.p = Sim.addPlayer(world, cleanSave(msg.save, name, cls));
   c.invDirty = true;
   send(c, { t: 'welcome', id: c.p.id, protocol: PROTOCOL, players: world.players.size });
@@ -255,7 +260,7 @@ function onCommand(c, msg) {
       const now = Date.now();
       if (!text || now - (c.chatAt || 0) < 800) return;
       c.chatAt = now;
-      return broadcastChat({ t: 'chat', kind: 'player', name: p.name, cls: p.cls, text });
+      return broadcastChat({ t: 'chat', kind: 'player', id: p.id, name: p.name, cls: p.cls, text });
     }
   }
 }

@@ -1,6 +1,9 @@
 # Compila los instaladores de Windows y macOS y los publica como Release.
-# Se ejecuta al subir una etiqueta de versión (git tag v0.3.0 && git push origin v0.3.0)
+# Se ejecuta al subir una etiqueta de versión (git tag v0.3.1 && git push origin v0.3.1)
 # o a mano desde la pestaña Actions de GitHub.
+#
+# latest.yml + .blockmap permiten que la app de Windows se actualice sola desde el splash.
+# Si GitHub no tiene equipos Mac disponibles, el Release se publica igual con Windows.
 name: Instaladores
 
 on:
@@ -19,11 +22,16 @@ jobs:
         include:
           - os: windows-latest
             target: --win
-            file: desktop/dist/EcosDeValdoria-Setup.exe
+            files: |
+              desktop/dist/EcosDeValdoria-Setup.exe
+              desktop/dist/EcosDeValdoria-Setup.exe.blockmap
+              desktop/dist/latest.yml
           - os: macos-latest
             target: --mac
-            file: desktop/dist/EcosDeValdoria-Mac.dmg
+            files: |
+              desktop/dist/EcosDeValdoria-Mac.dmg
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -52,32 +60,44 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: instalador-${{ matrix.os }}
-          path: ${{ matrix.file }}
+          path: ${{ matrix.files }}
 
   release:
     needs: build
-    if: github.ref_type == 'tag'
+    # Publica aunque un sistema haya fallado (p. ej. sin equipos Mac disponibles)
+    if: always() && github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           path: dist
           merge-multiple: true
+
+      - name: Archivos a publicar
+        run: |
+          ls -la dist || true
+          if [ -z "$(ls -A dist 2>/dev/null)" ]; then echo "::error::No se compiló ningún instalador"; exit 1; fi
 
       - uses: softprops/action-gh-release@v2
         with:
           name: Ecos de Valdoria ${{ github.ref_name }}
           files: |
             dist/EcosDeValdoria-Setup.exe
+            dist/EcosDeValdoria-Setup.exe.blockmap
+            dist/latest.yml
             dist/EcosDeValdoria-Mac.dmg
+          fail_on_unmatched_files: false
           make_latest: true
           body: |
             **Windows 10 y 11 (64 bits)** · `EcosDeValdoria-Setup.exe` · no requiere permisos de administrador.
             Si Windows muestra «Windows protegió su PC», pulsa **Más información → Ejecutar de todas formas**.
+            Desde esta versión el juego busca actualizaciones al abrirse y se actualiza solo.
 
             **macOS 11 o superior (Apple Silicon e Intel)** · `EcosDeValdoria-Mac.dmg`.
             Abre el .dmg y arrastra el juego a Aplicaciones. Como la app aún no está firmada por Apple, la primera vez:
             haz clic derecho sobre el juego → **Abrir** → **Abrir**. Si macOS dice que la app «está dañada», abre Terminal y ejecuta:
             `xattr -cr "/Applications/Ecos de Valdoria.app"`
 
+            **Navegador** (PC, Mac, celular y tablet): https://ecos-de-valdoria.vercel.app/jugar
             Guía del juego: https://ecos-de-valdoria.vercel.app/guia.html

@@ -1,11 +1,21 @@
 // App de escritorio de Ecos de Valdoria (Electron).
-// Muestra un splash con el estilo del juego mientras la ventana principal genera el mundo,
-// y la revela cuando el juego avisa que está listo.
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
+//
+// Al abrirse muestra un splash con el estilo del juego que:
+//  1. Busca actualizaciones. En Windows la descarga e instala sola y reinicia el juego.
+//     En macOS (app sin firma de Apple) avisa y ofrece descargar la versión nueva.
+//  2. Carga el juego en una ventana oculta y la muestra cuando el mundo está listo.
+const { app, BrowserWindow, ipcMain, Menu, shell, net } = require('electron');
 const path = require('path');
+
+const REPO = 'hsanchezlabrin-art/ecos-de-valdoria';
+const RELEASES_URL = `https://github.com/${REPO}/releases/latest`;
+const CHECK_TIMEOUT = 8000;
 
 let splash = null;
 let win = null;
+
+const toSplash = (channel, data) => splash && !splash.isDestroyed() && splash.webContents.send(channel, data);
+const status = (text, pct) => toSplash('progress', { text, pct });
 
 function createSplash() {
   splash = new BrowserWindow({
@@ -21,7 +31,12 @@ function createSplash() {
     webPreferences: { preload: path.join(__dirname, 'splash-preload.js') },
   });
   splash.loadFile(path.join(__dirname, 'splash.html'));
-  splash.once('ready-to-show', () => splash.show());
+  return new Promise((resolve) =>
+    splash.once('ready-to-show', () => {
+      splash.show();
+      resolve();
+    })
+  );
 }
 
 function createMain() {
@@ -80,28 +95,123 @@ function reveal() {
     win.focus();
   }
   if (splash && !splash.isDestroyed()) {
-    splash.webContents.send('progress', { text: 'Todo listo', pct: 1 });
+    status('Todo listo', 1);
     setTimeout(() => splash && !splash.isDestroyed() && splash.close(), 250);
   }
 }
 
+// ---------- Actualizaciones ----------
+
+const newer = (a, b) => {
+  const pa = String(a).replace(/^v/, '').split('.').map(Number);
+  const pb = String(b).replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+};
+
+// Windows: electron-updater descarga el instalador nuevo y lo aplica al reiniciar.
+// Devuelve true si la app se está reiniciando para actualizarse.
+function updateWindows() {
+  return new Promise((resolve) => {
+    let autoUpdater;
+    try {
+      ({ autoUpdater } = require('electron-updater'));
+    } catch {
+      return resolve(false);
+    }
+    let settled = false;
+    const done = (restarting) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(restarting);
+    };
+    const timer = setTimeout(() => done(false), CHECK_TIMEOUT);
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.on('update-available', (info) => {
+      clearTimeout(timer); // hay versión nueva: esperar la descarga aunque tarde
+      status(`Descargando la versión ${info.version}…`, 0.05);
+    });
+    autoUpdater.on('download-progress', (p) => status(`Descargando actualización… ${Math.round(p.percent)}%`, Math.max(0.05, p.percent / 100)));
+    autoUpdater.on('update-downloaded', (info) => {
+      status(`Instalando la versión ${info.version}…`, 1);
+      settled = true;
+      setTimeout(() => autoUpdater.quitAndInstall(true, true), 900);
+      resolve(true);
+    });
+    autoUpdater.on('update-not-available', () => done(false));
+    autoUpdater.on('error', () => done(false));
+    autoUpdater.checkForUpdates().catch(() => done(false));
+  });
+}
+
+// macOS: sin firma de Apple no se puede instalar sola. Se consulta la última versión
+// publicada y, si es más nueva, el splash ofrece descargarla o jugar igual.
+function checkMac() {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(), CHECK_TIMEOUT);
+    const req = net.request({ url: `https://api.github.com/repos/${REPO}/releases/latest`, headers: { 'User-Agent': 'EcosDeValdoria', Accept: 'application/vnd.github+json' } });
+    let body = '';
+    req.on('response', (res) => {
+      res.on('data', (d) => (body += d));
+      res.on('end', () => {
+        clearTimeout(timer);
+        try {
+          const tag = JSON.parse(body).tag_name;
+          if (tag && newer(tag, app.getVersion())) {
+            toSplash('update-prompt', { version: tag.replace(/^v/, '') });
+            ipcMain.once('update-choice', (_e, choice) => {
+              if (choice === 'download') {
+                shell.openExternal(RELEASES_URL);
+                app.quit();
+              } else resolve();
+            });
+            return;
+          }
+        } catch {
+          /* respuesta inesperada */
+        }
+        resolve();
+      });
+    });
+    req.on('error', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    req.end();
+  });
+}
+
+async function checkForUpdates() {
+  if (!app.isPackaged) return false;
+  status('Buscando actualizaciones…', 0.04);
+  if (process.platform === 'win32') return updateWindows();
+  if (process.platform === 'darwin') await checkMac();
+  return false;
+}
+
+// ---------- Arranque ----------
+
 ipcMain.handle('get-version', () => app.getVersion());
-ipcMain.on('progress', (_e, data) => {
-  if (splash && !splash.isDestroyed()) splash.webContents.send('progress', data);
-});
+ipcMain.on('progress', (_e, data) => toSplash('progress', data));
 ipcMain.on('ready', reveal);
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
+    const w = win && win.isVisible() ? win : splash;
+    if (w && !w.isDestroyed()) {
+      if (w.isMinimized()) w.restore();
+      w.focus();
     }
   });
-  app.whenReady().then(() => {
-    createSplash();
+  app.whenReady().then(async () => {
+    await createSplash();
+    const restarting = await checkForUpdates();
+    if (restarting) return;
+    status('Abriendo las puertas de Brezal…', 0.06);
     createMain();
   });
   app.on('window-all-closed', () => app.quit());

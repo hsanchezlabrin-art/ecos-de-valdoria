@@ -18,6 +18,7 @@ let E = null;
 let frame = 0;
 let lastZone;
 const statics = [];
+let myPlate = null;
 
 function initUI() {
   E = {
@@ -56,7 +57,8 @@ function initUI() {
   $('btnHelp').onclick = () => togglePanel('help');
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => togglePanel(b.dataset.close, false)));
 
-  addStatic(G.player.pos, G.player.model.height + 0.5, G.player.name, 'np-player', 40);
+  myPlate = addStatic(G.player.pos, G.player.model.height + 0.5, G.player.name, 'np-player', 40);
+  myPlate.id = G.player.id;
   for (const n of G.world.npcs) addStatic(n.root.position, 2.9, n.name, 'np-npc', 40);
   for (const s of G.world.signs) addStatic(s.pos, s.height, s.text, 'np-sign', 26);
 
@@ -65,6 +67,7 @@ function initUI() {
   const isOnline = V.Game.online;
   input.hidden = !isOnline;
   E.online.hidden = !isOnline;
+  if (V.Mobile && V.Mobile.isTouch) input.placeholder = 'Toca aquí para escribir en el chat';
   if (isOnline) {
     input.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -279,8 +282,24 @@ function chat(msg) {
     who.className = `who-${msg.cls}`;
     who.textContent = `${msg.name}: `;
     line.append(who, msg.text);
+    showBubble(msg.id, msg.text);
   }
   pushLog(line);
+}
+
+// Globo de texto sobre la cabeza de quien habla (6 segundos)
+function showBubble(id, text) {
+  const plate = myPlate && myPlate.id === id ? myPlate : statics.find((s) => s.ent && s.ent.id === id);
+  if (!plate) return;
+  let b = plate.el.querySelector('.bubble');
+  if (!b) {
+    b = document.createElement('span');
+    b.className = 'bubble';
+    plate.el.prepend(b);
+  }
+  b.textContent = text;
+  clearTimeout(b._t);
+  b._t = setTimeout(() => b.remove(), 6000);
 }
 
 function focusChat() {

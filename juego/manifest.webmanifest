@@ -1,0 +1,15 @@
+{
+  "name": "Ecos de Valdoria",
+  "short_name": "Valdoria",
+  "description": "RPG de fantasía en 3D en línea",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "lang": "es",
+  "icons": [
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

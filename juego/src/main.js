@@ -317,6 +317,8 @@
   let starting = false;
   async function start() {
     if (G.started || starting || !G.world) return;
+    // Pantalla completa en el mismo toque: después de conectar el navegador ya no lo permite
+    if (V.Mobile.isTouch) V.Mobile.enterFullscreen();
     const name = (nameInput.value || '').trim().slice(0, 16) || 'Viajero';
     const data = save ? { ...save, name } : Game.newCharacter(name, cls);
     try {
@@ -350,7 +352,8 @@
         btnStart.disabled = false;
         btnStart.textContent = label;
         netMsg.className = 'net-msg';
-        netMsg.textContent = `${err.message} Puedes jugar en modo «Un jugador» mientras tanto.`;
+        netMsg.textContent = err.code === 'name_taken' ? err.message : `${err.message} Puedes jugar en modo «Un jugador» mientras tanto.`;
+        if (err.code === 'name_taken') nameInput.focus();
         return;
       }
     } else {

@@ -100,7 +100,7 @@
     G.mobs = [];
     return new Promise((resolve, reject) => {
       let ready = false;
-      const fail = (msg) => {
+      const fail = (msg, code) => {
         if (ready) return;
         ready = true;
         online = false;
@@ -109,7 +109,9 @@
         } catch {
           /* nada */
         }
-        reject(new Error(msg));
+        const err = new Error(msg);
+        err.code = code;
+        reject(err);
       };
       const timer = setTimeout(() => fail('El servidor no responde. Inténtalo más tarde.'), 12000);
       let ws;
@@ -132,7 +134,7 @@
             break;
           case 'error':
             clearTimeout(timer);
-            fail(msg.msg);
+            fail(msg.msg, msg.code);
             break;
           case 's':
             applySnapshot(msg);

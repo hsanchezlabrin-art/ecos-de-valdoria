@@ -1,7 +1,7 @@
 {
   "name": "ecos-de-valdoria",
   "productName": "Ecos de Valdoria",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "RPG de fantasía en 3D",
   "author": "hsanchezlabrin-art",
   "license": "UNLICENSED",
@@ -12,6 +12,9 @@
     "dist": "electron-builder --win --publish never",
     "dist:mac": "electron-builder --mac --publish never"
   },
+  "dependencies": {
+    "electron-updater": "6.3.9"
+  },
   "devDependencies": {
     "electron": "33.2.1",
     "electron-builder": "25.1.8"
@@ -20,6 +23,7 @@
     "appId": "com.ecosdevaldoria.juego",
     "productName": "Ecos de Valdoria",
     "copyright": "Ecos de Valdoria",
+    "publish": [{ "provider": "github", "owner": "hsanchezlabrin-art", "repo": "ecos-de-valdoria" }],
     "directories": {
       "buildResources": "build",
       "output": "dist"
@@ -30,7 +34,8 @@
       "splash-preload.js",
       "splash.html",
       "build/icon.png",
-      "app/**/*"
+      "app/**/*",
+      "node_modules/**/*"
     ],
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],

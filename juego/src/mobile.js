@@ -139,14 +139,23 @@
     );
   }
 
-  // Al entrar al mundo en un dispositivo táctil: pantalla completa y joystick
+  // Al entrar al mundo en un dispositivo táctil: joystick, zoom y pantalla completa persistente
   function onStart(canvas) {
     syncFsButton();
     if (!isTouch) return;
-    enterFullscreen();
     initJoystick();
     initPinch(canvas);
+    // Si el jugador sale de pantalla completa (gesto atrás), el siguiente toque la recupera
+    canvas.addEventListener('pointerdown', () => {
+      if (!inFullscreen()) enterFullscreen();
+    });
   }
+
+  // iPhone: Safari no permite pantalla completa en páginas; sí al abrirlo desde la pantalla de inicio
+  const isIOS = /iPhone|iPod/.test(navigator.userAgent);
+  const standalone = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true;
+  const tip = $('iosTip');
+  if (tip && isIOS && !standalone) tip.hidden = false;
 
   V.Mobile = { isTouch, canFullscreen, enterFullscreen, toggleFullscreen, onStart };
 })();
