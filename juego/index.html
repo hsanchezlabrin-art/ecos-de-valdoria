@@ -238,7 +238,7 @@
   /* Globo de chat sobre la cabeza */
   .np .bubble { display: block; max-width: 220px; margin-bottom: 4px; padding: 5px 9px; white-space: normal; text-align: center; font: 500 13px/1.3 var(--body); color: #1a1408; background: #ecdfc4; border: 1px solid var(--edge); border-radius: 8px; text-shadow: none; box-shadow: 0 3px 10px rgba(0,0,0,.45); }
   /* En pantallas táctiles el registro y el chat van arriba a la izquierda (abajo está el joystick) */
-  body.touch #log { top: calc(112px + env(safe-area-inset-top, 0px)); bottom: auto; width: min(280px, 36vw); height: 118px; padding: 6px 8px; font-size: 12px; background: rgba(10,12,15,.5); }
+  body.touch #log { top: calc(112px + env(safe-area-inset-top, 0px)); bottom: auto; width: min(280px, 36vw); height: clamp(70px, calc(100vh - 290px), 140px); padding: 6px 8px; font-size: 12px; background: rgba(10,12,15,.5); }
   body.touch #chatInput { font-size: 16px; padding: 4px 8px; } /* 16px evita el zoom automático de iOS */
   @media (max-width: 560px) {
     .player-frame { width: 200px; }
