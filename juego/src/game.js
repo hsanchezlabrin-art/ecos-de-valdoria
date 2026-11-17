@@ -663,8 +663,13 @@
 
   function keyDir() {
     const k = G.keys;
-    const ix = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
-    const iz = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
+    let ix = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
+    let iz = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
+    if (G.joy) {
+      // Joystick táctil: arriba = avanzar hacia donde mira la cámara
+      ix = G.joy.x;
+      iz = -G.joy.y;
+    }
     if (!ix && !iz) return null;
     const fx = -Math.sin(G.cam.yaw);
     const fz = -Math.cos(G.cam.yaw);

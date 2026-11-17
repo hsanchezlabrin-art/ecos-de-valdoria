@@ -54,7 +54,8 @@
 
     const container = document.getElementById('game');
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const touch = V.Mobile && V.Mobile.isTouch;
+    renderer.setPixelRatio(Math.min(devicePixelRatio, touch ? 1.5 : 2)); // celulares: menos carga
     renderer.setSize(innerWidth, innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -70,7 +71,7 @@
     scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x4a3b28, 0.62));
     sun = new THREE.DirectionalLight(0xffe0b0, 1.25);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(touch ? 1024 : 2048, touch ? 1024 : 2048);
     Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 220 });
     sun.shadow.bias = -0.0008;
     scene.add(sun, sun.target);
@@ -160,7 +161,7 @@
       drag.y = e.clientY;
     });
     canvas.addEventListener('pointerup', (e) => {
-      if (drag && !drag.moved && drag.button === 0 && G.started) pick(e.clientX, e.clientY);
+      if (drag && !drag.moved && drag.button === 0 && G.started && !G.pinching) pick(e.clientX, e.clientY);
       drag = null;
     });
     canvas.addEventListener(
@@ -358,6 +359,7 @@
 
     UI.initUI();
     Game.spawnMobs();
+    V.Mobile.onStart(renderer.domElement);
     G.cam.dist = 15;
     G.cam.pitch = 0.6;
     G.started = true;
@@ -375,6 +377,7 @@
   }
   btnStart.addEventListener('click', start);
   document.getElementById('btnReconnect').addEventListener('click', () => location.reload());
+  document.getElementById('btnFull').addEventListener('click', () => V.Mobile.toggleFullscreen());
   nameInput.addEventListener('keydown', (e) => e.key === 'Enter' && start());
   document.getElementById('btnRespawn').addEventListener('click', () => Game.respawnPlayer());
 

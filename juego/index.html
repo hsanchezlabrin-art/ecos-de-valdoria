@@ -2,8 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0d10">
 <title>Ecos de Valdoria</title>
+<link rel="icon" href="../favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Alegreya+Sans:wght@400;500;700&display=swap">
@@ -233,6 +238,45 @@
     .slot { width: 44px; height: 44px; }
     #invPanel, #shopPanel { left: 12px; right: 12px; width: auto; }
   }
+
+  /* ---------- Táctil: joystick, aviso de girar y pantallas bajas (celular en horizontal) ---------- */
+  #joystick { position: fixed; z-index: 3; left: calc(28px + env(safe-area-inset-left, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; touch-action: none; background: radial-gradient(circle, rgba(21,24,29,.35), rgba(21,24,29,.7)); border: 1px solid var(--edge); box-shadow: 0 0 0 4px rgba(11,13,16,.6), 0 0 0 5px var(--edge-soft); }
+  #joystick::before { content: ''; position: absolute; inset: 22px; border-radius: 50%; border: 1px dashed var(--edge-soft); }
+  #joyKnob { width: 58px; height: 58px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #f0d68c, #c79f52 55%, #8a6d3b); border: 1px solid #e6c77d; box-shadow: 0 4px 14px rgba(0,0,0,.5); transition: transform .08s; pointer-events: none; }
+  #joystick.active #joyKnob { transition: none; }
+  body.touch kbd, body.touch .slot .key { display: none; }
+  body.touch .slot { width: 58px; height: 58px; }
+  body.touch #btnHelp { display: none; }
+
+  #rotate { position: fixed; inset: 0; z-index: 100; display: none; place-items: center; padding: 24px; text-align: center; background: radial-gradient(ellipse at 50% 40%, #1d2128 0%, #0b0d10 70%); }
+  #rotate div { display: grid; gap: 14px; justify-items: center; max-width: 320px; }
+  #rotate svg { width: 84px; height: 84px; color: var(--gold); animation: turn 2.4s ease-in-out infinite; }
+  #rotate h2 { margin: 0; font: 700 26px var(--display); color: var(--gold); letter-spacing: .05em; }
+  #rotate p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.45; }
+  @keyframes turn { 0%, 20% { transform: rotate(0); } 55%, 80% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
+  @media (orientation: portrait) { body.touch #rotate { display: grid; } }
+
+  @media (max-height: 520px) {
+    #start { align-items: flex-start; overflow-y: auto; padding-block: 16px; }
+    .start-card { gap: 8px; }
+    #start h1 { font-size: 34px; }
+    #start .lead, .start-keys, #saveInfo:empty { display: none; }
+    .class-pick button { padding: 6px; }
+    .class-desc { min-height: 0; font-size: 13px; }
+    .player-frame { width: 210px; padding: 6px 8px 8px; gap: 4px; }
+    .bar { height: 13px; }
+    .mapbox { padding: 6px; gap: 4px; }
+    #minimap { width: 100px; height: 100px; }
+    .zone { font-size: 11px; }
+    .target-frame { top: calc(8px + env(safe-area-inset-top, 0px)); }
+    #hotbar { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); gap: 4px; padding: 4px; }
+    body.touch .slot { width: 52px; height: 52px; }
+    .menu-btns { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); gap: 4px; }
+    .menu-btns button { padding: 6px 10px; font-size: 13px; }
+    #banner { top: 16%; }
+    .panel { max-height: calc(100% - 16px); padding: 10px 12px 12px; }
+    #invPanel, #shopPanel { width: 300px; }
+  }
   @media (prefers-reduced-motion: reduce) { .ft, #banner.show { animation-duration: .01s; } }
 </style>
 </head>
@@ -270,6 +314,7 @@
   <div class="menu-btns">
     <button id="btnInv">Inventario <kbd>I</kbd></button>
     <button id="btnHelp">Controles <kbd>H</kbd></button>
+    <button id="btnFull" hidden>Pantalla completa <kbd>⛶</kbd></button>
   </div>
 
   <section class="panel" id="invPanel" hidden>
@@ -318,6 +363,7 @@
       <button class="btn" id="btnReconnect">Volver al inicio</button>
     </div>
   </div>
+  <div id="joystick" hidden aria-label="Joystick de movimiento"><div id="joyKnob"></div></div>
   <div id="labels"></div>
   <div id="floats"></div>
 </div>
@@ -349,6 +395,14 @@
   </div>
 </div>
 
+<div id="rotate" role="alert">
+  <div>
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><rect x="20" y="6" width="24" height="44" rx="4"/><path d="M29 44h6"/><path d="M50 52a20 20 0 0 1-14 6" stroke-linecap="round"/><path d="m36 54 0 4.5 4.5 0" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h2>Gira tu dispositivo</h2>
+    <p>Ecos de Valdoria se juega en horizontal. Gira el teléfono para continuar.</p>
+  </div>
+</div>
+
 <div id="loading" role="status" aria-live="polite">
   <div class="load-card">
     <div class="load-emblem" aria-hidden="true">V</div>
@@ -368,6 +422,7 @@
 <script src="./src/world.js"></script>
 <script src="./src/sim.js"></script>
 <script src="./src/ui.js"></script>
+<script src="./src/mobile.js"></script>
 <script src="./src/game.js"></script>
 <script src="./src/main.js"></script>
 
