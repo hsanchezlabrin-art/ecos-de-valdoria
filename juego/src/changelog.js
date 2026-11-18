@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.19.0',
+      date: '2026-11-18',
+      title: 'Habilidades a la vista',
+      items: [
+        'El panel Estado tiene una pestaña nueva, Habilidades: cada una con su tecla, nivel, maná, recarga, descripción y si ya está disponible.',
+        'La barra separa las habilidades de las acciones (pociones, Gemas de Poder y montura), en PC y en celular.',
+        'Se quitó el botón Objetivo del celular: Atacar elige solo al monstruo más cercano, y también puedes tocar uno para seleccionarlo.',
+      ],
+    },
+    {
       version: '0.18.1',
       date: '2026-11-18',
       title: 'Textos que caben en su lugar',

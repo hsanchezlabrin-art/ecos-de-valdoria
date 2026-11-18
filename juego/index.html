@@ -125,7 +125,10 @@
   #log p.npc { color: #c9b8e8; }
 
   /* Barra de acciones */
-  #hotbar { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 6px; padding: 6px; background: var(--panel); border: 1px solid var(--edge); border-radius: 3px; }
+  /* Barra inferior: dos grupos separados — habilidades (1–6) y acciones (pociones, gemas, montura) */
+  #hotbar { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 14px; align-items: flex-end; }
+  #hotbar .hb-group { display: flex; gap: 6px; padding: 6px; background: var(--panel); border: 1px solid var(--edge); border-radius: 3px; }
+  #hotbar .hb-actions { border-color: var(--edge-soft); }
   .slot { --p: 0; position: relative; width: 54px; height: 54px; border: 1px solid var(--edge); background: radial-gradient(circle at 50% 35%, #2a2f38, #101216); border-radius: 3px; display: grid; place-items: center; padding: 0; transition: transform .08s; }
   .slot:hover { border-color: var(--gold); }
   .slot:active { transform: scale(.94); }
@@ -346,8 +349,7 @@
   body.touch #hotbar .slot:nth-child(6) { left: 164px; top: 43px; }
   body.touch .touch-only { display: grid; place-items: center; position: fixed; z-index: 2; touch-action: manipulation; }
   body.touch #btnAttack { right: calc(27px + env(safe-area-inset-right, 0px)); bottom: calc(25px + env(safe-area-inset-bottom, 0px)); width: 92px; height: 92px; border-radius: 50%; border: 2px solid #e8a090; background: radial-gradient(circle at 45% 35%, #d8584a, #a4271f 60%, #6e1712); color: #fff3e6; font: 700 17px var(--display); letter-spacing: .03em; text-shadow: 0 1px 3px rgba(0,0,0,.6); box-shadow: 0 0 0 4px rgba(11,13,16,.55), 0 6px 20px rgba(0,0,0,.55); }
-  body.touch #btnAttack:active, body.touch #btnTarget:active, body.touch #btnChat:active { transform: scale(.94); }
-  body.touch #btnTarget { right: calc(318px + env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 9px 14px; border: 1px solid var(--edge); border-radius: 4px; background: var(--panel); color: var(--parch); font: 700 14px var(--display); }
+  body.touch #btnAttack:active, body.touch #btnChat:active { transform: scale(.94); }
   body.touch #btnChat { left: calc(12px + min(330px, 36vw) + 8px); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 8px 14px; border: 1px solid var(--edge); border-radius: 4px; background: var(--panel); color: var(--parch); font: 700 14px var(--display); }
   body.touch #btnChat[hidden] { display: none; }
 
@@ -367,7 +369,6 @@
   @media (max-height: 400px) {
     body.touch #hotbar { transform: scale(.8); transform-origin: bottom right; }
     body.touch #btnAttack { right: calc(23px + env(safe-area-inset-right, 0px)); bottom: calc(21px + env(safe-area-inset-bottom, 0px)); width: 74px; height: 74px; font-size: 14px; }
-    body.touch #btnTarget { right: calc(258px + env(safe-area-inset-right, 0px)); }
     body.touch #joystick { width: 112px; height: 112px; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
     body.touch #joyKnob { width: 50px; height: 50px; }
     body.touch #log { height: 76px; }
@@ -386,7 +387,8 @@
     #minimap { width: 100px; height: 100px; }
     .zone { font-size: 11px; }
     .target-frame { top: calc(8px + env(safe-area-inset-top, 0px)); }
-    #hotbar { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); gap: 4px; padding: 4px; }
+    #hotbar { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+    #hotbar .hb-group { gap: 4px; padding: 4px; }
     body.touch .slot { width: 52px; height: 52px; }
     .menu-btns { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); gap: 4px; }
     .menu-btns button { padding: 6px 10px; font-size: 13px; }
@@ -490,6 +492,20 @@
   .st-grid dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
   .st-grid dt.sep, .st-grid dd.sep { border-top: 1px solid #23211d; padding-top: 6px; margin-top: 2px; }
   .st-grid .up { color: #8fd37a; }
+  .st-tabs { margin: 0 0 10px; }
+  .st-tabs button { padding: 8px; font-size: 14px; }
+  #skList { display: grid; gap: 8px; }
+  .sk { display: grid; grid-template-columns: 40px 1fr; gap: 4px 10px; padding: 8px; border: 1px solid var(--edge-soft); border-radius: 3px; background: rgba(0,0,0,.25); }
+  .sk .ic { grid-row: span 2; width: 40px; height: 40px; display: grid; place-items: center; font-size: 22px; border: 1px solid var(--edge); border-radius: 3px; background: radial-gradient(circle at 50% 35%, #2a2f38, #101216); position: relative; }
+  .sk .ic b { position: absolute; top: 1px; left: 3px; font-size: 10px; color: var(--muted); }
+  .sk .nm { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-weight: 700; }
+  .sk .nm small { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .sk .ds { font-size: 13px; line-height: 1.3; color: var(--parch); overflow-wrap: anywhere; }
+  .sk .tag { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #23211d; color: var(--muted); font-weight: 700; }
+  .sk .tag.ok { background: #1f3a1d; color: #8fd37a; }
+  .sk.locked { opacity: .6; }
+  .sk.passive { border-color: var(--gold); }
+  .sk.ult .nm { color: #ffd27a; }
   #dropPanel { left: 50%; transform: translate(-50%, -50%); width: min(340px, calc(100% - 24px)); z-index: 6; }
   #hatchPanel { left: 50%; transform: translate(-50%, -50%); width: min(620px, calc(100% - 24px)); z-index: 7; }
   @media (max-width: 560px) { #hatchList { grid-template-columns: 1fr !important; } }
@@ -542,12 +558,11 @@
   body.touch #chatInput { display: none; }
   body.touch #chatInput.open { display: block; }
   /* Botones táctiles: 8 casillas (anillo interior: habilidades 1-4; exterior: 5, 6 y pociones) */
-  body.touch #hotbar .slot:nth-child(5) { left: 48px; top: 175px; }
-  body.touch #hotbar .slot:nth-child(6) { left: 72px; top: 117px; }
-  body.touch #hotbar .slot:nth-child(7) { left: 117px; top: 72px; }
-  body.touch #hotbar .slot:nth-child(8) { left: 175px; top: 48px; }
-  body.touch #hotbar .slot:nth-child(9) { left: 236px; top: 30px; }
-  body.touch #hotbar .slot:nth-child(10) { left: 30px; top: 236px; }
+  body.touch #hotbar .hb-skills .slot:nth-child(5) { left: 72px; top: 117px; }
+  body.touch #hotbar .hb-skills .slot:nth-child(6) { left: 117px; top: 72px; }
+  body.touch #hotbar .hb-group { display: contents; }
+  body.touch #hotbar .hb-actions { display: flex; position: absolute; right: calc(100% + 4px); bottom: 10px; gap: 8px; padding: 6px 8px; background: rgba(11,13,16,.55); border: 1px solid var(--edge-soft); border-radius: 30px; pointer-events: auto; }
+  body.touch #hotbar .hb-actions .slot { position: relative; left: auto; top: auto; width: 48px; height: 48px; }
   body.touch .menu-btns button { height: 46px; }
   body.touch #btnHelp { display: none; }
 
@@ -575,21 +590,18 @@
   @media (max-height: 400px) { body.touch { --ui: .6; } }
   body.touch .player-frame, body.touch .party-frame, body.touch .target-frame, body.touch .mapbox,
   body.touch #log, body.touch #hotbar, body.touch .menu-btns, body.touch #joystick,
-  body.touch #btnAttack, body.touch #btnTarget, body.touch #btnChat, body.touch .panel,
+  body.touch #btnAttack, body.touch #btnChat, body.touch .panel,
   body.touch .item-menu, body.touch #banner, body.touch #reconnecting, body.touch #death > div, body.touch #netLost > div {
     zoom: var(--ui);
   }
   /* Con la reducción general ya no hace falta achicar a mano el grupo de acción */
   body.touch #hotbar { transform: none; }
   body.touch #btnAttack { right: calc(27px + env(safe-area-inset-right, 0px)); bottom: calc(25px + env(safe-area-inset-bottom, 0px)); width: 92px; height: 92px; font-size: 17px; }
-  body.touch #btnTarget { right: calc(318px + env(safe-area-inset-right, 0px)); }
   body.touch #joystick { width: 132px; height: 132px; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
   body.touch #joyKnob { width: 58px; height: 58px; }
   body.touch #log { height: 92px; width: min(380px, 44vw); }
   body.touch .party-frame { top: calc(118px + env(safe-area-inset-top, 0px)); }
 
-  /* Objetivo: botón pequeño junto a Atacar (como en los MMORPG móviles), no en el centro */
-  body.touch #btnTarget { right: calc(140px + env(safe-area-inset-right, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); padding: 7px 14px; font-size: 14px; border-radius: 4px; }
   /* Barra de chat fija bajo los mensajes, abajo a la izquierda */
   body.touch #log { height: 128px; width: min(440px, 48vw); gap: 6px; font-size: 14px; }
   body.touch #logLines { font-size: 14px; }
@@ -686,8 +698,18 @@
   <section class="panel" id="statPanel" hidden>
     <header><h2>Estado</h2><button class="x" data-close="stats" aria-label="Cerrar">✕</button></header>
     <div class="st-head"><span class="lvl" id="stLvl">1</span><div><strong id="stName"></strong><small id="stClass"></small></div></div>
-    <dl class="st-grid" id="statList"></dl>
-    <p class="hint">Los golpes críticos hacen daño extra. Tu probabilidad de crítico depende de tu clase, de tu arma y de algunas habilidades.</p>
+    <div class="tabs st-tabs" role="tablist">
+      <button type="button" role="tab" data-st="stats" class="on">Estadísticas</button>
+      <button type="button" role="tab" data-st="skills">Habilidades</button>
+    </div>
+    <div id="stView">
+      <dl class="st-grid" id="statList"></dl>
+      <p class="hint">Los golpes críticos hacen daño extra. Tu probabilidad de crítico depende de tu clase, de tu arma y de algunas habilidades.</p>
+    </div>
+    <div id="skView" hidden>
+      <div id="skList"></div>
+      <p class="hint">Las habilidades se usan con las teclas 1–6 (o con los botones redondos junto a «Atacar» en el celular). Las acciones —pociones, Gemas de Poder y montura— están en su propio grupo.</p>
+    </div>
   </section>
 
   <section class="panel" id="shopPanel" hidden>
@@ -786,7 +808,6 @@
   </div>
   <div id="joystick" hidden aria-label="Joystick de movimiento"><div id="joyKnob"></div></div>
   <button id="btnAttack" class="touch-only" aria-label="Atacar">Atacar</button>
-  <button id="btnTarget" class="touch-only" aria-label="Siguiente objetivo">Objetivo</button>
   <div id="labels"></div>
   <div id="floats"></div>
 </div>

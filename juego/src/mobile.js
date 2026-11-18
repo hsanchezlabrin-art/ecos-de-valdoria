@@ -161,7 +161,6 @@
       if (!t || t.dead || t.hidden) Game.targetNearest();
       Game.attackTarget();
     });
-    $('btnTarget').addEventListener('click', () => Game.targetNearest());
   }
 
   function onStart(canvas) {

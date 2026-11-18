@@ -60,6 +60,7 @@ function initUI() {
   $('pClass').textContent = className(G.player.cls, G.player.sex, G.player.stage, G.player.branch);
   buildHotbar();
   bindMaster();
+  bindStatTabs();
   bindSafeChat();
   $('hatchClose').onclick = () => ($('hatchPanel').hidden = true);
   if ($('btnGuide')) {
@@ -132,13 +133,21 @@ function buildHotbar() {
     { kind: 'gem', id: 'gema_poder', key: '9', glyph: ITEMS.gema_poder.glyph, title: `${ITEMS.gema_poder.name} (activar o desactivar)\n${ITEMS.gema_poder.desc}` },
     { kind: 'mount', key: '0', glyph: '🐾', title: 'Montar o bajar de tu mascota (desde el nivel 20)\nTerrestre: +60% de velocidad. Planeadora (nivel 40 con la Ascensión): +100% y cruza el agua.' },
   ];
+  // Dos grupos: habilidades (1–6) y acciones (pociones, Gemas de Poder y montura)
+  const skillsBox = document.createElement('div');
+  skillsBox.className = 'hb-group hb-skills';
+  skillsBox.setAttribute('aria-label', 'Habilidades');
+  const actionsBox = document.createElement('div');
+  actionsBox.className = 'hb-group hb-actions';
+  actionsBox.setAttribute('aria-label', 'Acciones');
+  bar.append(skillsBox, actionsBox);
   E.slots = defs.map((d) => {
     const b = document.createElement('button');
     b.className = `slot ${d.kind === 'pot' ? `pot ${d.id}` : d.kind === 'gem' || d.kind === 'mount' ? d.kind : 'skill'}`;
     b.title = d.title;
     b.innerHTML = `<span class="glyph">${d.glyph}</span><span class="key">${d.key}</span><span class="cd"></span><span class="qty"></span><span class="lock"></span>`;
     b.addEventListener('click', () => (d.kind === 'skill' ? useSkill(d.i) : d.kind === 'gem' ? V.Game.toggleGems() : d.kind === 'mount' ? V.Game.toggleMount() : usePotion(d.id)));
-    bar.append(b);
+    (d.kind === 'skill' ? skillsBox : actionsBox).append(b);
     return { d, b, cd: b.querySelector('.cd'), qty: b.querySelector('.qty'), lock: b.querySelector('.lock'), state: '' };
   });
 }
@@ -1026,7 +1035,71 @@ function updateUI() {
 
 // ---------- Estado del personaje ----------
 
+// ---------- Panel Estado: pestaña Habilidades ----------
+let stTab = 'stats';
+function bindStatTabs() {
+  document.querySelectorAll('#statPanel [data-st]').forEach((b) => {
+    b.onclick = () => {
+      stTab = b.dataset.st;
+      document.querySelectorAll('#statPanel [data-st]').forEach((x) => x.classList.toggle('on', x === b));
+      $('stView').hidden = stTab !== 'stats';
+      $('skView').hidden = stTab !== 'skills';
+      renderStats();
+    };
+  });
+}
+
+function renderSkills() {
+  const p = G.player;
+  const list = $('skList');
+  const key = `${p.cls}|${p.stage}|${p.branch}|${p.level}`;
+  if (list.dataset.key === key) return; // solo cambia al subir de nivel o de clase
+  list.dataset.key = key;
+  list.innerHTML = '';
+  const card = (glyph, keyLabel, name, sub, desc, tag, cls) => {
+    const el = document.createElement('div');
+    el.className = `sk ${cls || ''}`;
+    const ic = document.createElement('div');
+    ic.className = 'ic';
+    ic.textContent = glyph;
+    if (keyLabel) {
+      const k = document.createElement('b');
+      k.textContent = keyLabel;
+      ic.append(k);
+    }
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    nm.append(name);
+    if (sub) {
+      const sm = document.createElement('small');
+      sm.textContent = sub;
+      nm.append(sm);
+    }
+    if (tag) {
+      const t = document.createElement('span');
+      t.className = `tag ${tag.ok ? 'ok' : ''}`;
+      t.textContent = tag.text;
+      nm.append(t);
+    }
+    const ds = document.createElement('div');
+    ds.className = 'ds';
+    ds.textContent = desc;
+    el.append(ic, nm, ds);
+    list.append(el);
+  };
+  const pas = passiveFor(p.cls, p.stage, p.branch);
+  if (pas) card('✧', '', pas.name, 'Pasiva · siempre activa', pas.desc || '', { ok: true, text: 'Activa' }, 'passive');
+  p.skills.forEach((s, i) => {
+    const lock = skillLock(p, s);
+    const req = s.stage ? `${STAGES[s.stage].name} · nivel ${s.lvl}` : `Nivel ${s.lvl}`;
+    const sub = s.locked ? '' : `${req} · ${s.mp} MP · recarga ${s.cd} s`;
+    const tag = lock ? { ok: false, text: lock === 'Cambio de clase' ? 'Requiere cambio de clase' : `Se desbloquea en ${lock}` } : { ok: true, text: 'Disponible' };
+    card(s.glyph, String(i + 1), `${s.ultimate ? '★ ' : ''}${s.name}`, sub, s.desc || '', tag, `${lock ? 'locked' : ''} ${s.ultimate ? 'ult' : ''}`);
+  });
+}
+
 function renderStats() {
+  if (stTab === 'skills') return renderSkills();
   const p = G.player;
   const s = p.stats;
   $('stLvl').textContent = p.level;
