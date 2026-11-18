@@ -255,6 +255,7 @@
     if (!p.model) return;
     setWeaponLook(p.model, ITEMS[p.equip.weapon]);
     setArmorLook(p.model, ITEMS[p.equip.armor]);
+    if (p.view) p.view.cast = undefined; // piezas nuevas: se revisa de nuevo quién proyecta sombra
   }
 
   // Cuando termina de descargarse el modelo 3D de un jugador, reemplaza su figura de bloques
@@ -1510,6 +1511,44 @@
 
   // ---------- Dibujar entidades ----------
 
+  // Personajes lejanos: no se dibujan ni se animan (más allá de la distancia de vista del perfil
+  // gráfico) y solo los cercanos proyectan sombra. La lógica del juego no cambia: el servidor sigue
+  // simulándolos y aparecen apenas entran en la distancia de vista.
+  function cullEntity(ent, root, v) {
+    const Q = V.Gfx.preset();
+    const cam = G.camera.position;
+    const dx = ent.pos.x - cam.x;
+    const dz = ent.pos.z - cam.z;
+    const d2 = dx * dx + dz * dz;
+    const far = ent !== P && d2 > Q.viewDist * Q.viewDist;
+    if (far) {
+      if (!v.culled) {
+        v.culled = true;
+        root.visible = false;
+        if (ent.petView) ent.petView.model.root.visible = false;
+        if (v.sheep) v.sheep.visible = false;
+      }
+      return true;
+    }
+    if (v.culled) {
+      v.culled = false;
+      root.visible = true;
+      if (ent.petView) ent.petView.model.root.visible = true;
+      if (v.sheep) v.sheep.visible = true;
+      v.lastT = null;
+    }
+    const cast = Q.shadows && d2 < Q.shadowDist * Q.shadowDist;
+    if (v.cast !== cast) {
+      v.cast = cast;
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        if (o.userData.cs0 === undefined) o.userData.cs0 = o.castShadow;
+        o.castShadow = cast && o.userData.cs0;
+      });
+    }
+    return false;
+  }
+
   function drawEntity(ent, dt) {
     if (ent.kind === 'player' && ent.model.pending3d && V.Actors.has(ent.cls, ent.sex)) upgradeHero(ent);
     const v = ent.view;
@@ -1518,6 +1557,7 @@
       root.visible = false;
       return;
     }
+    if (cullEntity(ent, root, v)) return;
     // Equipo de grado Arcoíris: cambia de color y deja chispitas al moverse o atacar
     const rm = ent.model.rainbowMats;
     if (rm && rm.length) {

@@ -8,23 +8,40 @@
 
   // ---------- Calidad ----------
 
+  // Perfiles gráficos. pixel: tope de resolución interna (× densidad de la pantalla);
+  // pixelMin: hasta dónde puede bajar la resolución dinámica antes de cambiar de perfil;
+  // viewDist: distancia (m) a la que se dibujan personajes; shadowDist: hasta dónde proyectan sombra.
+  // Ninguno cambia las mecánicas: solo cuánto se dibuja y con qué detalle.
   const PRESETS = {
-    baja: { label: 'Baja', pixel: 1, shadows: false, shadowSize: 1024, post: false, grass: 0, grassR: 0, msaa: 0, aniso: 2 },
-    media: { label: 'Media', pixel: 1, shadows: true, shadowSize: 1024, post: true, grass: 4500, grassR: 22, msaa: 0, aniso: 4 },
-    alta: { label: 'Alta', pixel: 1.5, shadows: true, shadowSize: 2048, post: true, grass: 11000, grassR: 30, msaa: 2, aniso: 8 },
+    baja: { label: 'Baja', pixel: 1, pixelMin: 0.6, shadows: false, shadowSize: 1024, post: false, grass: 0, grassR: 0, msaa: 0, aniso: 2, viewDist: 70, shadowDist: 0 },
+    media: { label: 'Media', pixel: 1, pixelMin: 0.7, shadows: true, shadowSize: 1024, post: true, grass: 4500, grassR: 22, msaa: 0, aniso: 4, viewDist: 95, shadowDist: 25 },
+    alta: { label: 'Alta', pixel: 1.5, pixelMin: 0.8, shadows: true, shadowSize: 2048, post: true, grass: 11000, grassR: 30, msaa: 2, aniso: 8, viewDist: 130, shadowDist: 35 },
+    ultra: { label: 'Ultra', pixel: 2, pixelMin: 1, shadows: true, shadowSize: 4096, post: true, grass: 16000, grassR: 36, msaa: 4, aniso: 16, viewDist: 180, shadowDist: 45 },
   };
-  const ORDER = ['baja', 'media', 'alta'];
+  const ORDER = ['baja', 'media', 'alta', 'ultra'];
   const KEY = 'valdoria-graficos';
   const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+
+  // Tope de calidad: en celulares y tabletas nunca Ultra; con poca memoria, menos aún. Ultra solo en
+  // computadores con varios núcleos. El resto lo decide el rendimiento medido mientras se juega.
+  const MEM = navigator.deviceMemory || 0; // GB aproximados (Chrome/Android; en Safari no existe)
+  const CORES = navigator.hardwareConcurrency || 4;
+  const MAX_Q = (() => {
+    if (MEM && MEM <= 2) return 'media';
+    if (isTouch || (MEM && MEM <= 4)) return 'alta';
+    return CORES >= 8 && (!MEM || MEM >= 8) ? 'ultra' : 'alta';
+  })();
+  const maxIdx = ORDER.indexOf(MAX_Q);
+  const clampQ = (q) => ORDER[Math.min(ORDER.indexOf(q), maxIdx)];
 
   function savedQuality() {
     try {
       const q = localStorage.getItem(KEY);
-      if (PRESETS[q]) return q;
+      if (PRESETS[q]) return clampQ(q);
     } catch {
       /* sin almacenamiento */
     }
-    return isTouch ? 'media' : 'alta';
+    return clampQ(isTouch ? 'media' : 'alta');
   }
   let quality = savedQuality();
   const preset = () => PRESETS[quality];
@@ -792,21 +809,38 @@
     Post(renderer);
     const vtf = renderer.capabilities.maxVertexTextures > 0;
     if (vtf && groundMaps) {
-      buildGrass(scene, PRESETS.alta.grass);
+      buildGrass(scene, PRESETS.ultra.grass);
       grass.mat.uniforms.uHeight.value = groundMaps.height;
       grass.mat.uniforms.uColor.value = groundMaps.color;
     }
     if (ctx.water) ctx.water.material.uniforms.uHeight.value = groundMaps.height;
     apply();
+    let want = /[?&](debug|perf)\b/.test(location.search);
+    try {
+      want = want || localStorage.getItem('valdoria-monitor') === '1';
+    } catch {
+      /* sin almacenamiento */
+    }
+    if (want) monitor.toggle(true);
+  }
+
+  // Escala de resolución interna (1 = la del perfil). La baja el ajuste automático antes de cambiar
+  // de perfil, porque es lo que menos se nota.
+  let resScale = 1;
+  const pixelRatio = () => Math.min(devicePixelRatio, preset().pixel) * resScale;
+  function applyResolution() {
+    const { renderer } = ctx;
+    if (!renderer) return;
+    renderer.setPixelRatio(pixelRatio());
+    renderer.setSize(innerWidth, innerHeight);
+    post.setSize(innerWidth, innerHeight, renderer.getPixelRatio());
   }
 
   function apply() {
     const p = preset();
     const { renderer, sun, scene } = ctx;
     if (!renderer) return;
-    renderer.setPixelRatio(Math.min(devicePixelRatio, p.pixel));
-    renderer.setSize(innerWidth, innerHeight);
-    post.setSize(innerWidth, innerHeight, renderer.getPixelRatio());
+    applyResolution();
     post.setSamples(p.msaa);
     if (renderer.shadowMap.enabled !== p.shadows) {
       renderer.shadowMap.enabled = p.shadows;
@@ -838,6 +872,7 @@
   function setQuality(q) {
     if (!PRESETS[q]) return;
     quality = q;
+    resScale = 1;
     try {
       localStorage.setItem(KEY, q);
     } catch {
@@ -860,35 +895,225 @@
     } catch {
       /* sin almacenamiento */
     }
-    setQuality(ORDER[(ORDER.indexOf(quality) + 1) % ORDER.length]);
+    setQuality(ORDER[(ORDER.indexOf(quality) + 1) % (maxIdx + 1)]);
   };
 
-  // Ajuste automático: los primeros 90 s de juego, si va a menos de 32 cuadros por segundo
-  // durante 5 s seguidos, baja un nivel de calidad
-  const perf = { start: 0, win: 0, frames: 0, last: 0 };
-  function autoTune() {
-    if (manual || !G.started || quality === 'baja') return;
-    const now = performance.now();
-    if (!perf.start) perf.start = perf.win = perf.last = now;
-    const gap = now - perf.last;
-    perf.last = now;
-    if (gap > 400) {
-      // pestaña en segundo plano o carga: se reinicia la medición
-      perf.win = now;
-      perf.frames = 0;
+  // ---------- Medición de cada cuadro y ajuste automático ----------
+  // Se mide de verdad: cuadros por segundo, tiempo de CPU (lógica + envío del dibujo) y, si el
+  // navegador lo permite, tiempo de GPU con consultas de tiempo de WebGL. Cada 3 s se decide:
+  //  · va lento 6 s seguidos (menos del 80% de la meta) → baja la resolución interna y, si ya está
+  //    al mínimo del perfil, baja un perfil (también sirve si el equipo se calienta y se frena);
+  //  · va holgado 12 s seguidos (meta cumplida y carga < 50%) → sube resolución y luego perfil,
+  //    sin pasar el tope del equipo y nunca justo después de haber bajado.
+  // Si el jugador eligió la calidad a mano, no se cambia nada.
+  const stats = {
+    fps: 0, fpsAvg: 0, cpuLogic: 0, cpuRender: 0, gpu: null, refresh: 60, target: 60,
+    capped: false, calls: 0, tris: 0, lastChange: '',
+  };
+  const gov = { winStart: 0, frames: 0, last: 0, cpuSum: 0, low: 0, high: 0, lastDown: -1e9, ceiling: Infinity };
+  const intervals = [];
+  let lastDrawn = 0;
+
+  // Meta de cuadros por segundo: la frecuencia de la pantalla, con tope de 60 en celulares y
+  // tabletas (en pantallas de 90/120 Hz eso ahorra mucha batería sin perder fluidez)
+  // Se mide con la mediana de 90 intervalos y se vuelve a medir siempre (la ventana puede pasar a
+  // otra pantalla). Solo con la página visible y activa: oculta, el navegador frena los cuadros.
+  function measureRefresh(dt) {
+    if (dt <= 0 || dt > 50 || document.hidden || !document.hasFocus()) return;
+    // Con el tope de 60 activo se miden los intervalos de la pantalla, no los dibujados
+    intervals.push(dt);
+    if (intervals.length < 90) return;
+    const sorted = intervals.sort((x, y) => x - y);
+    stats.refresh = Math.round(1000 / sorted[45]);
+    intervals.length = 0;
+    stats.target = isTouch ? Math.min(60, stats.refresh) : Math.min(144, stats.refresh);
+    stats.capped = isTouch && stats.refresh > 70;
+  }
+
+  // Al empezar cada cuadro: false = saltar este cuadro (tope de 60 en pantallas rápidas)
+  function frameBegin(now) {
+    const dt = now - gov.last;
+    gov.last = now;
+    measureRefresh(dt);
+    if (stats.capped && now - lastDrawn < 1000 / 60 - 2.5) return false;
+    lastDrawn = now;
+    if (monitor.on) ctx.renderer.info.reset();
+    return true;
+  }
+
+  function frameEnd(now, logicMs, renderMs) {
+    stats.cpuLogic = stats.cpuLogic * 0.9 + logicMs * 0.1;
+    stats.cpuRender = stats.cpuRender * 0.9 + renderMs * 0.1;
+    if (monitor.on) {
+      stats.calls = ctx.renderer.info.render.calls;
+      stats.tris = ctx.renderer.info.render.triangles;
+    }
+    pollGpu();
+    // Ventana de 3 s (si hubo una pausa larga — pestaña oculta, carga — se empieza de nuevo).
+    // Con la pestaña oculta el navegador frena los cuadros a propósito: eso no cuenta.
+    if (document.hidden || !document.hasFocus()) {
+      gov.winStart = 0;
       return;
     }
-    if (now - perf.start > 90000) return;
-    perf.frames++;
-    if (now - perf.win < 5000) return;
-    const fps = (perf.frames * 1000) / (now - perf.win);
-    perf.win = now;
-    perf.frames = 0;
-    if (fps < 32) {
-      setQuality(ORDER[ORDER.indexOf(quality) - 1]);
-      dispatchEvent(new CustomEvent('valdoria-gfx', { detail: { auto: true, fps: Math.round(fps) } }));
+    if (!gov.winStart || now - gov.prevFrame > 400) {
+      gov.winStart = now;
+      gov.frames = 0;
+      gov.cpuSum = 0;
+    }
+    gov.prevFrame = now;
+    gov.frames++;
+    gov.cpuSum += logicMs + renderMs;
+    gov.total++;
+    if (now - gov.winStart < 3000) return;
+    const secs = (now - gov.winStart) / 1000;
+    stats.fps = gov.frames / secs;
+    stats.fpsAvg = stats.fpsAvg ? stats.fpsAvg * 0.8 + stats.fps * 0.2 : stats.fps;
+    const cpu = gov.cpuSum / gov.frames;
+    gov.winStart = now;
+    gov.frames = 0;
+    gov.cpuSum = 0;
+    if (monitor.on) monitor.draw();
+    tune(now, cpu);
+  }
+
+  function tune(now, cpu) {
+    if (manual || !G.started) return;
+    const target = stats.target;
+    const budget = 1000 / target;
+    const load = Math.max(cpu, stats.gpu || 0) / budget;
+    const p = preset();
+    // Piso de resolución: respecto a la resolución real que usa el perfil en esta pantalla
+    const minScale = Math.min(1, p.pixelMin / Math.min(devicePixelRatio, p.pixel));
+    if (stats.fps < target * 0.8) {
+      gov.high = 0;
+      if (++gov.low < 2) return;
+      gov.low = 0;
+      gov.lastDown = now;
+      if (resScale > minScale + 0.01) {
+        resScale = Math.max(minScale, resScale - 0.1);
+        applyResolution();
+        stats.lastChange = `resolución ${Math.round(resScale * 100)}%`;
+      } else if (ORDER.indexOf(quality) > 0) {
+        // Este perfil no se sostuvo: en esta sesión no se vuelve a subir hasta él (sin vaivenes)
+        gov.ceiling = ORDER.indexOf(quality) - 1;
+        setQuality(ORDER[ORDER.indexOf(quality) - 1]);
+        stats.lastChange = `perfil ↓ ${preset().label}`;
+        dispatchEvent(new CustomEvent('valdoria-gfx', { detail: { auto: true, dir: -1, fps: Math.round(stats.fps) } }));
+      }
+      return;
+    }
+    gov.low = 0;
+    // Holgura: solo se sube si se sabe que sobra GPU (medida) o, sin esa medida, con mucha holgura de CPU
+    const roomy = stats.fps >= target * 0.95 && (stats.gpu != null ? load < 0.5 : cpu / budget < 0.3);
+    if (!roomy) {
+      gov.high = 0;
+      return;
+    }
+    if (++gov.high < 4 || now - gov.lastDown < 30000) return;
+    gov.high = 0;
+    if (resScale < 1) {
+      resScale = Math.min(1, resScale + 0.1);
+      applyResolution();
+      stats.lastChange = `resolución ${Math.round(resScale * 100)}%`;
+    } else if (ORDER.indexOf(quality) < Math.min(maxIdx, gov.ceiling) && stats.gpu != null) {
+      setQuality(ORDER[ORDER.indexOf(quality) + 1]);
+      stats.lastChange = `perfil ↑ ${preset().label}`;
+      dispatchEvent(new CustomEvent('valdoria-gfx', { detail: { auto: true, dir: 1, fps: Math.round(stats.fps) } }));
     }
   }
+
+  // Tiempo de GPU: una consulta cada 30 cuadros (casi sin costo); solo si el navegador la ofrece
+  const gpuQ = { ext: null, gl: null, pending: [], every: 30, n: 0, tried: false };
+  function gpuBegin() {
+    if (!gpuQ.tried) {
+      gpuQ.tried = true;
+      try {
+        const gl = ctx.renderer.getContext();
+        if (ctx.renderer.capabilities.isWebGL2) gpuQ.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+        gpuQ.gl = gl;
+      } catch {
+        gpuQ.ext = null;
+      }
+    }
+    if (!gpuQ.ext || ++gpuQ.n % gpuQ.every || gpuQ.pending.length > 3) return null;
+    const q = gpuQ.gl.createQuery();
+    gpuQ.gl.beginQuery(gpuQ.ext.TIME_ELAPSED_EXT, q);
+    return q;
+  }
+  function gpuEnd(q) {
+    if (!q) return;
+    gpuQ.gl.endQuery(gpuQ.ext.TIME_ELAPSED_EXT);
+    gpuQ.pending.push(q);
+  }
+  function pollGpu() {
+    const { gl, ext } = gpuQ;
+    if (!ext || !gpuQ.pending.length) return;
+    const q = gpuQ.pending[0];
+    if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) return;
+    gpuQ.pending.shift();
+    const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
+    if (!disjoint) {
+      const ms = gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
+      stats.gpu = stats.gpu == null ? ms : stats.gpu * 0.7 + ms * 0.3;
+    }
+    gl.deleteQuery(q);
+  }
+
+  // ---------- Monitor de rendimiento (F3, ?debug en la dirección) ----------
+  // Apagado no cuesta nada: no crea nada en la página ni lee contadores.
+  const monitor = {
+    on: false,
+    el: null,
+    toggle(force) {
+      this.on = force === undefined ? !this.on : !!force;
+      if (this.on && !this.el) {
+        this.el = document.createElement('pre');
+        this.el.id = 'perfMonitor';
+        this.el.style.cssText = 'position:fixed;left:8px;top:8px;z-index:50;margin:0;padding:8px 10px;font:12px/1.35 ui-monospace,Consolas,monospace;color:#d8f5c8;background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.18);border-radius:4px;pointer-events:none;white-space:pre';
+        document.body.append(this.el);
+      }
+      if (this.el) this.el.hidden = !this.on;
+      if (ctx.renderer) ctx.renderer.info.autoReset = !this.on;
+      try {
+        localStorage.setItem('valdoria-monitor', this.on ? '1' : '0');
+      } catch {
+        /* sin almacenamiento */
+      }
+      if (this.on) this.draw();
+    },
+    draw() {
+      if (!this.el || !ctx.renderer) return;
+      const r = ctx.renderer;
+      const W = Math.round(innerWidth * r.getPixelRatio());
+      const H = Math.round(innerHeight * r.getPixelRatio());
+      const mem = performance.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB (JS)` : 'no disponible en este navegador';
+      const gpuName = (() => {
+        try {
+          const gl = r.getContext();
+          const d = gl.getExtension('WEBGL_debug_renderer_info');
+          return d ? String(gl.getParameter(d.UNMASKED_RENDERER_WEBGL)).replace(/^ANGLE \(|\)$/g, '').slice(0, 60) : 'oculto por el navegador';
+        } catch {
+          return '?';
+        }
+      })();
+      this.el.textContent = [
+        `FPS ${stats.fps.toFixed(0)} (prom. ${stats.fpsAvg.toFixed(0)}) · meta ${stats.target}${stats.capped ? ' (tope 60 por batería)' : ''} · pantalla ${stats.refresh} Hz`,
+        `CPU lógica ${stats.cpuLogic.toFixed(2)} ms · CPU envío dibujo ${stats.cpuRender.toFixed(2)} ms`,
+        `GPU ${stats.gpu != null ? stats.gpu.toFixed(2) + ' ms' : 'no medible en este navegador'}`,
+        `Llamadas de dibujo ${stats.calls} · triángulos ${(stats.tris / 1000).toFixed(0)} mil`,
+        `Perfil ${preset().label}${manual ? ' (elegido a mano)' : ' (automático)'} · tope del equipo ${PRESETS[MAX_Q].label}`,
+        `Resolución ${W}×${H} (${Math.round(resScale * 100)}% del perfil) · memoria ${mem}`,
+        `Motor ${r.capabilities.isWebGL2 ? 'WebGL 2' : 'WebGL 1'} · ${gpuName}`,
+        `Sombras ${preset().shadows ? 'sí' : 'no'} · brillo ${preset().post ? (post && post.hdr ? 'HDR' : 'sí') : 'no'} · último ajuste: ${stats.lastChange || '—'}`,
+      ].join('\n');
+    },
+  };
+  addEventListener('keydown', (e) => {
+    if (e.key === 'F3') {
+      e.preventDefault();
+      monitor.toggle();
+    }
+  });
 
   // Materiales que brillan (llamas, lava, ventanas): su color sube cuando hay bloom
   const glows = [];
@@ -899,7 +1124,6 @@
 
   function update(dt, center, player) {
     const { scene, sun, hemi, skyMesh, water } = ctx;
-    autoTune();
     updateSky(dayPhase());
     const hdr = preset().post && post.hdr ? 1 : 0;
     sun.color.copy(sky.sunColor);
@@ -937,17 +1161,17 @@
   }
 
   function render(scene, camera) {
+    const q = gpuBegin();
     if (preset().post) post.render(scene, camera);
     else {
       ctx.renderer.setRenderTarget(null);
       ctx.renderer.render(scene, camera);
     }
+    gpuEnd(q);
   }
 
   function resize() {
-    if (!ctx.renderer) return;
-    ctx.renderer.setSize(innerWidth, innerHeight);
-    post.setSize(innerWidth, innerHeight, ctx.renderer.getPixelRatio());
+    applyResolution(); // también recalcula la densidad (al mover la ventana a otra pantalla)
   }
 
   V.Gfx = {
@@ -969,6 +1193,14 @@
     update,
     render,
     resize,
+    frameBegin,
+    frameEnd,
+    stats,
+    monitor,
+    pixelRatio,
+    get maxQuality() {
+      return MAX_Q;
+    },
     glow,
     glowNight: (mat, k, night) => {
       glow(mat, k);

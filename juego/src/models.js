@@ -663,7 +663,12 @@
 
   function setArmorLook(m, item) {
     if (m.torsoMat) m.torsoMat.color.setHex(item ? item.look : m.baseBody);
-    for (const g of m.armorParts || []) if (g.parent) g.parent.remove(g);
+    // Al cambiar de armadura se liberan los materiales de las piezas anteriores (las geometrías
+    // vienen del caché compartido y no se tocan)
+    for (const g of m.armorParts || []) {
+      if (g.parent) g.parent.remove(g);
+      if (g.material) g.material.dispose();
+    }
     m.armorParts = [];
     m.armorRainbow = [];
     m.armorGrade = item ? item.grade || null : null;

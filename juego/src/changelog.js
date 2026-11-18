@@ -8,6 +8,18 @@
 })(function () {
   return [
     {
+      version: '0.18.0',
+      date: '2026-11-18',
+      title: 'Más fluido en cualquier equipo',
+      items: [
+        'El juego dibuja menos cosas que no se ven: los personajes lejanos se ocultan y solo los cercanos hacen sombra.',
+        'Nueva calidad gráfica Ultra para computadores potentes.',
+        'La calidad se ajusta sola mientras juegas: baja la resolución o los efectos si va lento y los sube si a tu equipo le sobra.',
+        'En celulares con pantalla rápida el juego va a 60 cuadros por segundo para cuidar la batería.',
+        'Pulsa F3 para ver el monitor de rendimiento (cuadros por segundo, memoria y calidad).',
+      ],
+    },
+    {
       version: '0.17.0',
       date: '2026-11-18',
       title: 'Armaduras que se ven en 3D',

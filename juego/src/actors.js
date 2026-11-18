@@ -643,7 +643,14 @@
 
   // ---------- Armadura en los modelos 3D: las mismas piezas por grado que las figuras de bloques ----------
   function setArmorSkinned(m, item) {
-    for (const g of m.armorParts) if (g.parent) g.parent.remove(g);
+    // Las piezas anteriores se quitan y se libera su memoria de video (geometría y material propios)
+    for (const g of m.armorParts) {
+      if (g.parent) g.parent.remove(g);
+      g.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+    }
     m.armorParts = [];
     m.armorRainbow = [];
     m.armorGrade = item ? item.grade || null : null;

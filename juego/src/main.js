@@ -62,9 +62,11 @@
     await frame();
 
     const container = $('game');
-    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // Suavizado de bordes del lienzo solo si no hay efectos de cámara: con ellos el dibujo pasa por
+    // una imagen intermedia (con su propio suavizado según el perfil) y el del lienzo no se usaría
+    renderer = new THREE.WebGLRenderer({ antialias: !V.Gfx.preset().post, powerPreference: 'high-performance' });
     const touch = V.Mobile && V.Mobile.isTouch;
-    renderer.setPixelRatio(Math.min(devicePixelRatio, V.Gfx.preset().pixel));
+    renderer.setPixelRatio(V.Gfx.pixelRatio());
     renderer.setSize(innerWidth, innerHeight);
     renderer.shadowMap.enabled = V.Gfx.preset().shadows;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -681,9 +683,15 @@
   const btnGfx = document.getElementById('btnGfx');
   const syncGfx = () => (btnGfx.firstChild.textContent = `Gráficos: ${V.Gfx.preset().label} `);
   syncGfx();
-  addEventListener('valdoria-gfx', () => {
+  addEventListener('valdoria-gfx', (e) => {
     syncGfx();
-    UI.log(`El juego iba lento: calidad gráfica ajustada a ${V.Gfx.preset().label}. Puedes cambiarla con el botón Gráficos.`, 'sys');
+    const up = e.detail && e.detail.dir > 0;
+    UI.log(
+      up
+        ? `Tu equipo va holgado: calidad gráfica subida a ${V.Gfx.preset().label}. Puedes cambiarla con el botón Gráficos.`
+        : `El juego iba lento: calidad gráfica ajustada a ${V.Gfx.preset().label}. Puedes cambiarla con el botón Gráficos.`,
+      'sys'
+    );
   });
   btnGfx.addEventListener('click', () => {
     V.Gfx.cycleQuality();
@@ -719,8 +727,37 @@
 
   // ---------- Bucle ----------
 
+  // NPC lejanos: igual que los demás personajes, se dejan de dibujar más allá de la distancia de
+  // vista del perfil gráfico y solo los cercanos proyectan sombra (se revisa cada 10 cuadros)
+  let npcTick = 0;
+  function cullNpcs() {
+    const Q = V.Gfx.preset();
+    const cam = camera.position;
+    for (const n of G.world.npcs) {
+      const r = n.root;
+      const d2 = (r.position.x - cam.x) ** 2 + (r.position.z - cam.z) ** 2;
+      const vis = d2 < Q.viewDist * Q.viewDist;
+      if (r.visible !== vis) r.visible = vis;
+      const cast = vis && Q.shadows && d2 < Q.shadowDist * Q.shadowDist;
+      if (r.userData.cast !== cast) {
+        r.userData.cast = cast;
+        r.traverse((o) => {
+          if (!o.isMesh) return;
+          if (o.userData.cs0 === undefined) o.userData.cs0 = o.castShadow;
+          o.castShadow = cast && o.userData.cs0;
+        });
+      }
+    }
+  }
+
   const clock = new THREE.Clock();
-  function loop() {
+  function loop(now = performance.now()) {
+    // Tope de cuadros (pantallas de 90/120 Hz en celulares): este cuadro se salta
+    if (!V.Gfx.frameBegin(now)) {
+      requestAnimationFrame(loop);
+      return;
+    }
+    const t0 = performance.now();
     const dt = Math.min(clock.getDelta(), 0.05);
     G.time += dt;
     if (G.started) Game.update(dt);
@@ -747,13 +784,16 @@
       }
     }
     for (const n of G.world.npcs) if (n.model && n.model.root.userData.veil) n.model.root.userData.veil.material.opacity = 0.4 + Math.sin(G.time * 3) * 0.15;
+    if (++npcTick % 10 === 0) cullNpcs();
     if (G.world.crystal) {
       G.world.crystal.rotation.y += dt * 0.8;
       G.world.crystal.position.y = 1.45 + Math.sin(G.time * 1.6) * 0.08;
     }
     if (G.started) UI.updateUI();
     else renderPreview(dt);
+    const t1 = performance.now();
     V.Gfx.render(scene, camera);
+    V.Gfx.frameEnd(t1, t1 - t0, performance.now() - t1);
     requestAnimationFrame(loop);
   }
 
