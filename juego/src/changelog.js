@@ -8,6 +8,20 @@
 })(function () {
   return [
     {
+      version: '0.5.0',
+      date: '2026-11-17',
+      title: 'Un mundo más vivo',
+      items: [
+        'Ciclo de día y noche: amaneceres, atardeceres y noches con estrellas y luna. Todos los jugadores ven la misma hora.',
+        'Cielo con nubes que se mueven y sol con resplandor.',
+        'Suelo con texturas de pasto, tierra y roca, y sombra bajo árboles y casas.',
+        'Pasto que se mece con el viento y se aparta al pasar.',
+        'Agua con olas, reflejos del cielo y espuma en la orilla.',
+        'Brillo en llamas, lava, ventanas y hechizos, y colores más cálidos.',
+        'Nuevo botón Gráficos (Baja, Media, Alta) para elegir calidad según tu equipo.',
+      ],
+    },
+    {
       version: '0.4.1',
       date: '2026-11-17',
       title: 'Joystick y celulares',

@@ -639,11 +639,11 @@
   const sparkGeo = new THREE.OctahedronGeometry(0.09, 0);
   function spawnLevelUp(ent) {
     const g = new THREE.Group();
-    const pillar = new THREE.Mesh(pillarGeo, new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
+    const pillar = new THREE.Mesh(pillarGeo, new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xffd36b, 2.4), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
     g.add(pillar);
     const sparks = [];
     for (let i = 0; i < 40; i++) {
-      const s = new THREE.Mesh(sparkGeo, new THREE.MeshBasicMaterial({ color: i % 3 ? 0xffe9a8 : 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const s = new THREE.Mesh(sparkGeo, new THREE.MeshBasicMaterial({ color: V.Gfx.hot(i % 3 ? 0xffe9a8 : 0xffffff, 2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
       const a = Math.random() * Math.PI * 2;
       const r = 0.4 + Math.random() * 1.1;
       s.userData = { a, r, v: 2 + Math.random() * 3, y: Math.random() * 1.5 };
@@ -676,7 +676,7 @@
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    const line = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xbfe0ff, transparent: true, blending: THREE.AdditiveBlending }));
+    const line = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: V.Gfx.hot(0xbfe0ff, 2.6), transparent: true, blending: THREE.AdditiveBlending }));
     G.scene.add(line);
     effects.push({ line, t: 0, life: 0.35 });
     for (const p of pts.slice(1)) spawnRing({ x: p.x, y: p.y - 1, z: p.z }, 0x9fd0ff, 1.4, 0.35);
@@ -695,17 +695,17 @@
     },
     fire: () => {
       const g = new THREE.Group();
-      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb04a })));
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xffb04a, 2.6) })));
       g.add(new THREE.Mesh(new THREE.SphereGeometry(0.48, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff5a1a, transparent: true, opacity: 0.4, depthWrite: false })));
       return g;
     },
     arcane: () => {
       const g = new THREE.Group();
-      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), new THREE.MeshBasicMaterial({ color: 0xe6d0ff })));
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xe6d0ff, 2.4) })));
       g.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), new THREE.MeshBasicMaterial({ color: 0x9a6aff, transparent: true, opacity: 0.45, depthWrite: false })));
       return g;
     },
-    ice: () => new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.85 })),
+    ice: () => new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xcfeaff, 2.2), transparent: true, opacity: 0.85 })),
   };
   const projMeshes = new Map();
   const tmp = new THREE.Vector3();
@@ -738,7 +738,7 @@
     if (kind === 'meteor') {
       mesh = new THREE.Group();
       mesh.add(new THREE.Mesh(new THREE.DodecahedronGeometry(0.9, 0), new THREE.MeshStandardMaterial({ color: 0x3a2a20, emissive: 0xff5a1a, emissiveIntensity: 1.3, flatShading: true })));
-      mesh.add(new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0.35, depthWrite: false })));
+      mesh.add(new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 8), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xff7a2a, 2.0), transparent: true, opacity: 0.35, depthWrite: false })));
     } else if (kind === 'ice') {
       mesh = PROJ_MESH.ice();
     } else {

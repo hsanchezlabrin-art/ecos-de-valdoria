@@ -64,9 +64,9 @@
     const container = $('game');
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const touch = V.Mobile && V.Mobile.isTouch;
-    renderer.setPixelRatio(Math.min(devicePixelRatio, touch ? 1.5 : 2)); // celulares: menos carga
+    renderer.setPixelRatio(Math.min(devicePixelRatio, V.Gfx.preset().pixel));
     renderer.setSize(innerWidth, innerHeight);
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = V.Gfx.preset().shadows;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.append(renderer.domElement);
 
@@ -77,18 +77,22 @@
     G.camera = camera;
     G.renderer = renderer;
 
-    scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x4a3b28, 0.62));
+    const hemi = new THREE.HemisphereLight(0xcfe0ff, 0x4a3b28, 0.62);
+    scene.add(hemi);
     sun = new THREE.DirectionalLight(0xffe0b0, 1.25);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(touch ? 1024 : 2048, touch ? 1024 : 2048);
+    sun.shadow.mapSize.set(V.Gfx.preset().shadowSize, V.Gfx.preset().shadowSize);
     Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 220 });
-    sun.shadow.bias = -0.0008;
+    sun.shadow.bias = -0.0006;
+    sun.shadow.normalBias = 0.02;
     scene.add(sun, sun.target);
 
     progress('Moldeando las tierras de Valdoria…', 0.3);
     await frame();
     G.world = buildWorld(scene);
     G.world.zones = ZONES.filter((z) => !z.safe);
+    V.Gfx.attach({ renderer, scene, sun, hemi, skyMesh: G.world.sky, water: G.world.water });
+    V.Gfx.update(0, new THREE.Vector3(), null);
 
     progress('Despertando a los habitantes de Brezal…', 0.62);
     await frame();
@@ -124,8 +128,7 @@
     look.set(t.x, t.y + 1.6, t.z);
     camera.lookAt(look);
     G.world.sky.position.copy(camera.position);
-    sun.position.set(t.x + 45, t.y + 80, t.z + 30);
-    sun.target.position.set(t.x, t.y, t.z);
+    V.Gfx.update(dt, t, G.player ? G.player.pos : null);
   }
 
   // ---------- Entrada ----------
@@ -254,7 +257,7 @@
     addEventListener('resize', () => {
       camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth, innerHeight);
+      V.Gfx.resize();
     });
   }
 
@@ -644,6 +647,15 @@
   document.getElementById('btnRespawn').addEventListener('click', () => Game.respawnPlayer());
   document.getElementById('btnReconnect').addEventListener('click', () => location.reload());
   document.getElementById('btnFull').addEventListener('click', () => V.Mobile.toggleFullscreen());
+  // Calidad gráfica: Baja → Media → Alta (se guarda en este equipo)
+  const btnGfx = document.getElementById('btnGfx');
+  const syncGfx = () => (btnGfx.firstChild.textContent = `Gráficos: ${V.Gfx.preset().label} `);
+  syncGfx();
+  btnGfx.addEventListener('click', () => {
+    V.Gfx.cycleQuality();
+    syncGfx();
+    UI.log(`Calidad gráfica: ${V.Gfx.preset().label}.`, 'sys');
+  });
 
   // Al abrir: si hay una sesión guardada, entra directo al selector de personajes
   async function startScreen() {
@@ -680,7 +692,7 @@
     if (G.started) Game.update(dt);
     updateCamera(dt);
     for (const f of G.world.fires) {
-      f.light.intensity = f.base * (0.85 + Math.sin(G.time * 13) * 0.08 + Math.random() * 0.07);
+      f.light.intensity = f.base * (0.4 + V.Gfx.sky.night * 0.6) * (0.85 + Math.sin(G.time * 13) * 0.08 + Math.random() * 0.07);
       f.flame.scale.y = 0.9 + Math.sin(G.time * 17) * 0.12;
     }
     if (G.world.crystal) {
@@ -689,7 +701,7 @@
     }
     if (G.started) UI.updateUI();
     else renderPreview(dt);
-    renderer.render(scene, camera);
+    V.Gfx.render(scene, camera);
     requestAnimationFrame(loop);
   }
 

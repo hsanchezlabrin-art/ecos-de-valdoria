@@ -13,6 +13,8 @@ function buildTerrain() {
   g.rotateX(-Math.PI / 2);
   const pos = g.attributes.position;
   const colors = new Float32Array(pos.count * 3);
+  const splat = new Float32Array(pos.count * 3);
+  const Gfx = V.Gfx;
   const r = rng(11);
   const grass = [0.34, 0.49, 0.22];
   const dirt = [0.5, 0.41, 0.28];
@@ -37,33 +39,24 @@ function buildTerrain() {
     mix(dirt, (1 - ss(1.2, 3.2, pathDist(x, z))) * 0.8);
     mix(rock, ss(7, 15, h));
     mix(mud, 1 - ss(WATER_Y - 0.4, WATER_Y + 0.9, h));
-    colors.set(c, i * 3);
+    const ao = Gfx.groundAO(x, z);
+    colors.set([c[0] * ao, c[1] * ao, c[2] * ao], i * 3);
+    splat.set(Gfx.splatAt(x, z, h, zoneAt({ x, z })), i * 3);
   }
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  g.setAttribute('splat', new THREE.BufferAttribute(splat, 3));
   g.computeVertexNormals();
-  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }));
+  Gfx.buildGroundMaps(colors, Gfx.grassDensityAt);
+  const m = new THREE.Mesh(g, Gfx.terrainMaterial());
   m.receiveShadow = true;
   m.name = 'terrain';
   return m;
 }
 
 function buildSky(scene) {
-  const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(600, 32, 16),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      uniforms: {
-        top: { value: new THREE.Color(0x3a5a86) },
-        horizon: { value: new THREE.Color(0xe6c597) },
-        bottom: { value: new THREE.Color(0x7d6d5a) },
-      },
-      vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader:
-        'uniform vec3 top; uniform vec3 horizon; uniform vec3 bottom; varying vec3 vP; void main(){ float h = vP.y; vec3 c = h > 0.0 ? mix(horizon, top, pow(h, 0.5)) : mix(horizon, bottom, min(1.0, -h * 4.0)); gl_FragColor = vec4(c, 1.0); }',
-    })
-  );
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(600, 32, 16), V.Gfx.skyMaterial());
   sky.renderOrder = -1;
+  sky.frustumCulled = false;
   scene.add(sky);
   return sky;
 }
@@ -109,7 +102,9 @@ function buildVegetation(scene) {
   });
 
   // Grietas de lava en la Llanura de Ceniza
-  const lavaMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.1, 3), new THREE.MeshBasicMaterial({ color: 0xff7a2a }), L.lava.length);
+  const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff7a2a });
+  V.Gfx.glow(lavaMat, 2.8);
+  const lavaMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.1, 3), lavaMat, L.lava.length);
   L.lava.forEach((t, i) => {
     dummy.position.set(t.x, t.y, t.z);
     dummy.scale.set(1, 1, t.s);
@@ -133,9 +128,10 @@ function campfire(scene, x, z, big = false) {
     g.add(l);
   }
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.1, 6), new THREE.MeshBasicMaterial({ color: 0xffa340 }));
+  V.Gfx.glowNight(flame.material, 2.8, 0.3);
   flame.position.y = 0.6;
   g.add(flame);
-  const light = new THREE.PointLight(0xff9a4a, big ? 2.4 : 1.6, big ? 26 : 18, 2);
+  const light = new THREE.PointLight(0xff9a4a, big ? 1.8 : 1.3, big ? 24 : 17, 2);
   light.position.y = 1.4;
   g.add(light);
   scene.add(g);
@@ -165,6 +161,7 @@ function house(scene, h) {
   const door = new THREE.Mesh(new THREE.BoxGeometry(1, 1.9, 0.1), beams);
   door.position.set(0, 0.95, d / 2 + 0.03);
   const win = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.6, 0.1), new THREE.MeshBasicMaterial({ color: 0xffc56b }));
+  V.Gfx.glowNight(win.material, 1.3, 1.2);
   win.position.set(w * 0.28, 1.9, d / 2 + 0.03);
   g.add(wall, roof, door, win);
   scene.add(g);
@@ -272,18 +269,17 @@ function buildWorld(scene) {
   const sky = buildSky(scene);
   const terrain = buildTerrain();
   scene.add(terrain);
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD * 1.4, WORLD * 1.4),
-    new THREE.MeshStandardMaterial({ color: 0x2f5866, roughness: 0.2, metalness: 0.2, transparent: true, opacity: 0.82 })
-  );
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD * 1.4, WORLD * 1.4), V.Gfx.waterMaterial());
   water.rotation.x = -Math.PI / 2;
   water.position.y = WATER_Y;
+  water.renderOrder = 1;
   scene.add(water);
   buildVegetation(scene);
   const village = buildVillage(scene);
   const campFires = buildCamps(scene);
   return {
     sky,
+    water,
     terrain,
     merchant: village.merchant,
     npcs: village.npcs,
