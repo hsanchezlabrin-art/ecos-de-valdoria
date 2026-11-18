@@ -641,6 +641,7 @@
         break;
       case 'levelUp':
         spawnLevelUp(ev.ent);
+        if (ev.ent.model && V.Actors) V.Actors.celebrate(ev.ent.model);
         UI.floatText(ev.ent.pos, ev.ent.height + 1.2, `¡Nivel ${ev.level}!`, 'lvlup');
         break;
       case 'log':
@@ -1555,6 +1556,7 @@
     if (ent.stunned) ent.model.root.rotation.z = Math.sin(G.time * 12) * 0.08;
     else if (ent.model.root.rotation.z) ent.model.root.rotation.z = 0;
     const riding = ent.kind === 'player' && ent.mounted && ent.petView && ent.petView.model.saddle;
+    if (ent.model.skinned) ent.model.sitting = !!riding;
     animateModel(ent.model, G.time + (ent.kind === 'mob' ? v.phase : 0), riding ? 0 : v.walkBlend, v.atkAnim, riding ? 0 : v.swim);
     if (riding && ent.model.lLeg) {
       // Caderas sobre la silla (la figura está escalada según la raza)
@@ -1562,8 +1564,8 @@
       ent.model.lLeg.rotation.set(-1.35, 0, 0.35);
       ent.model.rLeg.rotation.set(-1.35, 0, -0.35);
     } else if (riding && ent.model.skinned) {
-      // Modelo 3D: la cadera queda sobre la silla
-      ent.model.rig.position.y += ent.petView.model.saddle - ent.model.hipY;
+      // Modelo 3D: sentado, con la cadera sobre la silla
+      ent.model.rig.position.y += ent.petView.model.saddle - ent.model.curHipY;
     } else if (ent.model.lLeg && ent.model.lLeg.rotation.z) {
       ent.model.lLeg.rotation.z = 0;
       ent.model.rLeg.rotation.z = 0;

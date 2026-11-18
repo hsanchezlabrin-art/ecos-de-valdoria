@@ -8,6 +8,18 @@
 })(function () {
   return [
     {
+      version: '0.14.0',
+      date: '2026-11-18',
+      title: 'Movimientos para cada arma',
+      items: [
+        'El Elfo 3D ataca según el arma que lleva: corte de espada, combo de dagas, estocada de lanza, hechizo con báculo y disparo con arco.',
+        'Las armas siguen el giro real de la muñeca, y el báculo, el cetro y el arco se sostienen derechos.',
+        '¡A celebrar! Al subir de nivel el personaje salta de alegría con los brazos arriba.',
+        'En la montura, el personaje 3D va sentado.',
+        'Las animaciones se comparten entre todas las razas: los próximos personajes 3D se moverán igual de bien.',
+      ],
+    },
+    {
       version: '0.13.0',
       date: '2026-11-18',
       title: 'El Elfo cobra vida en 3D',

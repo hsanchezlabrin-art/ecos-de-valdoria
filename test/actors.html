@@ -16,6 +16,7 @@
 <header>
   <select id="race"></select>
   <span id="anims"></span>
+  <select id="weapon"></select>
   <select id="grade"></select>
   <span id="msg"></span>
 </header>
@@ -44,7 +45,7 @@
   })().catch((e) => (document.getElementById('msg').textContent = 'Error: ' + e.message));
 
   function start() {
-    const { ARCHETYPES, ITEMS, GRADE_ORDER } = V.Data;
+    const { ARCHETYPES, GRADE_ORDER, WEAPON_TYPES } = V.Data;
     const cv = document.getElementById('c');
     const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
     renderer.shadowMap.enabled = true;
@@ -67,7 +68,10 @@
     for (const id of Object.keys(ARCHETYPES)) raceSel.add(new Option(id + (V.Actors.has(id, 'm') ? ' (3D)' : ''), id));
     raceSel.value = V.Actors.has('elfo', 'm') ? 'elfo' : raceSel.value;
     const gradeSel = document.getElementById('grade');
-    for (const g of GRADE_ORDER) gradeSel.add(new Option('arma ' + g, g));
+    for (const g of GRADE_ORDER) gradeSel.add(new Option(g, g));
+    const weaponSel = document.getElementById('weapon');
+    weaponSel.add(new Option('(armas de la raza)', ''));
+    for (const [id, w] of Object.entries(WEAPON_TYPES)) weaponSel.add(new Option(w.name, id));
 
     let heroes = [];
     let mode = 'idle';
@@ -85,17 +89,21 @@
       equip();
     }
     function equip() {
-      const id = `w_${raceSel.value}_${gradeSel.value}`;
-      for (const m of heroes) V.Models.setWeaponLook(m, ITEMS[id]);
+      const race = ARCHETYPES[raceSel.value];
+      const wt = weaponSel.value || (race.weaponTypes || [])[0] || 'longsword';
+      for (const m of heroes) V.Models.setWeaponLook(m, { weaponType: wt, grade: gradeSel.value });
     }
     const anims = document.getElementById('anims');
-    for (const k of ['idle', 'walk', 'attack', 'die', 'turn']) {
+    for (const k of ['idle', 'walk', 'attack', 'celebrate', 'sit', 'die', 'turn']) {
       const b = document.createElement('button');
-      b.textContent = { idle: 'Quieto', walk: 'Correr', attack: 'Atacar', die: 'Morir', turn: 'Girar' }[k];
+      b.textContent = { idle: 'Quieto', walk: 'Correr', attack: 'Atacar', celebrate: 'Celebrar', sit: 'Sentado', die: 'Morir', turn: 'Girar' }[k];
       b.dataset.k = k;
       b.onclick = () => {
         mode = k;
         deathK = 0;
+        tCeleb = 0;
+        tAtk = 0;
+        for (const m of heroes) m.sitting = k === 'sit';
         for (const m of heroes) V.Models.animateDeath(m, 0);
         anims.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
       };
@@ -103,10 +111,12 @@
     }
     raceSel.onchange = build;
     gradeSel.onchange = equip;
+    weaponSel.onchange = equip;
     build();
 
     let last = performance.now() / 1000;
     let tAtk = 0;
+    let tCeleb = 0;
     function frame() {
       const w = cv.clientWidth;
       const h = cv.clientHeight;
@@ -125,6 +135,13 @@
           atk = 1;
         } else atk = Math.max(0, atk - dt * 2.4);
       } else atk = 0;
+      if (mode === 'celebrate') {
+        tCeleb -= dt;
+        if (tCeleb <= 0) {
+          tCeleb = 4.5;
+          for (const m of heroes) V.Actors.celebrate(m);
+        }
+      }
       for (const m of heroes) {
         if (mode === 'turn') m.root.rotation.y += dt * 0.8;
         if (mode === 'die') {
