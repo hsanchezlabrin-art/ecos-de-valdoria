@@ -17,6 +17,12 @@
   const FILES = {
     elfo_m: 'assets/models/elfo_m.glb',
     elfo_f: 'assets/models/elfo_f.glb',
+    oso_m: 'assets/models/oso_m.glb',
+    oso_f: 'assets/models/oso_f.glb',
+    gnomo_m: 'assets/models/gnomo_m.glb',
+    gnomo_f: 'assets/models/gnomo_f.glb',
+    lagarto_m: 'assets/models/lagarto_m.glb',
+    lagarto_f: 'assets/models/lagarto_f.glb',
   };
   const LIBRARY = 'assets/models/animaciones.glb';
 
@@ -337,6 +343,9 @@
     }
     const left = bones.LeftHand ? armProxy(rig, bones.LeftHand) : null;
     const right = bones.RightHand ? armProxy(rig, bones.RightHand) : null;
+    // Tamaño de la raza (el Oso es más grande y el Gnomo más pequeño), igual que las figuras de código
+    const size = lookFor(cls, sex).scale || 1;
+    rig.scale.setScalar(size);
     const m = {
       kind: 'hum',
       skinned: true,
@@ -358,7 +367,7 @@
       weaponShape: null,
       bladeMat: null,
       torsoMat: null,
-      height: HEIGHT + 0.05,
+      height: (HEIGHT + 0.05) * size,
       lastT: null,
       prevAtk: 0,
       atkLeft: 0,

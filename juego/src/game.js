@@ -1565,7 +1565,7 @@
       ent.model.rLeg.rotation.set(-1.35, 0, -0.35);
     } else if (riding && ent.model.skinned) {
       // Modelo 3D: sentado, con la cadera sobre la silla
-      ent.model.rig.position.y += ent.petView.model.saddle - ent.model.curHipY;
+      ent.model.rig.position.y += ent.petView.model.saddle - ent.model.curHipY * ent.model.rig.scale.y;
     } else if (ent.model.lLeg && ent.model.lLeg.rotation.z) {
       ent.model.lLeg.rotation.z = 0;
       ent.model.rLeg.rotation.z = 0;

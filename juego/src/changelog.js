@@ -8,6 +8,17 @@
 })(function () {
   return [
     {
+      version: '0.15.0',
+      date: '2026-11-18',
+      title: 'Oso, Gnomo y Lagarto en 3D',
+      items: [
+        'El Oso Pardo, el Gnomo y el Lagarto estrenan modelo 3D, en versión hombre y mujer, con el mismo estilo low-poly del Elfo.',
+        'Cada raza mantiene su tamaño: el Oso es grandote y el Gnomo bien pequeñito.',
+        'Todos usan los movimientos nuevos: corren, atacan según su arma, celebran al subir de nivel y van sentados en la montura.',
+        'El Hada-Gato llegará en 3D muy pronto.',
+      ],
+    },
+    {
       version: '0.14.0',
       date: '2026-11-18',
       title: 'Movimientos para cada arma',
