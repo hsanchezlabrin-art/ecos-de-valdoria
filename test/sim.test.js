@@ -1,6 +1,17 @@
 // Prueba de la simulación sin gráficos, en Node: es la base del servidor online.
 // Uso: node test/sim.test.js   (también corre en GitHub Actions en cada push)
 const assert = require('assert');
+
+// Azar con semilla fija: la prueba sale igual en cada ejecución (sin fallos por mala suerte)
+let seed = 20261118;
+Math.random = () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = seed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
 const Sim = require('../juego/src/sim.js');
 const Data = require('../juego/src/data.js');
 const Terrain = require('../juego/src/terrain.js');
