@@ -8,6 +8,20 @@
 })(function () {
   return [
     {
+      version: '0.7.0',
+      date: '2026-11-18',
+      title: 'Cinco razas y cambios de clase',
+      items: [
+        'Cinco razas nuevas: Oso Pardo (tanque), Elfo del Bosque Cubo (arquero), Gnomo Ingeniero (magia y torretas), Hada-Gato (sanadora) y Caballero Lagarto (espadachín).',
+        'Tus personajes se conservan: el Guerrero pasa a Caballero Lagarto, la Arquera a Elfo y el Mago a Gnomo, con su nivel, oro y equipo equivalente.',
+        'Nuevo Maestro Aldric en la aldea: cambios de clase en los niveles 10 (Despertar), 25 (eliges rama A o B) y 40 (Ascensión Maestra), cada uno con su misión.',
+        'Cada raza tiene 5 habilidades, una pasiva y una Ultimate por rama, que se vuelve Maestra en el nivel 40. Nivel máximo: 50.',
+        'Equipo por grados: Madera, Cobre, Cristal Azul, Oro Morado, Diamante Dorado y Arcoíris Celestial. Cada raza usa su tipo de armadura y sus armas.',
+        'Sin castigos: al caer no pierdes experiencia ni objetos y despiertas en un lugar seguro cerca.',
+        'En grupo, cada jugador recibe su propio botín y oro.',
+      ],
+    },
+    {
       version: '0.6.0',
       date: '2026-11-18',
       title: 'Panel de control del servidor',

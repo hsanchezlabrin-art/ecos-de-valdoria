@@ -74,14 +74,78 @@
       head.add(part(box(0.06, 0.15, 0.06), t, 0.13, -0.14, 0.25));
       head.add(part(box(0.06, 0.15, 0.06), t, -0.13, -0.14, 0.25));
     }
-    if (o.ears) {
+    if (o.ears === true) {
       const e1 = part(box(0.08, 0.1, 0.34), skin, 0.32, 0.06, -0.02);
       const e2 = part(box(0.08, 0.1, 0.34), skin, -0.32, 0.06, -0.02);
       e1.rotation.y = 0.9;
       e2.rotation.y = -0.9;
       head.add(e1, e2);
+    } else if (o.ears === 'pointy') {
+      // Elfo: orejas largas y puntiagudas hacia arriba
+      for (const sx of [1, -1]) {
+        const e = part(box(0.06, 0.1, 0.3), skin, 0.3 * sx, 0.08, -0.04);
+        e.rotation.set(0.5, 0.5 * sx, 0.6 * sx);
+        head.add(e);
+      }
+    } else if (o.ears === 'round') {
+      // Oso: orejas redondas (cubos) sobre la cabeza
+      const em = mat(o.hair || o.skin);
+      head.add(part(box(0.17, 0.17, 0.1), em, 0.22, 0.3, -0.02), part(box(0.17, 0.17, 0.1), em, -0.22, 0.3, -0.02));
+    } else if (o.ears === 'cat') {
+      // Hada-Gato: orejas de gato triangulares
+      for (const sx of [1, -1]) {
+        const e = part(geo('catear', () => new THREE.ConeGeometry(0.11, 0.24, 4)), skin, 0.18 * sx, 0.34, -0.02);
+        e.rotation.y = Math.PI / 4;
+        head.add(e);
+      }
+    }
+    if (o.snout) {
+      // Hocico de oso o de lagarto
+      head.add(part(box(0.26, 0.18, 0.2), mat(o.snout), 0, -0.08, 0.3));
+      head.add(part(box(0.1, 0.06, 0.04), mat(0x1a1410), 0, -0.02, 0.41));
+    }
+    if (o.crest) {
+      // Cresta dracónica
+      const cm = mat(o.crest);
+      for (let i = 0; i < 3; i++) head.add(part(box(0.06, 0.16 - i * 0.03, 0.12), cm, 0, 0.32 - i * 0.04, -0.06 - i * 0.13));
+    }
+    if (o.goggles) {
+      // Gnomo: gafas de ingeniero sobre la frente
+      const gm = mat(o.goggles, { metalness: 0.4, roughness: 0.3 });
+      head.add(part(box(0.15, 0.12, 0.06), gm, 0.1, 0.14, 0.27), part(box(0.15, 0.12, 0.06), gm, -0.1, 0.14, 0.27));
+      head.add(part(box(0.62, 0.05, 0.05), mat(0x3a2a1c), 0, 0.14, 0.02));
     }
     if (o.cape) rig.add(part(box(0.74, 1.15, 0.06), mat(o.cape), 0, 1.33, -0.27));
+    if (o.tail) {
+      // Cola: corta (oso), larga y gruesa (lagarto) o fina y curvada (gato)
+      const tm = mat(o.tail === 'stub' ? o.hair || o.skin : o.skin);
+      if (o.tail === 'stub') rig.add(part(box(0.2, 0.2, 0.16), tm, 0, 1.0, -0.3));
+      else if (o.tail === 'lizard') {
+        // Tres segmentos que bajan hasta el suelo
+        const t1 = part(box(0.26, 0.24, 0.5), tm, 0, 0.98, -0.38);
+        t1.rotation.x = 0.45;
+        const t2 = part(box(0.2, 0.18, 0.45), tm, 0, 0.78, -0.72);
+        t2.rotation.x = 0.55;
+        const t3 = part(box(0.14, 0.12, 0.42), tm, 0, 0.58, -1.05);
+        t3.rotation.x = 0.6;
+        rig.add(t1, t2, t3);
+      } else {
+        const t1 = part(box(0.08, 0.08, 0.5), tm, 0, 1.0, -0.42);
+        t1.rotation.x = -0.6;
+        const t2 = part(box(0.08, 0.3, 0.08), tm, 0, 1.35, -0.62);
+        rig.add(t1, t2);
+      }
+    }
+    if (o.wings) {
+      // Alas de hada translúcidas
+      const wm = mat(o.wings, { transparent: true, opacity: 0.55, emissive: o.wings, emissiveIntensity: 0.15, side: THREE.DoubleSide });
+      for (const sx of [1, -1]) {
+        const wg = part(box(0.62, 0.8, 0.02), wm, 0.36 * sx, 1.62, -0.32);
+        wg.rotation.set(0.1, -0.5 * sx, 0.35 * sx);
+        wg.castShadow = false;
+        rig.add(wg);
+      }
+    }
     if (o.robe) {
       const skirt = part(geo('robe', () => new THREE.CylinderGeometry(0.42, 0.56, 0.95, 8)), body, 0, 0.5, 0);
       rig.add(skirt);
@@ -99,7 +163,16 @@
     const wt = o.weapon === false ? null : o.weaponType || (o.club ? 'club' : 'sword');
     let weapon = null;
     let bladeMat = null;
-    if (wt === 'sword' || wt === 'club') {
+    if (wt === 'hammer') {
+      // Martillo de bloques: mango y cabeza que cambia de color según el grado
+      weapon = new THREE.Group();
+      weapon.position.set(0, -0.82, 0.04);
+      weapon.rotation.x = Math.PI / 2;
+      rArm.add(weapon);
+      weapon.add(part(box(0.1, 1.15, 0.1), mat(0x5b4129), 0, 0.5, 0));
+      bladeMat = mat(0x9a8f80, { metalness: 0.25, roughness: 0.6 });
+      weapon.add(part(box(0.5, 0.32, 0.32), bladeMat, 0, 1.1, 0));
+    } else if (wt === 'sword' || wt === 'club') {
       weapon = new THREE.Group();
       weapon.position.set(0, -0.82, 0.04);
       weapon.rotation.x = Math.PI / 2;
@@ -233,28 +306,39 @@
     }
   }
 
-  // [color, emisivo, intensidad] por rareza y tipo de arma
+  // [color, emisivo, intensidad] por grado y tipo de arma
   const LOOKS = {
     sword: {
-      comun: [0xc9ccd2, 0x000000, 0],
-      refinado: [0xdfe4ea, 0x0b2a12, 0.22],
-      raro: [0x8fb8ff, 0x1a3a90, 0.5],
-      epico: [0xc79bff, 0x5a1fa0, 0.77],
-      legendario: [0xffc46b, 0xb05a10, 0.99],
+      madera: [0x9a7448, 0x000000, 0],
+      cobre: [0xc8844a, 0x1a0a02, 0.1],
+      azul: [0x8fb8ff, 0x1a3a90, 0.5],
+      morado: [0xc79bff, 0x5a1fa0, 0.77],
+      dorado: [0xffc46b, 0xb05a10, 0.99],
+      arcoiris: [0xffe6ff, 0xd060c0, 1.1],
+    },
+    hammer: {
+      madera: [0x8a6a46, 0x000000, 0],
+      cobre: [0x9a9088, 0x000000, 0],
+      azul: [0x6a9cff, 0x1a3a90, 0.5],
+      morado: [0xb88cff, 0x5a1fa0, 0.72],
+      dorado: [0xffc46b, 0xb05a10, 0.94],
+      arcoiris: [0xffe6ff, 0xd060c0, 1.05],
     },
     bow: {
-      comun: [0x6b4a2e, 0x000000, 0],
-      refinado: [0x7a5a32, 0x1d3a10, 0.28],
-      raro: [0xd4dde8, 0x2a4a90, 0.44],
-      epico: [0xb88cff, 0x5a1fa0, 0.72],
-      legendario: [0xffc46b, 0xb05a10, 0.94],
+      madera: [0x6b4a2e, 0x000000, 0],
+      cobre: [0x7a5a32, 0x1d1206, 0.1],
+      azul: [0xd4dde8, 0x2a4a90, 0.44],
+      morado: [0xb88cff, 0x5a1fa0, 0.72],
+      dorado: [0xffc46b, 0xb05a10, 0.94],
+      arcoiris: [0xffe6ff, 0xd060c0, 1.05],
     },
     staff: {
-      comun: [0x9fc4ff, 0x3a6ad0, 0.33],
-      refinado: [0x9fe08a, 0x2f8a2a, 0.55],
-      raro: [0x6a9cff, 0x1f4ad0, 0.83],
-      epico: [0xd09bff, 0x7a2ad0, 1.1],
-      legendario: [0xffd27a, 0xd07a10, 1.32],
+      madera: [0x9fe08a, 0x2f8a2a, 0.33],
+      cobre: [0xffb06a, 0x8a4010, 0.5],
+      azul: [0x6a9cff, 0x1f4ad0, 0.83],
+      morado: [0xd09bff, 0x7a2ad0, 1.1],
+      dorado: [0xffd27a, 0xd07a10, 1.32],
+      arcoiris: [0xfff0ff, 0xe070d0, 1.4],
     },
   };
 
@@ -263,7 +347,7 @@
     m.weapon.visible = !!item;
     if (!item || !m.bladeMat) return;
     const table = LOOKS[m.weaponType] || LOOKS.sword;
-    const [c, e, i] = table[item.rarity] || table.comun;
+    const [c, e, i] = table[item.grade || item.rarity] || table.madera;
     m.bladeMat.color.setHex(c);
     m.bladeMat.emissive.setHex(e);
     m.bladeMat.emissiveIntensity = i;

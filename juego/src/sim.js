@@ -1,6 +1,6 @@
 // Simulación del juego, sin gráficos ni interfaz: jugadores, monstruos, combate,
-// habilidades, objetos, grupos y progresión. Es la misma lógica que corre el servidor
-// en línea (Node), por eso no usa THREE, document ni window.
+// habilidades, objetos, grupos, progresión y cambios de clase. Es la misma lógica que corre
+// el servidor en línea (Node), por eso no usa THREE, document ni window.
 //
 // Modelo: un "mundo" con varios jugadores. Los comandos (moverse, atacar, usar
 // habilidad…) cambian el estado; step(world, dt) avanza el tiempo; todo lo que ocurre
@@ -13,8 +13,9 @@
     V.Sim = factory(V.Data, V.Terrain);
   }
 })(function (Data, Terrain) {
-  const { CLASSES, MOBS, ITEMS, ZONES, NPCS, MAX_LEVEL, xpToNext, mobStats, playerBaseStats, sellPrice, resolveDrop, shopFor, CRIT_MULT, MOVE_SPEED } = Data;
-  const { heightAt, inVillage, WORLD_LIMIT, collide, waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y } = Terrain;
+  const { ARCHETYPES, isArchetype, MOBS, ITEMS, ZONES, NPCS, MAX_LEVEL, STAGES, GRADES, ARMOR_TYPES, xpToNext, mobStats, playerBaseStats, sellPrice, resolveDrop, shopFor, CRIT_MULT, MOVE_SPEED } = Data;
+  const { skillsFor, passiveFor, equipProblem, startGear, questFor, weaponFor, className, raceName } = Data;
+  const { heightAt, inVillage, zoneAt, WORLD_LIMIT, collide, waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y } = Terrain;
 
   const SPEED = MOVE_SPEED;
   const SWIM_SPEED = 0.6; // nadar es más lento
@@ -26,8 +27,9 @@
   const INV_SLOTS = 30;
   const TALK_R = 4;
   const SHOP_R = 8;
+  const MASTER_R = 7;
   const PARTY_MAX = 7;
-  const PARTY_R = 45; // distancia para compartir experiencia
+  const PARTY_R = 45; // distancia para compartir experiencia, botín y misiones
   const PLAYER_R = 0.45;
   const SPAWN = { x: 0, z: 5 };
   const PROJ_SPEED = { arrow: 38, fire: 24, arcane: 26 };
@@ -35,8 +37,9 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const randInt = (a, b) => Math.floor(rand(a, b + 1));
   const d2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
-  const bodyR = (m) => (m.def.scale || 1) * 0.45;
+  const bodyR = (m) => (m.def ? (m.def.scale || 1) * 0.45 : PLAYER_R);
   const entR = (e) => (e.kind === 'mob' ? 0.4 * (e.def.scale || 1) : PLAYER_R);
+  const clampStage = (s) => Math.max(0, Math.min(3, Math.floor(+s) || 0));
 
   // ---------- Mundo y eventos ----------
 
@@ -56,26 +59,33 @@
   // ---------- Jugadores ----------
 
   function newCharacter(name, cls, sex = 'm') {
-    const c = CLASSES[cls];
+    const id = isArchetype(cls) ? cls : 'lagarto';
+    const magic = ARCHETYPES[id].combat === 'magic';
     return {
+      v: 4,
       name,
-      cls,
+      cls: id,
       sex: sex === 'f' ? 'f' : 'm',
       level: 1,
       xp: 0,
       gold: 40,
+      stage: 0,
+      branch: null,
+      quest: null,
       inv: [
         { id: 'pocion_vida', qty: 4 },
-        { id: 'pocion_mana', qty: cls === 'mago' ? 4 : 2 },
+        { id: 'pocion_mana', qty: magic ? 4 : 2 },
       ],
-      equip: { weapon: c.start, armor: null },
+      equip: startGear(id),
       pos: { ...SPAWN },
     };
   }
 
   function addPlayer(w, data, id = `p${w.nextId++}`) {
-    const cls = CLASSES[data.cls] ? data.cls : 'guerrero';
-    const cdef = CLASSES[cls];
+    const cls = isArchetype(data.cls) ? data.cls : 'lagarto';
+    const cdef = ARCHETYPES[cls];
+    const stage = clampStage(data.stage);
+    const branch = stage >= 2 && (data.branch === 'a' || data.branch === 'b') ? data.branch : null;
     const p = {
       id,
       kind: 'player',
@@ -83,12 +93,16 @@
       cls,
       sex: data.sex === 'f' ? 'f' : 'm',
       cdef,
-      skills: cdef.skills,
+      stage: branch || stage < 2 ? stage : 1,
+      branch,
+      quest: validQuest(data.quest),
+      skills: null,
+      passive: null,
       level: data.level,
       xp: data.xp,
       gold: data.gold,
       inv: data.inv.map((s) => ({ ...s })),
-      equip: { ...data.equip },
+      equip: { weapon: null, armor: null, ...data.equip },
       pos: { x: data.pos.x, y: 0, z: data.pos.z },
       facing: Math.PI,
       height: 2.5,
@@ -100,12 +114,10 @@
       atkTimer: 0,
       pendingHit: 0,
       cds: {},
-      buffT: 0,
-      buffPct: 0,
-      buffCrit: 0,
-      buffName: '',
+      buffs: {},
       shield: 0,
       shieldT: 0,
+      bubble: 0,
       leap: null,
       combatT: 0,
       queued: null,
@@ -117,9 +129,25 @@
       party: null,
       invite: null,
       slide: null,
+      spells: 0,
+      freeNext: false,
+      basics: 0,
+      frenzy: 0,
+      frenzyT: 0,
+      turrets: [],
+      aura: null,
       hp: 0,
       mp: 0,
     };
+    refreshKit(p);
+    // Equipo que ya no corresponde (otra raza, grado bloqueado…): vuelve al inventario
+    for (const key of ['weapon', 'armor']) {
+      const it = ITEMS[p.equip[key]];
+      if (p.equip[key] && (!it || it.type !== key || equipProblem(p, it))) {
+        if (it && p.inv.length < INV_SLOTS) p.inv.push({ id: p.equip[key], qty: 1 });
+        p.equip[key] = null;
+      }
+    }
     collide(p.pos, PLAYER_R);
     p.pos.y = groundY(p.pos.x, p.pos.z);
     w.players.set(id, p);
@@ -130,24 +158,42 @@
     return p;
   }
 
+  // Habilidades y pasiva según raza, etapa y rama
+  function refreshKit(p) {
+    p.skills = skillsFor(p.cls, p.stage, p.branch);
+    p.passive = passiveFor(p.cls, p.stage, p.branch) || {};
+  }
+
+  function validQuest(q) {
+    if (!q || typeof q !== 'object') return null;
+    const st = clampStage(q.stage);
+    const def = questFor(st);
+    if (!def) return null;
+    return { stage: st, kills: Math.max(0, Math.min(def.need, Math.floor(+q.kills) || 0)), branch: q.branch === 'a' || q.branch === 'b' ? q.branch : null };
+  }
+
   function removePlayer(w, id) {
     const p = w.players.get(id);
     if (!p) return;
     partyLeave(w, p, true);
     w.players.delete(id);
     for (const m of w.mobs) if (m.aggro === p) dropAggro(m);
+    for (const t of p.turrets) t.alive = false;
   }
 
   function serialize(p) {
     const alive = !p.dead;
     return {
-      v: 3,
+      v: 4,
       name: p.name,
       cls: p.cls,
       sex: p.sex,
       level: p.level,
       xp: p.xp,
       gold: p.gold,
+      stage: p.stage,
+      branch: p.branch,
+      quest: p.quest ? { ...p.quest } : null,
       inv: p.inv.map((s) => ({ ...s })),
       equip: { ...p.equip },
       pos: alive ? { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2) } : { ...SPAWN },
@@ -160,24 +206,69 @@
     const b = playerBaseStats(p.cls, p.level);
     const wpn = ITEMS[p.equip.weapon];
     const arm = ITEMS[p.equip.armor];
+    const pas = p.passive || {};
     p.stats = {
-      maxHp: b.maxHp + (arm ? arm.hp : 0),
-      maxMp: b.maxMp,
+      maxHp: Math.round((b.maxHp + (arm ? arm.hp : 0)) * (1 + (pas.hpPct || 0))),
+      maxMp: b.maxMp + (arm ? arm.mp || 0 : 0),
       atk: b.atk + (wpn ? wpn.atk : 0),
       def: b.def + (arm ? arm.def : 0),
       crit: b.crit + (wpn && wpn.crit ? wpn.crit : 0),
       critMult: CRIT_MULT,
-      atkSpeed: p.cdef.atkSpeed, // segundos entre ataques básicos
-      speed: SPEED,
-      range: p.cdef.range,
+      atkSpeed: p.cdef.atkSpeed, // segundos entre ataques básicos (sin bonificaciones)
+      speed: SPEED * (1 + (pas.speedPct || 0)),
+      range: Math.round(p.cdef.range * (1 + (pas.rangePct || 0)) * 10) / 10,
+      evade: arm ? arm.evade || 0 : 0,
+      heal: 1 + (arm ? arm.heal || 0 : 0) + (pas.healPct || 0),
+      block: pas.block || 0,
     };
     if (p.hp > p.stats.maxHp) p.hp = p.stats.maxHp;
+    if (p.mp > p.stats.maxMp) p.mp = p.stats.maxMp;
     emit(w, { type: 'equip', ent: p });
   }
 
-  const playerAtk = (p) => p.stats.atk * (1 + (p.buffT > 0 ? p.buffPct : 0));
-  const playerCrit = (p) => p.stats.crit + (p.buffT > 0 ? p.buffCrit : 0);
-  const reachTo = (p, m) => p.cdef.range + bodyR(m);
+  // ---------- Bonificaciones temporales (buffs) ----------
+
+  const BUFF_KEYS = ['atk', 'crit', 'speed', 'haste', 'dr', 'evade', 'thorns', 'cdr'];
+  function addBuff(w, p, key, name, b) {
+    const old = p.buffs[key];
+    p.buffs[key] = { name, t: b.dur, ccImmune: !!b.ccImmune };
+    for (const k of BUFF_KEYS) if (b[k]) p.buffs[key][k] = b[k];
+    if (!old) emit(w, { type: 'buff', to: p.id, name, dur: b.dur });
+  }
+  const buffSum = (p, k) => {
+    let s = 0;
+    for (const id in p.buffs) s += p.buffs[id][k] || 0;
+    if (p.aura && p.aura[k]) s += p.aura[k];
+    return s;
+  };
+  const playerAtk = (p) => p.stats.atk * (1 + buffSum(p, 'atk'));
+  const playerCrit = (p) => p.stats.crit + buffSum(p, 'crit');
+  const moveSpeed = (p) => p.stats.speed * (1 + buffSum(p, 'speed'));
+  const attackInterval = (p) => p.stats.atkSpeed / (1 + buffSum(p, 'haste') + p.frenzy * (p.passive.frenzy || 0));
+  const reachTo = (p, m) => p.stats.range + bodyR(m);
+
+  // Aliados: tú y los miembros de tu grupo vivos a menos de r metros (de un punto)
+  function alliesNear(w, p, r, at = p.pos, includeDead = false) {
+    const party = p.party ? w.parties.get(p.party) : null;
+    const ids = party ? party.members : [p.id];
+    const out = [];
+    for (const id of ids) {
+      const q = w.players.get(id);
+      if (q && (includeDead || !q.dead) && d2(q.pos, at) <= r) out.push(q);
+    }
+    if (!out.includes(p) && (includeDead || !p.dead) && d2(p.pos, at) <= r) out.push(p);
+    return out;
+  }
+
+  function healPlayer(w, healer, q, amount) {
+    if (q.dead || amount <= 0) return 0;
+    const amt = Math.round(amount);
+    const before = q.hp;
+    q.hp = Math.min(q.stats.maxHp, q.hp + amt);
+    const done = Math.round(q.hp - before);
+    if (done > 0) float(w, q, `+${done}`, 'heal');
+    return done;
+  }
 
   // ---------- Monstruos ----------
 
@@ -212,6 +303,10 @@
           moving: false,
           slowT: 0,
           stunT: 0,
+          rootT: 0,
+          polyT: 0,
+          markT: 0,
+          markPct: 0,
           dots: [],
           slide: null,
         };
@@ -239,14 +334,41 @@
     m.atkTimer = rand(0.6, 1.4);
     m.slowT = 0;
     m.stunT = 0;
+    m.rootT = 0;
+    m.polyT = 0;
+    m.markT = 0;
     m.dots = [];
     m.deadT = 0;
+    m.hitBy = new Set();
     emit(w, { type: 'mobSpawn', ent: m });
   }
 
   function dropAggro(m) {
     m.aggro = null;
     m.state = 'return';
+  }
+
+  const isBurning = (m) => m.dots.some((d) => d.kind === 'burn');
+  function stunMob(w, m, dur, label = 'Aturdido') {
+    if (m.dead || !dur) return;
+    m.stunT = Math.max(m.stunT, dur);
+    float(w, m, label, 'stun', 0.3);
+  }
+  function addDot(w, p, m, dot, kind) {
+    if (m.dead || !dot) return;
+    const total = playerAtk(p) * dot.mult;
+    m.dots.push({ owner: p, perSec: total / dot.dur, left: dot.dur, tick: 1, kind });
+    float(w, m, kind === 'burn' ? 'Quemado' : 'Envenenado', kind === 'burn' ? 'burn' : 'poison', 0.3);
+  }
+  function knockBack(m, from, dist) {
+    if (m.def.boss) return;
+    const dx = m.pos.x - from.x;
+    const dz = m.pos.z - from.z;
+    const len = Math.hypot(dx, dz) || 1;
+    m.pos.x += (dx / len) * dist;
+    m.pos.z += (dz / len) * dist;
+    collide(m.pos, entR(m));
+    m.pos.y = groundY(m.pos.x, m.pos.z);
   }
 
   // ---------- Movimiento, colisiones y agua ----------
@@ -263,7 +385,7 @@
   // Avanza hacia un punto rodeando obstáculos: si el camino directo está bloqueado,
   // prueba desviarse siempre hacia el mismo lado (seguir la pared) hasta despejarlo.
   const TRIES = [0.5, 1, 1.45, 1.9, 2.4];
-  function stepToward(ent, target, speed, dt, stopDist) {
+  function stepToward(ent, target, speed, dt, stopDist, turn = true) {
     const dx = target.x - ent.pos.x;
     const dz = target.z - ent.pos.z;
     const dist = Math.hypot(dx, dz);
@@ -306,7 +428,7 @@
     ent.pos.x = best.pos.x;
     ent.pos.z = best.pos.z;
     ent.pos.y = groundY(ent.pos.x, ent.pos.z);
-    if (best.moved > 0.0005) face(ent, ent.pos.x + mx, ent.pos.z + mz, dt); // mira hacia donde camina
+    if (turn && best.moved > 0.0005) face(ent, ent.pos.x + mx, ent.pos.z + mz, dt); // mira hacia donde camina
     return best.moved > 0.0005;
   }
 
@@ -321,23 +443,37 @@
 
   function damageMob(w, p, m, mult, opts = {}) {
     if (!m || m.dead) return;
-    const r = opts.noCrit ? calcDamage(playerAtk(p), m.armor, mult, 0) : calcDamage(playerAtk(p), m.armor, mult, playerCrit(p), p.stats.critMult);
+    let critMult = p.stats.critMult;
+    // Ojo del Sol: el crítico pega más cuanto más lejos está el objetivo
+    if (p.passive.farCrit) critMult += p.passive.farCrit * Math.min(1, d2(p.pos, m.pos) / p.stats.range);
+    const chance = opts.noCrit ? 0 : opts.forceCrit ? 1 : playerCrit(p);
+    const r = calcDamage(playerAtk(p), m.armor, mult * (m.markT > 0 ? 1 + m.markPct : 1), chance, critMult);
     m.hp -= r.dmg;
     p.combatT = 6;
+    m.hitBy.add(p.id);
     float(w, m, r.crit ? `¡${r.dmg}!` : `${r.dmg}`, opts.cls || (r.crit ? 'crit' : 'dmg'));
+    // La polimorfia se rompe al recibir daño
+    if (m.polyT > 0) {
+      m.polyT = 0;
+      m.stunT = 0;
+    }
     // Si estaba volviendo a su sitio y lo atacan, vuelve a pelear (sin haberse curado)
     if (m.state === 'return') m.state = 'idle';
     if (!m.aggro || m.aggro.dead) m.aggro = p;
     if (m.hp <= 0) killMob(w, p, m);
   }
 
-  // Reparte la experiencia entre el grupo cercano: más miembros, más bonificación
-  function shareXp(w, killer, m, xp) {
+  // Jugadores que reciben experiencia, botín y progreso de misión por una muerte:
+  // el que la causó y su grupo vivo cercano
+  function creditedFor(w, killer, m) {
     const party = killer.party ? w.parties.get(killer.party) : null;
-    const members = party
-      ? party.members.map((id) => w.players.get(id)).filter((q) => q && !q.dead && d2(q.pos, m.pos) <= PARTY_R)
-      : [killer];
+    const members = party ? party.members.map((id) => w.players.get(id)).filter((q) => q && !q.dead && d2(q.pos, m.pos) <= PARTY_R) : [killer];
     if (!members.includes(killer)) members.push(killer);
+    return members;
+  }
+
+  // Reparte la experiencia entre el grupo cercano: más miembros, más bonificación
+  function shareXp(w, killer, m, xp, members) {
     const bonus = 1 + 0.1 * (members.length - 1);
     const levels = members.reduce((a, q) => a + q.level, 0);
     for (const q of members) {
@@ -347,8 +483,7 @@
       else if (diff <= -4) share *= 0.4;
       else if (diff >= 3) share *= 1.2;
       share = Math.max(1, Math.round(share));
-      if (q !== killer) log(w, q, `Experiencia de grupo: +${share} XP`, 'sys');
-      else killer.lastXp = share;
+      q.lastXp = share;
       gainXp(w, q, share);
     }
   }
@@ -368,26 +503,47 @@
         pl.queued = null;
       }
     }
-    const gold = randInt(m.gold[0], m.gold[1]);
-    p.gold += gold;
-    shareXp(w, p, m, m.xp);
-    const xp = p.lastXp || 0;
-    log(w, p, `${m.def.name} ha caído. +${xp} XP · +${gold} oro`, 'sys');
-    float(w, m, `+${xp} XP`, 'xp', 0.6);
-    for (const [raw, chance] of m.def.drops) {
-      if (Math.random() >= chance) continue;
-      const id = resolveDrop(raw, p.cls);
-      if (addItem(p, id, 1)) emit(w, { type: 'loot', to: p.id, id, qty: 1, verb: 'Obtienes' });
-      else log(w, p, 'Tu inventario está lleno.', 'warn');
+    const members = creditedFor(w, p, m);
+    shareXp(w, p, m, m.xp, members);
+    // Botín personal: cada miembro tira su propio botín (adaptado a su raza) y su oro
+    for (const q of members) {
+      const gold = randInt(m.gold[0], m.gold[1]);
+      q.gold += gold;
+      log(w, q, `${m.def.name} ha caído. +${q.lastXp || 0} XP · +${gold} oro`, 'sys');
+      if (q === p) float(w, m, `+${q.lastXp || 0} XP`, 'xp', 0.6);
+      for (const [raw, chance] of m.def.drops) {
+        if (Math.random() >= chance) continue;
+        const id = resolveDrop(raw, q.cls);
+        if (addItem(q, id, 1)) emit(w, { type: 'loot', to: q.id, id, qty: 1, verb: 'Obtienes' });
+        else log(w, q, 'Tu inventario está lleno.', 'warn');
+      }
+      questProgress(w, q, m);
+      emit(w, { type: 'inventory', to: q.id });
     }
     if (m.def.boss) emit(w, { type: 'banner', to: null, title: `${m.def.name} ha sido derrotado`, sub: 'Vuelve a aparecer en 3 minutos' });
-    emit(w, { type: 'inventory', to: p.id });
   }
 
   function mobHitsPlayer(w, m, p) {
     if (p.dead || p.leap) return;
+    // Esquivar (armadura ligera, Paso Veloz)
+    if (Math.random() < Math.min(0.6, p.stats.evade + buffSum(p, 'evade'))) {
+      float(w, p, 'Esquiva', 'mana');
+      return;
+    }
+    // Burbuja Estelar: bloquea el golpe entero
+    if (p.bubble > 0) {
+      p.bubble = 0;
+      float(w, p, 'Burbuja', 'mana');
+      emit(w, { type: 'ring', pos: { ...p.pos }, color: 0xbfe6ff, r: 1.6, life: 0.4 });
+      return;
+    }
     const r = calcDamage(m.atk, p.stats.def, 1, 0.05);
-    let dmg = r.dmg;
+    let dmg = r.dmg * (1 - Math.min(0.7, buffSum(p, 'dr')));
+    if (p.stats.block && Math.random() < p.stats.block) {
+      dmg *= 0.5;
+      float(w, p, 'Bloqueo', 'mana', 0.3);
+    }
+    dmg = Math.max(1, Math.round(dmg));
     if (p.shield > 0) {
       const absorbed = Math.min(p.shield, dmg);
       p.shield -= absorbed;
@@ -396,6 +552,9 @@
       if (absorbed) float(w, p, `(${absorbed})`, 'mana');
     }
     p.combatT = 6;
+    // Escudo de Brasas / Fortaleza Maestra: devuelve daño a quien golpea
+    const thorns = buffSum(p, 'thorns');
+    if (thorns > 0) damageMob(w, p, m, thorns, { noCrit: true, cls: 'burn' });
     if (dmg <= 0) return;
     p.hp -= dmg;
     float(w, p, `-${dmg}`, 'hurt');
@@ -410,27 +569,45 @@
     p.queued = null;
     p.moveTarget = null;
     p.shield = 0;
+    p.bubble = 0;
+    p.buffs = {};
     p.target = null;
     p.leap = null;
+    p.diedAt = { x: p.pos.x, z: p.pos.z };
     for (const mob of w.mobs) if (mob.aggro === p) dropAggro(mob);
-    log(w, p, cause === 'agua' ? 'Te has ahogado.' : `Has caído ante ${cause}.`, 'warn');
+    log(w, p, cause === 'agua' ? 'Te has mareado en el agua.' : `Te has mareado ante ${cause}. No pierdes nada: descansa y vuelve.`, 'warn');
     emit(w, { type: 'playerDeath', to: p.id, ent: p });
   }
 
-  function respawn(w, p) {
-    if (!p.dead) return;
-    const loss = p.level >= MAX_LEVEL ? 0 : Math.floor(xpToNext(p.level) * 0.05);
-    p.xp = Math.max(0, p.xp - loss);
+  // Punto seguro cercano: en el camino entre la aldea y la zona donde caíste (fuera de ella)
+  function safePointNear(pos) {
+    const z = pos && zoneAt(pos);
+    if (!z || z.safe) return { x: SPAWN.x, z: SPAWN.z };
+    const dist = Math.hypot(z.x, z.z);
+    const k = Math.max(0, dist - z.r - 7) / dist;
+    const pt = { x: z.x * k, z: z.z * k };
+    collide(pt, PLAYER_R);
+    return waterDepth(pt.x, pt.z) > SWIM_DEPTH ? { x: SPAWN.x, z: SPAWN.z } : pt;
+  }
+
+  function revivePlayer(w, p, at, pct) {
     p.dead = false;
-    p.pos.x = SPAWN.x + rand(-1.5, 1.5);
-    p.pos.z = SPAWN.z + rand(-1, 1);
+    p.pos.x = at.x + rand(-1.2, 1.2);
+    p.pos.z = at.z + rand(-1, 1);
     collide(p.pos, PLAYER_R);
     p.pos.y = groundY(p.pos.x, p.pos.z);
-    p.hp = Math.round(p.stats.maxHp * 0.7);
-    p.mp = Math.round(p.stats.maxMp * 0.7);
+    p.hp = Math.round(p.stats.maxHp * pct);
+    p.mp = Math.max(p.mp, Math.round(p.stats.maxMp * pct));
     p.breath = BREATH_MAX;
     emit(w, { type: 'playerRespawn', to: p.id, ent: p });
-    log(w, p, loss ? `Despiertas en la aldea. Pierdes ${loss} XP.` : 'Despiertas en la aldea.', 'sys');
+  }
+
+  // Sin castigo: no se pierde experiencia ni objetos al caer
+  function respawn(w, p) {
+    if (!p.dead) return;
+    const at = safePointNear(p.diedAt);
+    revivePlayer(w, p, at, 0.7);
+    log(w, p, at.x === SPAWN.x && at.z === SPAWN.z ? 'Despiertas en la aldea, sano y salvo.' : 'Despiertas en un lugar seguro, cerca de donde estabas.', 'sys');
   }
 
   function gainXp(w, p, xp) {
@@ -444,15 +621,91 @@
       recalcStats(w, p);
       p.hp = p.stats.maxHp;
       p.mp = p.stats.maxMp;
-      const unlocked = p.skills.find((s) => s.lvl === p.level);
-      emit(w, { type: 'banner', to: p.id, title: `Nivel ${p.level}`, sub: unlocked ? `Nueva habilidad: ${unlocked.name}` : 'Tus fuerzas aumentan' });
+      const st = STAGES.find((s) => s.lvl === p.level && s.stage > p.stage);
+      const grade = Object.values(GRADES).find((g) => g.lvl === p.level && g.stage <= p.stage);
+      const sub = st ? `Habla con el Maestro de Clase: ¡ya puedes hacer el ${st.name}!` : grade ? `Ya puedes usar equipo de grado ${grade.name}` : 'Tus fuerzas aumentan';
+      emit(w, { type: 'banner', to: p.id, title: `Nivel ${p.level}`, sub });
       log(w, p, `Has alcanzado el nivel ${p.level}.`, 'lvl');
+      if (st) log(w, p, `Nuevo cambio de clase disponible: ${st.name}. Ve con el Maestro Aldric en la aldea.`, 'lvl');
     }
     if (up) {
       emit(w, { type: 'levelUp', ent: p, level: p.level }); // columna de luz visible para todos
       emit(w, { type: 'inventory', to: p.id });
     }
     if (p.level >= MAX_LEVEL) p.xp = 0;
+  }
+
+  // ---------- Cambios de clase (Maestro de Clase) ----------
+
+  function questProgress(w, p, m) {
+    const q = p.quest;
+    if (!q) return;
+    const def = questFor(q.stage);
+    if (!def || q.kills >= def.need) return;
+    const counts = def.boss ? m.key === def.boss : m.lvl >= def.minLvl;
+    if (!counts) return;
+    q.kills++;
+    if (q.kills >= def.need) {
+      emit(w, { type: 'banner', to: p.id, title: '¡Misión cumplida!', sub: 'Vuelve con el Maestro Aldric en la aldea' });
+      log(w, p, `${def.title}: ¡completada! Vuelve con el Maestro Aldric.`, 'lvl');
+    } else if (q.kills % 3 === 0 || def.need - q.kills <= 2) {
+      log(w, p, `${def.title}: ${q.kills}/${def.need}`, 'sys');
+    }
+    emit(w, { type: 'quest', to: p.id });
+  }
+
+  function nearMaster(p) {
+    const n = npcById('maestro');
+    return n && d2(p.pos, n) < MASTER_R;
+  }
+
+  // action: 'accept' (branch: 'a' | 'b' en el nivel 25), 'complete' o 'abandon'
+  function classQuest(w, p, action, branch) {
+    if (p.dead) return;
+    if (!nearMaster(p)) return log(w, p, 'Acércate al Maestro Aldric para hablar de tu clase.', 'warn');
+    const next = p.stage + 1;
+    const st = STAGES[next];
+    if (action === 'abandon') {
+      if (!p.quest) return;
+      p.quest = null;
+      log(w, p, 'Aldric: «Vuelve cuando estés listo.»', 'npc');
+      return emit(w, { type: 'quest', to: p.id });
+    }
+    if (action === 'accept') {
+      if (!st) return log(w, p, 'Aldric: «Ya alcanzaste la maestría. No hay nada más que pueda enseñarte.»', 'npc');
+      if (p.quest) return log(w, p, 'Ya tienes una misión de cambio de clase en curso.', 'warn');
+      if (p.level < st.lvl) return log(w, p, `Aldric: «Vuelve cuando seas nivel ${st.lvl}.»`, 'npc');
+      if (st.branch && branch !== 'a' && branch !== 'b') return log(w, p, 'Primero elige tu especialización.', 'warn');
+      const def = questFor(next);
+      p.quest = { stage: next, kills: 0, branch: st.branch ? branch : null };
+      const bname = st.branch ? ` como ${p.cdef.branches[branch].name}` : '';
+      log(w, p, `Aldric: «${def.title}${bname}. ${def.text}»`, 'npc');
+      emit(w, { type: 'banner', to: p.id, title: def.title, sub: def.text });
+      return emit(w, { type: 'quest', to: p.id });
+    }
+    if (action === 'complete') {
+      const q = p.quest;
+      const def = q && questFor(q.stage);
+      if (!def || q.stage !== next) return log(w, p, 'No tienes ninguna misión de cambio de clase.', 'warn');
+      if (q.kills < def.need) return log(w, p, `Aún te falta: ${q.kills}/${def.need}. ${def.text}`, 'warn');
+      p.stage = q.stage;
+      if (q.branch) p.branch = q.branch;
+      p.quest = null;
+      refreshKit(p);
+      recalcStats(w, p);
+      p.hp = p.stats.maxHp;
+      p.mp = p.stats.maxMp;
+      const title = className(p.cls, p.sex, p.stage, p.branch);
+      // Regalo del gremio: un arma del grado que se acaba de desbloquear
+      const gift = weaponFor(p.cls, ['madera', 'azul', 'dorado', 'arcoiris'][p.stage]);
+      if (gift && addItem(p, gift, 1)) emit(w, { type: 'loot', to: p.id, id: gift, qty: 1, verb: 'El gremio te regala' });
+      emit(w, { type: 'banner', to: p.id, title: `¡Ahora eres ${title}!`, sub: STAGES[p.stage].unlocks });
+      emit(w, { type: 'classChange', ent: p, stage: p.stage, branch: p.branch });
+      emit(w, { type: 'levelUp', ent: p, level: p.level });
+      log(w, p, `Has completado el ${STAGES[p.stage].name}: ahora eres ${title}.`, 'lvl');
+      emit(w, { type: 'inventory', to: p.id });
+      emit(w, { type: 'quest', to: p.id });
+    }
   }
 
   // ---------- Comandos del jugador ----------
@@ -515,10 +768,18 @@
     }
   }
 
+  const TIPS = {
+    oso: 'Usa el Rugido Protector para que los monstruos te ataquen a ti y no a tus amigos.',
+    elfo: 'Marca al enemigo con tu halcón y dispara desde lejos. Si te alcanzan, ¡Salto de Copa!',
+    gnomo: 'Pon una Torreta de Chispas antes de pelear y convierte en oveja al enemigo más peligroso.',
+    hada: 'Quédate detrás de tus amigos y cúralos con la Canción de Corazones.',
+    lagarto: 'Quema a los enemigos con el Aliento de Chispa y remata con Corte Cruzado: ¡críticos seguros!',
+  };
+
   function interactWith(w, p, npc) {
     if (npc.id === 'mercader') {
       emit(w, { type: 'openShop', to: p.id });
-      return log(w, p, 'Orlen: «Pociones frescas y acero honrado. ¿Qué necesitas?»', 'npc');
+      return log(w, p, 'Orlen: «Pociones frescas y equipo para tu raza. ¿Qué necesitas?»', 'npc');
     }
     if (npc.id === 'sanadora') {
       if (p.combatT > 0) return log(w, p, 'Ilwen: «Primero aléjate del peligro, viajero.»', 'npc');
@@ -528,6 +789,13 @@
       ring(w, p.pos, 0x7fe0b0, 3, 0.9);
       return log(w, p, full ? 'Ilwen: «Tu luz ya está completa. Ve con cuidado.»' : 'Ilwen: «Que la luz del cristal cierre tus heridas.» Vida y maná restaurados.', 'npc');
     }
+    if (npc.id === 'maestro') {
+      emit(w, { type: 'openMaster', to: p.id });
+      const st = STAGES[p.stage + 1];
+      if (p.quest) return log(w, p, 'Aldric: «¿Cómo va tu misión?»', 'npc');
+      if (st && p.level >= st.lvl) return log(w, p, `Aldric: «Estás listo para el ${st.name}.»`, 'npc');
+      return log(w, p, st ? `Aldric: «Vuelve en el nivel ${st.lvl} para el ${st.name}.»` : 'Aldric: «Eres un verdadero maestro.»', 'npc');
+    }
     if (npc.id === 'capitana') {
       const field = ZONES.filter((z) => !z.safe);
       const rec =
@@ -535,12 +803,7 @@
           const [a, b] = z.lvl.split(' ')[0].split('–').map(Number);
           return p.level >= a - 1 && p.level <= b;
         }) || field[field.length - 1];
-      const tips = {
-        guerrero: 'Usa Torbellino cuando te rodeen y guarda Segundo Aliento para los apuros.',
-        arquera: 'Dispara desde lejos y usa Salto de Retirada si algo te alcanza. Nunca dejes que te rodeen.',
-        mago: 'Lanza el Escudo Arcano antes de atacar y congela a los grupos con la Nova de Escarcha.',
-      };
-      log(w, p, `Brisa: «A tu nivel te recomiendo ${rec.name} (nivel ${rec.lvl}). ${tips[p.cls]} Cazar en grupo da más experiencia.»`, 'npc');
+      log(w, p, `Brisa: «A tu nivel te recomiendo ${rec.name} (nivel ${rec.lvl}). ${TIPS[p.cls]} Cazar en grupo da más experiencia.»`, 'npc');
     }
   }
 
@@ -548,17 +811,24 @@
 
   // ---------- Habilidades ----------
 
-  const TARGETED = ['dmg', 'area', 'leap', 'charge', 'chain'];
+  const NEEDS_TARGET = ['dmg', 'area', 'leap', 'charge', 'chain', 'mark', 'poly', 'dance'];
+  const skillReady = (p, s) => !s.locked && p.level >= s.lvl && p.stage >= s.stage;
 
   function useSkill(w, p, i) {
     const s = p.skills[i];
-    if (p.dead || !s || p.leap) return;
-    if (p.level < s.lvl) return log(w, p, `${s.name} se desbloquea en el nivel ${s.lvl}.`, 'warn');
+    if (p.dead || !s || p.leap || p.dancing) return;
+    if (!skillReady(p, s)) {
+      if (s.locked) return log(w, p, s.desc, 'warn');
+      if (p.level < s.lvl) return log(w, p, `${s.name} se desbloquea en el nivel ${s.lvl}.`, 'warn');
+      return log(w, p, `${s.name} se desbloquea con el ${STAGES[s.stage].name}. Habla con el Maestro Aldric.`, 'warn');
+    }
     if ((p.cds[s.id] || 0) > 0) return;
-    if (p.mp < s.mp) return log(w, p, 'No tienes suficiente maná.', 'warn');
-    if (TARGETED.includes(s.type)) {
+    const cost = p.freeNext ? 0 : s.mp;
+    if (p.mp < cost) return log(w, p, 'No tienes suficiente maná.', 'warn');
+    if (NEEDS_TARGET.includes(s.type)) {
       const t = p.target;
       if (!t || t.dead) return log(w, p, 'Primero elige un objetivo.', 'warn');
+      if (s.type === 'poly' && t.def.boss) return log(w, p, 'Los jefes son demasiado fuertes para la polimorfia.', 'warn');
       if (s.range && d2(p.pos, t.pos) > s.range + bodyR(t)) {
         p.queued = i;
         p.autoAttack = true;
@@ -569,41 +839,154 @@
     castSkill(w, p, i);
   }
 
+  // Dirección de una habilidad: hacia el objetivo si hay, si no hacia donde miras
+  function aimDir(p) {
+    const t = p.target && !p.target.dead ? p.target : null;
+    if (t) {
+      const dx = t.pos.x - p.pos.x;
+      const dz = t.pos.z - p.pos.z;
+      const len = Math.hypot(dx, dz);
+      if (len > 0.1) return { x: dx / len, z: dz / len };
+    }
+    return { x: Math.sin(p.facing), z: Math.cos(p.facing) };
+  }
+
   function castSkill(w, p, i) {
-    const s = p.skills[i];
-    if (p.mp < s.mp) return;
-    p.mp -= s.mp;
-    p.cds[s.id] = s.cd;
-    emit(w, { type: 'swing', ent: p });
-    const t = p.target;
-    if (s.type === 'dmg') {
-      if (s.proj) spawnProjectile(w, p, s.proj, t, s.mult, true, s.dot);
-      else {
-        ring(w, t.pos, 0xffc46b, 1.8, 0.4);
-        damageMob(w, p, t, s.mult);
+    const base = p.skills[i];
+    const cost = p.freeNext ? 0 : base.mp;
+    if (p.mp < cost || !skillReady(p, base)) return;
+    // Resonancia Prismática: cada 3 hechizos, el siguiente gratis y con daño doble
+    const boost = p.freeNext ? 2 : 1;
+    p.freeNext = false;
+    const pas = p.passive;
+    if (pas.freeEvery) {
+      p.spells++;
+      if (p.spells >= pas.freeEvery) {
+        p.spells = 0;
+        p.freeNext = true;
+        float(w, p, 'Resonancia', 'mana', 0.4);
       }
-      if (p.target) p.autoAttack = true;
-    } else if (s.type === 'area') {
-      const at = { x: t.pos.x, y: t.pos.y, z: t.pos.z };
-      emit(w, { type: 'faller', fx: s.fx, at, r: s.radius, dur: s.delay });
-      later(w, s.delay, () => {
-        const color = s.fx === 'meteor' ? 0xff6a2a : s.fx === 'frost' ? 0x9fd8ff : 0xe8dcc2;
-        ring(w, at, color, s.radius, 0.6);
-        for (const m of w.mobs) {
-          if (m.dead || d2(m.pos, at) > s.radius + bodyR(m)) continue;
-          damageMob(w, p, m, s.mult);
-          if (s.slow) m.slowT = s.slow;
+    }
+    const s = boost === 1 ? base : { ...base, mult: (base.mult || 0) * boost, tick: base.tick && base.tick * boost };
+    p.mp -= cost;
+    p.cds[s.id] = s.cd * (1 - Math.min(0.5, buffSum(p, 'cdr')));
+    if (pas.cdRefund) for (const k in p.cds) if (k !== s.id && k !== 'pot') p.cds[k] = Math.max(0, p.cds[k] - pas.cdRefund);
+    emit(w, { type: 'swing', ent: p });
+    const t = p.target && !p.target.dead ? p.target : null;
+    if (t) face(p, t.pos.x, t.pos.z, 1);
+    if (s.selfShield) {
+      p.shield = Math.max(p.shield, Math.round(p.stats.maxHp * s.selfShield));
+      p.shieldT = Math.max(p.shieldT, s.dur || 10);
+    }
+    if (s.selfBuff) addBuff(w, p, `${s.id}_self`, s.name, s.selfBuff);
+    CAST[s.type](w, p, s, t);
+    if (NEEDS_TARGET.includes(s.type) && p.target && s.type !== 'poly') p.autoAttack = true;
+  }
+
+  // Daño en un círculo (a monstruos vivos)
+  function hitCircle(w, p, at, radius, mult, s, fn) {
+    for (const m of w.mobs) {
+      if (m.dead || d2(m.pos, at) > radius + bodyR(m)) continue;
+      damageMob(w, p, m, mult);
+      if (m.dead) continue;
+      if (s.slow) m.slowT = Math.max(m.slowT, s.slow);
+      if (s.stun) stunMob(w, m, s.stun);
+      if (s.burn) addDot(w, p, m, s.burn, 'burn');
+      if (fn) fn(m);
+    }
+  }
+
+  function healAllies(w, p, at, radius, pct) {
+    for (const q of alliesNear(w, p, radius, at)) healPlayer(w, p, q, q.stats.maxHp * pct * p.stats.heal);
+  }
+
+  const CAST = {
+    none() {},
+    dmg(w, p, s, t) {
+      const hits = s.hits || 1;
+      if (s.proj) {
+        spawnProjectile(w, p, s.proj, t, s.mult, { big: true, dot: s.dot, root: s.root, stun: s.stun, healAlly: s.healAlly });
+        return;
+      }
+      ring(w, t.pos, 0xffc46b, 1.8, 0.4);
+      const forceCrit = s.critIfBurning && isBurning(t);
+      for (let k = 0; k < hits; k++) {
+        if (k === 0) damageMob(w, p, t, s.mult, { forceCrit });
+        else later(w, 0.18 * k, () => damageMob(w, p, t, s.mult, { forceCrit }));
+      }
+      if (s.stun) stunMob(w, t, s.stun);
+    },
+    area(w, p, s, t) {
+      const n = s.count || 1;
+      for (let k = 0; k < n; k++) {
+        const ang = Math.random() * Math.PI * 2;
+        const rr = n > 1 ? Math.sqrt(Math.random()) * (s.spread || 0) : 0;
+        const at = { x: t.pos.x + Math.cos(ang) * rr, y: t.pos.y, z: t.pos.z + Math.sin(ang) * rr };
+        const delay = s.delay + k * 0.22;
+        emit(w, { type: 'faller', fx: s.fx, at, r: s.radius, dur: delay });
+        later(w, delay, () => {
+          const color = s.fx === 'meteor' ? 0xff6a2a : s.fx === 'frost' ? 0x9fd8ff : s.fx === 'glue' ? 0xf2b13a : s.fx === 'sword' ? 0xffe9a0 : 0xe8dcc2;
+          ring(w, at, color, s.radius, 0.6);
+          hitCircle(w, p, at, s.radius, s.mult, s);
+          if (s.healAllies) healAllies(w, p, at, s.radius + 4, s.healAllies);
+        });
+      }
+    },
+    aoe(w, p, s) {
+      ring(w, p.pos, s.taunt ? 0xffd36b : s.slow ? 0x9fd8ff : 0xff8a3d, s.radius, 0.5);
+      hitCircle(w, p, p.pos, s.radius, s.mult, s, (m) => {
+        if (s.taunt) {
+          m.aggro = p;
+          m.state = 'idle';
         }
       });
-      if (p.target) p.autoAttack = true;
-    } else if (s.type === 'aoe') {
-      ring(w, p.pos, s.slow ? 0x9fd8ff : 0xff8a3d, s.radius, 0.5);
-      for (const m of w.mobs) {
-        if (m.dead || d2(m.pos, p.pos) > s.radius + bodyR(m)) continue;
-        damageMob(w, p, m, s.mult);
-        if (s.slow) m.slowT = s.slow;
+      if (s.allyShield) {
+        for (const q of alliesNear(w, p, s.radius + 3)) {
+          q.shield = Math.max(q.shield, Math.round(q.stats.maxHp * s.allyShield));
+          q.shieldT = Math.max(q.shieldT, s.shieldDur || 6);
+          if (q !== p) float(w, q, 'Escudo', 'mana', 0.3);
+        }
       }
-    } else if (s.type === 'chain') {
+    },
+    cone(w, p, s) {
+      const dir = aimDir(p);
+      const cosA = Math.cos(((s.angle || 70) * Math.PI) / 360);
+      emit(w, { type: 'cone', at: { ...p.pos }, dir, r: s.radius, color: 0xff7a2a });
+      for (const m of w.mobs) {
+        if (m.dead) continue;
+        const dx = m.pos.x - p.pos.x;
+        const dz = m.pos.z - p.pos.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > s.radius + bodyR(m) || (dist > 1 && (dx * dir.x + dz * dir.z) / dist < cosA)) continue;
+        damageMob(w, p, m, s.mult);
+        if (!m.dead && s.burn) addDot(w, p, m, s.burn, 'burn');
+      }
+    },
+    line(w, p, s) {
+      const dir = aimDir(p);
+      const from = { x: p.pos.x, y: p.pos.y + 1.2, z: p.pos.z };
+      const to = { x: p.pos.x + dir.x * s.length, y: p.pos.y + 1.2, z: p.pos.z + dir.z * s.length };
+      emit(w, { type: 'beam', at: from, from, to, w: s.width, color: s.id === 'tronco' ? 0x8a5a34 : 0xfff0a0 });
+      for (const m of w.mobs) {
+        if (m.dead) continue;
+        const dx = m.pos.x - p.pos.x;
+        const dz = m.pos.z - p.pos.z;
+        const along = dx * dir.x + dz * dir.z;
+        const side = Math.abs(dx * dir.z - dz * dir.x);
+        if (along < -0.5 || along > s.length || side > s.width / 2 + bodyR(m)) continue;
+        damageMob(w, p, m, s.mult);
+        if (!m.dead && s.stun) stunMob(w, m, s.stun, 'Derribado');
+      }
+      // Maestra: rastro de luz que quema y acelera aliados
+      if (s.trail) {
+        for (let k = 3; k < s.length; k += 5) {
+          const at = { x: p.pos.x + dir.x * k, y: p.pos.y, z: p.pos.z + dir.z * k };
+          groundZone(w, p, at, 2.6, s.trail.dur, { tick: 0.8, color: 0xffd36b });
+        }
+      }
+      if (s.allyBuff) for (const q of alliesNear(w, p, 14)) addBuff(w, q, `${s.id}_ally`, s.name, s.allyBuff);
+    },
+    chain(w, p, s, t) {
       // Rayo que salta al enemigo más cercano que aún no recibió el golpe
       const hit = [t];
       let last = t;
@@ -618,33 +1001,17 @@
       const pts = [{ x: p.pos.x, y: p.pos.y + 1.8, z: p.pos.z }, ...hit.map((m) => ({ x: m.pos.x, y: m.pos.y + m.height * 0.55, z: m.pos.z }))];
       emit(w, { type: 'chain', pts });
       for (const m of hit) damageMob(w, p, m, s.mult);
-      if (p.target) p.autoAttack = true;
-    } else if (s.type === 'charge') {
-      // Embestida: corre hasta el objetivo, lo golpea y lo aturde
+    },
+    charge(w, p, s, t) {
+      // Carga: corre hasta el objetivo, lo golpea y lo aturde
       const dx = t.pos.x - p.pos.x;
       const dz = t.pos.z - p.pos.z;
       const len = Math.hypot(dx, dz) || 1;
       const stop = Math.max(0, len - (1.2 + bodyR(t)));
       p.leap = { fx: p.pos.x, fz: p.pos.z, tx: p.pos.x + (dx / len) * stop, tz: p.pos.z + (dz / len) * stop, t: 0, dur: 0.28, hop: 0.4, hit: { m: t, mult: s.mult, stun: s.stun } };
       p.moveTarget = null;
-    } else if (s.type === 'heal') {
-      const amt = Math.round(p.stats.maxHp * s.amount);
-      p.hp = Math.min(p.stats.maxHp, p.hp + amt);
-      float(w, p, `+${amt}`, 'heal');
-      ring(w, p.pos, 0x7fe08a, 2.4, 0.7);
-    } else if (s.type === 'buff') {
-      p.buffT = s.dur;
-      p.buffPct = s.pct;
-      p.buffCrit = s.crit || 0;
-      p.buffName = s.name;
-      ring(w, p.pos, 0xffd36b, 3, 0.8);
-      log(w, p, `${s.name}: +${Math.round(s.pct * 100)}% de ataque${s.crit ? ` y +${Math.round(s.crit * 100)}% de crítico` : ''} durante ${s.dur} s.`, 'sys');
-    } else if (s.type === 'shield') {
-      p.shield = Math.round(p.stats.maxHp * s.amount);
-      p.shieldT = s.dur;
-      ring(w, p.pos, 0x8fb8ff, 2.6, 0.8);
-      log(w, p, `${s.name}: absorbe ${p.shield} de daño durante ${s.dur} s.`, 'sys');
-    } else if (s.type === 'leap') {
+    },
+    leap(w, p, s, t) {
       let ax = p.pos.x - t.pos.x;
       let az = p.pos.z - t.pos.z;
       let len = Math.hypot(ax, az);
@@ -656,25 +1023,192 @@
       const to = { x: p.pos.x + (ax / len) * s.dist, z: p.pos.z + (az / len) * s.dist };
       collide(to, PLAYER_R);
       p.leap = { fx: p.pos.x, fz: p.pos.z, tx: to.x, tz: to.z, t: 0, dur: 0.35, hop: 1.4 };
-      t.slowT = s.slow;
+      if (s.shot) spawnProjectile(w, p, p.cdef.projectile || 'arrow', t, s.shot, { knock: s.knock });
+      if (s.slow) t.slowT = s.slow;
       ring(w, p.pos, 0xb6e08a, 1.8, 0.5);
       p.moveTarget = null;
+    },
+    blink(w, p, s) {
+      const dir = p.moveDir || aimDir(p);
+      const to = { x: p.pos.x + dir.x * s.dist, z: p.pos.z + dir.z * s.dist };
+      collide(to, PLAYER_R);
+      ring(w, p.pos, 0xb9b2a4, 2.2, 0.8);
+      p.leap = { fx: p.pos.x, fz: p.pos.z, tx: to.x, tz: to.z, t: 0, dur: 0.25, hop: 0.9 };
+      p.facing = Math.atan2(dir.x, dir.z);
+      p.moveTarget = null;
+    },
+    buff(w, p, s) {
+      const targets = s.group ? alliesNear(w, p, s.radius || 12) : [p];
+      for (const q of targets) {
+        addBuff(w, q, s.id, s.name, s);
+        ring(w, q.pos, 0xffd36b, 2.6, 0.7);
+      }
+      const parts = [];
+      if (s.atk) parts.push(`+${Math.round(s.atk * 100)}% de ataque`);
+      if (s.speed) parts.push(`+${Math.round(s.speed * 100)}% de velocidad`);
+      if (s.haste) parts.push(`+${Math.round(s.haste * 100)}% de velocidad de ataque`);
+      if (s.dr) parts.push(`${Math.round(s.dr * 100)}% menos daño recibido`);
+      if (s.evade) parts.push(`+${Math.round(s.evade * 100)}% de esquivar`);
+      if (s.thorns) parts.push('quemas a quien te golpee');
+      if (s.cdr) parts.push(`habilidades un ${Math.round(s.cdr * 100)}% más rápidas`);
+      log(w, p, `${s.name}: ${parts.join(', ')} durante ${s.dur} s${s.group && targets.length > 1 ? ` (${targets.length} aliados)` : ''}.`, 'sys');
+      // Sinfonía Cósmica: los enemigos cercanos bailan sin poder atacar
+      if (s.danceStun) for (const m of w.mobs) if (!m.dead && !m.def.boss && d2(m.pos, p.pos) <= s.danceStun.radius) stunMob(w, m, s.danceStun.dur, '¡A bailar!');
+    },
+    heal(w, p, s) {
+      const targets = s.group ? alliesNear(w, p, s.radius || 9) : [p];
+      // Revivir: aliados caídos en el área vuelven al instante
+      if (s.revive) {
+        for (const q of alliesNear(w, p, s.radius || 9, p.pos, true)) {
+          if (!q.dead) continue;
+          revivePlayer(w, q, q.pos, 0.6);
+          log(w, q, `${p.name} te ha revivido.`, 'sys');
+          targets.push(q);
+        }
+      }
+      for (const q of targets) {
+        if (s.amount) healPlayer(w, p, q, q.stats.maxHp * s.amount * p.stats.heal);
+        if (s.shield) {
+          q.shield = Math.max(q.shield, Math.round(q.stats.maxHp * s.shield));
+          q.shieldT = Math.max(q.shieldT, s.shieldDur || 6);
+        }
+        if (s.thorns) addBuff(w, q, `${s.id}_thorns`, s.name, { thorns: s.thorns, dur: s.shieldDur || 6 });
+        if (s.cleanse) float(w, q, 'Purificado', 'heal', 0.4);
+        ring(w, q.pos, s.shield && !s.amount ? 0xc9b48a : 0x7fe08a, 2.4, 0.7);
+      }
+      if (s.shield && s.group) emit(w, { type: 'dome', at: { ...p.pos }, r: s.radius || 9, dur: s.shieldDur || 6 });
+    },
+    bubble(w, p, s) {
+      const list = alliesNear(w, p, s.reach || 16).sort((a, b) => a.hp / a.stats.maxHp - b.hp / b.stats.maxHp);
+      const q = list[0] || p;
+      q.bubble = 1;
+      q.bubbleT = s.dur;
+      float(w, q, 'Burbuja Estelar', 'mana', 0.4);
+      ring(w, q.pos, 0xbfe6ff, 1.6, 0.8);
+      if (q !== p) log(w, q, `${p.name} te protege con una Burbuja Estelar.`, 'sys');
+    },
+    mark(w, p, s, t) {
+      t.markT = s.dur;
+      t.markPct = s.pct;
+      float(w, t, 'Marcado', 'crit', 0.5);
+      ring(w, t.pos, 0xffd36b, 1.6, 0.6);
+    },
+    zone(w, p, s, t) {
+      const dir = aimDir(p);
+      const at = t ? { ...t.pos } : { x: p.pos.x + dir.x * 3, y: p.pos.y, z: p.pos.z + dir.z * 3 };
+      groundZone(w, p, at, s.radius, s.dur, { tick: s.tick, slow: s.slow, color: s.fx });
+    },
+    turret(w, p, s) {
+      const dir = aimDir(p);
+      const at = { x: p.pos.x + dir.x * 1.6, z: p.pos.z + dir.z * 1.6 };
+      collide(at, 0.5);
+      at.y = groundY(at.x, at.z);
+      const max = p.passive.turretMax || 1;
+      p.turrets = p.turrets.filter((x) => x.alive);
+      while (p.turrets.length >= max) p.turrets.shift().alive = false;
+      const tur = { id: `t${w.nextId++}`, alive: true, pos: at, owner: p, big: !!s.big };
+      p.turrets.push(tur);
+      emit(w, { type: 'turret', id: tur.id, at, dur: s.dur, big: !!s.big });
+      const mult = s.mult * (1 + (p.passive.turretPct || 0));
+      const shots = Math.floor(s.dur / s.every);
+      for (let k = 1; k <= shots; k++) {
+        later(w, k * s.every, () => {
+          if (!tur.alive || !w.players.has(p.id)) return;
+          const m = w.mobs.filter((x) => !x.dead && d2(x.pos, at) <= s.reach).sort((a, b) => d2(a.pos, at) - d2(b.pos, at))[0];
+          if (m) spawnProjectile(w, p, s.big ? 'fire' : 'arcane', m, mult, { from: { x: at.x, y: at.y + (s.big ? 3 : 1.6), z: at.z }, big: s.big });
+          if (k === shots) tur.alive = false;
+        });
+      }
+    },
+    poly(w, p, s, t) {
+      t.polyT = s.dur;
+      t.stunT = Math.max(t.stunT, s.dur);
+      if (t.aggro === p) dropAggro(t);
+      float(w, t, '¡Beee!', 'stun', 0.4);
+      emit(w, { type: 'poly', ent: t, dur: s.dur });
+    },
+    pulse(w, p, s) {
+      for (let k = 0; k < s.count; k++) {
+        later(w, k * s.every, () => {
+          if (p.dead || !w.players.has(p.id)) return;
+          ring(w, p.pos, s.id === 'tornado' ? 0xb6e08a : 0xffc46b, s.radius, 0.45);
+          const struck = [];
+          hitCircle(w, p, p.pos, s.radius, s.mult, s, (m) => struck.push(m));
+          // Maestro: rayos sobre los enemigos golpeados
+          if (s.lightning && struck.length) {
+            for (const m of struck) {
+              emit(w, { type: 'chain', pts: [{ x: m.pos.x, y: m.pos.y + 9, z: m.pos.z }, { x: m.pos.x, y: m.pos.y + 0.5, z: m.pos.z }] });
+              damageMob(w, p, m, s.lightning);
+            }
+          }
+        });
+      }
+    },
+    dance(w, p, s, t) {
+      // Cortes saltando de enemigo en enemigo; el personaje se teletransporta junto a cada uno
+      p.dancing = true;
+      let cur = t;
+      const hitOnce = (k) => {
+        if (p.dead || !w.players.has(p.id)) return (p.dancing = false);
+        if (!cur || cur.dead) cur = w.mobs.filter((m) => !m.dead && d2(m.pos, p.pos) <= s.jumpR).sort((a, b) => d2(a.pos, p.pos) - d2(b.pos, p.pos))[0];
+        if (cur) {
+          const ang = Math.random() * Math.PI * 2;
+          const r = bodyR(cur) + 1;
+          p.pos.x = cur.pos.x + Math.cos(ang) * r;
+          p.pos.z = cur.pos.z + Math.sin(ang) * r;
+          collide(p.pos, PLAYER_R);
+          p.pos.y = groundY(p.pos.x, p.pos.z);
+          face(p, cur.pos.x, cur.pos.z, 1);
+          emit(w, { type: 'swing', ent: p });
+          ring(w, cur.pos, 0xff7a2a, 1.4, 0.3);
+          damageMob(w, p, cur, s.mult);
+          // El siguiente corte va a otro enemigo cercano si lo hay
+          const others = w.mobs.filter((m) => !m.dead && m !== cur && d2(m.pos, p.pos) <= s.jumpR);
+          if (others.length) cur = others[Math.floor(Math.random() * others.length)];
+        }
+        if (k + 1 < s.hits) later(w, 0.14, () => hitOnce(k + 1));
+        else {
+          p.dancing = false;
+          if (s.finale) {
+            ring(w, p.pos, 0xff4a1a, s.finale.radius, 0.8);
+            emit(w, { type: 'faller', fx: 'meteor', at: { ...p.pos }, r: s.finale.radius, dur: 0.01 });
+            hitCircle(w, p, p.pos, s.finale.radius, s.finale.mult, { burn: s.finale.burn });
+          }
+        }
+      };
+      hitOnce(0);
+    },
+  };
+
+  // Zona en el suelo: daña (tick = % de ataque por segundo) y/o ralentiza cada medio segundo
+  function groundZone(w, p, at, radius, dur, o) {
+    emit(w, { type: 'zone', at, r: radius, dur, color: o.color || 0xf2b13a });
+    const n = Math.round(dur / 0.5);
+    for (let k = 1; k <= n; k++) {
+      later(w, k * 0.5, () => {
+        if (!w.players.has(p.id)) return;
+        for (const m of w.mobs) {
+          if (m.dead || d2(m.pos, at) > radius + bodyR(m)) continue;
+          if (o.slow) m.slowT = Math.max(m.slowT, 0.7);
+          if (o.tick && k % 2 === 0) damageMob(w, p, m, o.tick, { noCrit: true, cls: 'burn' });
+        }
+      });
     }
   }
 
   // ---------- Proyectiles y temporizadores ----------
 
-  function spawnProjectile(w, p, kind, target, mult, big = false, dot = null) {
+  function spawnProjectile(w, p, kind, target, mult, o = {}) {
     w.projectiles.push({
       id: `j${w.nextId++}`,
       kind,
-      big,
-      dot,
+      big: !!o.big,
+      o,
       owner: p,
       target,
       mult,
       speed: PROJ_SPEED[kind] || 26,
-      pos: { x: p.pos.x + Math.sin(p.facing) * 0.7, y: p.pos.y + 1.7, z: p.pos.z + Math.cos(p.facing) * 0.7 },
+      pos: o.from ? { ...o.from } : { x: p.pos.x + Math.sin(p.facing) * 0.7, y: p.pos.y + 1.7, z: p.pos.z + Math.cos(p.facing) * 0.7 },
     });
   }
 
@@ -700,13 +1234,26 @@
       const step = pr.speed * dt;
       if (dist <= step + 0.3) {
         w.projectiles.splice(i, 1);
+        const o = pr.o;
+        const p = pr.owner;
         if (pr.kind === 'fire') ring(w, t.pos, 0xff7a2a, 1.6, 0.4);
-        damageMob(w, pr.owner, t, pr.mult);
-        if (pr.dot && !t.dead) {
-          // Veneno: daño repartido en el tiempo (ataque del jugador × mult total)
-          const total = playerAtk(pr.owner) * pr.dot.mult;
-          t.dots.push({ owner: pr.owner, perSec: total / pr.dot.dur, left: pr.dot.dur, tick: 1 });
-          float(w, t, 'Envenenado', 'poison', 0.3);
+        damageMob(w, p, t, pr.mult);
+        if (!t.dead) {
+          if (o.dot) addDot(w, p, t, o.dot, 'poison');
+          if (o.root) {
+            t.rootT = Math.max(t.rootT, o.root);
+            float(w, t, 'Enredado', 'stun', 0.3);
+          }
+          if (o.stun) stunMob(w, t, o.stun);
+          if (o.knock) knockBack(t, p.pos, o.knock);
+        }
+        // Ola de Notas: rebota y cura al aliado más herido
+        if (o.healAlly) {
+          const list = alliesNear(w, p, 18).sort((a, b) => a.hp / a.stats.maxHp - b.hp / b.stats.maxHp);
+          if (list[0]) {
+            emit(w, { type: 'chain', pts: [{ x: t.pos.x, y: t.pos.y + 1.2, z: t.pos.z }, { x: list[0].pos.x, y: list[0].pos.y + 1.4, z: list[0].pos.z }] });
+            healPlayer(w, p, list[0], list[0].stats.maxHp * o.healAlly * p.stats.heal);
+          }
         }
         continue;
       }
@@ -733,6 +1280,7 @@
 
   function addItem(p, id, qty = 1) {
     const it = ITEMS[id];
+    if (!it) return false;
     if (it.stack) {
       const slot = p.inv.find((s) => s.id === id);
       if (slot) {
@@ -766,14 +1314,15 @@
   }
 
   // Usar o equipar el objeto de una casilla del inventario.
+  // El servidor valida raza, tipo de armadura y arma, nivel y grado (cambio de clase).
   function useItem(w, p, index) {
     const slot = p.inv[index];
     if (!slot) return;
     const it = ITEMS[slot.id];
     if (it.type === 'potion') return usePotion(w, p, slot.id);
     if (it.type !== 'weapon' && it.type !== 'armor') return log(w, p, `${it.name}: ${it.desc}`, 'sys');
-    if (it.cls && it.cls !== p.cls) return log(w, p, `${it.name} solo puede usarlo la clase ${CLASSES[it.cls].name}.`, 'warn');
-    if (p.level < it.lvl) return log(w, p, `Necesitas nivel ${it.lvl} para equipar ${it.name}.`, 'warn');
+    const problem = equipProblem(p, it);
+    if (problem) return log(w, p, `No puedes equipar ${it.name}: ${problem}`, 'warn');
     const key = it.type;
     const prev = p.equip[key];
     p.inv.splice(index, 1);
@@ -910,7 +1459,7 @@
       members: party.members
         .map((id) => w.players.get(id))
         .filter(Boolean)
-        .map((q) => ({ id: q.id, name: q.name, cls: q.cls, sex: q.sex, level: q.level, hp: Math.round(q.hp), maxHp: q.stats.maxHp, mp: Math.round(q.mp), maxMp: q.stats.maxMp, dead: q.dead, x: Math.round(q.pos.x), z: Math.round(q.pos.z) })),
+        .map((q) => ({ id: q.id, name: q.name, cls: q.cls, sex: q.sex, stage: q.stage, branch: q.branch, level: q.level, hp: Math.round(q.hp), maxHp: q.stats.maxHp, mp: Math.round(q.mp), maxMp: q.stats.maxMp, dead: q.dead, x: Math.round(q.pos.x), z: Math.round(q.pos.z) })),
     };
   }
 
@@ -918,10 +1467,29 @@
 
   function step(w, dt) {
     w.time += dt;
+    updateAuras(w);
     for (const p of w.players.values()) updatePlayer(w, p, dt);
     for (const m of w.mobs) updateMob(w, m, dt);
     updateProjectiles(w, dt);
     updateTimers(w, dt);
+  }
+
+  // Auras pasivas (Bardo Melódico, Oráculo Estelar): afectan al grupo cercano
+  function updateAuras(w) {
+    for (const p of w.players.values()) p.aura = null;
+    for (const p of w.players.values()) {
+      if (p.dead) continue;
+      const pas = p.passive;
+      if (!pas.aura && !pas.partyMp) continue;
+      for (const q of alliesNear(w, p, pas.aura ? pas.aura.radius : 12)) {
+        const a = q.aura || (q.aura = {});
+        if (pas.aura) {
+          a.atk = Math.max(a.atk || 0, pas.aura.atk);
+          a.speed = Math.max(a.speed || 0, pas.aura.speed);
+        }
+        if (pas.partyMp) a.mp = Math.max(a.mp || 0, pas.partyMp);
+      }
+    }
   }
 
   function updatePlayer(w, p, dt) {
@@ -929,15 +1497,17 @@
     if (p.invite && (p.invite.t -= dt) <= 0) p.invite = null;
     if (p.dead) return;
     for (const k in p.cds) p.cds[k] = Math.max(0, p.cds[k] - dt);
-    p.buffT = Math.max(0, p.buffT - dt);
+    for (const k in p.buffs) if ((p.buffs[k].t -= dt) <= 0) delete p.buffs[k];
     p.shieldT = Math.max(0, p.shieldT - dt);
     if (p.shieldT <= 0) p.shield = 0;
+    if (p.bubble && (p.bubbleT -= dt) <= 0) p.bubble = 0;
+    if (p.frenzy && (p.frenzyT -= dt) <= 0) p.frenzy = 0;
     p.combatT = Math.max(0, p.combatT - dt);
     p.atkTimer = Math.max(0, p.atkTimer - dt);
 
     const rate = p.combatT > 0 ? 0.004 : inVillage(p.pos) ? 0.08 : 0.025;
     p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.maxHp * rate * dt);
-    p.mp = Math.min(p.stats.maxMp, p.mp + p.stats.maxMp * rate * 1.4 * p.cdef.mpRegen * dt);
+    p.mp = Math.min(p.stats.maxMp, p.mp + p.stats.maxMp * rate * 1.4 * p.cdef.mpRegen * (1 + (p.aura && p.aura.mp ? p.aura.mp : 0)) * dt);
 
     // Agua: nadar es más lento; en aguas profundas se gasta el aire
     const depth = waterDepth(p.pos.x, p.pos.z);
@@ -960,13 +1530,15 @@
     } else {
       p.breath = Math.min(BREATH_MAX, p.breath + dt * 10);
     }
-    const speed = SPEED * (p.swimming ? SWIM_SPEED : 1);
+    const speed = moveSpeed(p) * (p.swimming ? SWIM_SPEED : 1);
 
     const t = p.target && !p.target.dead ? p.target : null;
     if (!p.leap) p.pos.y = groundY(p.pos.x, p.pos.z); // sobre el suelo o flotando en el agua
 
-    if (p.leap) {
-      // Salto de retirada o embestida: trayecto corto sin control
+    if (p.dancing) {
+      // Danza del Dragón: los cortes mueven al personaje
+    } else if (p.leap) {
+      // Salto, carga o propulsores: trayecto corto sin control
       const L = p.leap;
       L.t += dt;
       const k = Math.min(1, L.t / L.dur);
@@ -980,19 +1552,24 @@
         if (L.hit && !L.hit.m.dead) {
           ring(w, L.hit.m.pos, 0xffc46b, 2.2, 0.45);
           damageMob(w, p, L.hit.m, L.hit.mult);
-          if (!L.hit.m.dead) {
-            L.hit.m.stunT = L.hit.stun;
-            float(w, L.hit.m, 'Aturdido', 'stun', 0.3);
-          }
+          if (!L.hit.m.dead) stunMob(w, L.hit.m, L.hit.stun);
           p.autoAttack = true;
         }
       }
     } else if (p.moveDir) {
       p.moveTarget = null;
-      p.autoAttack = false;
-      p.queued = null;
       p.interact = null;
-      p.moving = stepToward(p, { x: p.pos.x + p.moveDir.x * 5, z: p.pos.z + p.moveDir.z * 5 }, speed, dt, 0);
+      // Danza del Viento: se puede atacar mientras se camina
+      const fire = p.passive.moveAttack && p.autoAttack && t;
+      if (!fire) {
+        p.autoAttack = false;
+        p.queued = null;
+      }
+      p.moving = stepToward(p, { x: p.pos.x + p.moveDir.x * 5, z: p.pos.z + p.moveDir.z * 5 }, speed, dt, 0, !fire);
+      if (fire) {
+        face(p, t.pos.x, t.pos.z, dt);
+        if (d2(p.pos, t.pos) <= reachTo(p, t) && p.atkTimer <= 0 && p.pendingHit <= 0) startBasic(w, p);
+      }
     } else if (p.autoAttack && t) {
       const want = p.queued != null ? p.skills[p.queued].range + bodyR(t) : reachTo(p, t);
       if (d2(p.pos, t.pos) > want) {
@@ -1004,9 +1581,7 @@
           p.queued = null;
           castSkill(w, p, q);
         } else if (p.atkTimer <= 0 && p.pendingHit <= 0) {
-          p.atkTimer = p.cdef.atkSpeed;
-          p.pendingHit = p.cdef.projectile ? 0.3 : 0.22;
-          emit(w, { type: 'swing', ent: p });
+          startBasic(w, p);
         }
       }
     } else if (p.moveTarget) {
@@ -1038,10 +1613,7 @@
     if (p.pendingHit > 0) {
       p.pendingHit -= dt;
       const tt = p.target;
-      if (p.pendingHit <= 0 && tt && !tt.dead && d2(p.pos, tt.pos) <= reachTo(p, tt) + 0.6) {
-        if (p.cdef.projectile) spawnProjectile(w, p, p.cdef.projectile, tt, 1);
-        else damageMob(w, p, tt, 1);
-      }
+      if (p.pendingHit <= 0 && tt && !tt.dead && d2(p.pos, tt.pos) <= reachTo(p, tt) + 0.6) basicHit(w, p, tt);
     }
 
     const r = Math.hypot(p.pos.x, p.pos.z);
@@ -1049,6 +1621,31 @@
       p.pos.x *= WORLD_LIMIT / r;
       p.pos.z *= WORLD_LIMIT / r;
       p.pos.y = groundY(p.pos.x, p.pos.z);
+    }
+  }
+
+  function startBasic(w, p) {
+    p.atkTimer = attackInterval(p);
+    p.pendingHit = p.cdef.projectile ? 0.3 : 0.22;
+    emit(w, { type: 'swing', ent: p });
+  }
+
+  function basicHit(w, p, t) {
+    if (p.cdef.projectile) spawnProjectile(w, p, p.cdef.projectile, t, 1);
+    else damageMob(w, p, t, 1);
+    const pas = p.passive;
+    // Furia Creciente: cada golpe acelera el siguiente
+    if (pas.frenzy) {
+      p.frenzy = Math.min(5, p.frenzy + 1);
+      p.frenzyT = 3;
+    }
+    // Escama Dorada: cada 3er golpe cura a ti y al aliado más cercano
+    if (pas.healEvery && ++p.basics % pas.healEvery === 0) {
+      healPlayer(w, p, p, p.stats.maxHp * pas.healPct);
+      const ally = alliesNear(w, p, 12)
+        .filter((q) => q !== p)
+        .sort((a, b) => d2(a.pos, p.pos) - d2(b.pos, p.pos))[0];
+      if (ally) healPlayer(w, p, ally, ally.stats.maxHp * pas.healPct);
     }
   }
 
@@ -1073,8 +1670,11 @@
     }
     if (nearD > ACTIVE_R && !m.aggro && m.state !== 'return') return;
     m.slowT = Math.max(0, m.slowT - dt);
+    m.rootT = Math.max(0, m.rootT - dt);
+    m.markT = Math.max(0, m.markT - dt);
+    if (m.polyT > 0) m.polyT = Math.max(0, m.polyT - dt);
 
-    // Veneno: un golpe por segundo
+    // Veneno y quemaduras: un golpe por segundo
     for (let i = m.dots.length - 1; i >= 0; i--) {
       const d = m.dots[i];
       d.left -= dt;
@@ -1083,7 +1683,7 @@
         d.tick += 1;
         const dmg = Math.max(1, Math.round(d.perSec));
         m.hp -= dmg;
-        float(w, m, `${dmg}`, 'poison');
+        float(w, m, `${dmg}`, d.kind === 'burn' ? 'burn' : 'poison');
         if (m.hp <= 0 && w.players.has(d.owner.id)) {
           killMob(w, d.owner, m);
           return;
@@ -1092,7 +1692,7 @@
       if (d.left <= 0) m.dots.splice(i, 1);
     }
 
-    // Aturdido: no se mueve ni ataca
+    // Aturdido u oveja: no se mueve ni ataca
     if (m.stunT > 0) {
       m.stunT -= dt;
       return;
@@ -1109,11 +1709,12 @@
     }
 
     const spd = (m.def.speed || 5) * (m.slowT > 0 ? 0.45 : 1);
+    const rooted = m.rootT > 0;
     if (m.state === 'return') {
-      m.moving = stepToward(m, m.spawn, (m.def.speed || 5) * 1.4, dt, 0.8);
+      if (!rooted) m.moving = stepToward(m, m.spawn, (m.def.speed || 5) * 1.4, dt, 0.8);
       // Recupera vida de a poco mientras vuelve; completa solo al llegar
       m.hp = Math.min(m.maxHp, m.hp + m.maxHp * RETURN_HEAL * dt);
-      if (!m.moving) {
+      if (!m.moving && !rooted) {
         m.state = 'idle';
         m.hp = m.maxHp;
       }
@@ -1121,7 +1722,7 @@
       const p = m.aggro;
       const reach = 1.5 + (m.def.scale || 1) * 0.6;
       if (d2(m.pos, p.pos) > reach) {
-        m.moving = stepToward(m, p.pos, spd, dt, reach * 0.9);
+        if (!rooted) m.moving = stepToward(m, p.pos, spd, dt, reach * 0.9);
       } else {
         face(m, p.pos.x, p.pos.z, dt);
         m.atkTimer -= dt;
@@ -1131,7 +1732,7 @@
           mobHitsPlayer(w, m, p);
         }
       }
-    } else {
+    } else if (!rooted) {
       m.wanderT -= dt;
       if (m.wanderT <= 0) {
         m.wanderT = rand(3, 8);
@@ -1145,6 +1746,18 @@
       }
     }
   }
+
+  // Bonificaciones activas para mostrar en pantalla
+  const buffList = (p) => Object.values(p.buffs).map((b) => ({ name: b.name, t: Math.round(b.t * 10) / 10 }));
+  const liveStats = (p) => ({
+    ...p.stats,
+    atk: Math.round(playerAtk(p) * 10) / 10,
+    crit: Math.round(playerCrit(p) * 1000) / 1000,
+    atkSpeed: Math.round(attackInterval(p) * 100) / 100,
+    speed: Math.round(moveSpeed(p) * 10) / 10,
+    dr: Math.min(0.7, buffSum(p, 'dr')),
+    evade: Math.min(0.6, p.stats.evade + buffSum(p, 'evade')),
+  });
 
   return {
     SPAWN,
@@ -1161,9 +1774,12 @@
     step,
     countItem,
     partyView,
+    buffList,
+    liveStats,
+    skillReady,
     cmd: {
       setTarget, attack, targetNearest, moveTo, setMoveDir, talkTo, useSkill, usePotion, useItem, sellItem, buyItem, unequip, respawn,
-      partyInvite, partyAnswer, partyLeave, partyKick,
+      partyInvite, partyAnswer, partyLeave, partyKick, classQuest,
     },
   };
 });

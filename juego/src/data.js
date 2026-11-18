@@ -1,7 +1,17 @@
-// Datos del juego: clases, zonas, monstruos, objetos, habilidades, NPCs y fórmulas.
-// Todo el contenido vive aquí. La web de guías lee este mismo archivo, así que lo que
-// cambies aquí se refleja en la guía automáticamente. Funciona en el navegador (V.Data)
-// y en Node (require), para que el servidor use exactamente las mismas reglas.
+// Datos del juego: razas (arquetipos), habilidades, grados de equipo, zonas, monstruos,
+// objetos, NPCs, progresión y fórmulas. Todo el contenido vive aquí. La web de guías lee
+// este mismo archivo, así que lo que cambies aquí se refleja en la guía automáticamente.
+// Funciona en el navegador (V.Data) y en Node (require): el servidor usa exactamente las
+// mismas reglas.
+//
+// Modelo (v0.7):
+//   · 5 razas jugables (ArchetypeID: oso, elfo, gnomo, hada, lagarto). Cada una reutiliza
+//     una forma de combate: cuerpo a cuerpo (oso, lagarto), a distancia (elfo) o magia
+//     (gnomo, hada).
+//   · Etapas de clase (stage): 0 base · 1 Despertar (nv 10) · 2 Especialización (nv 25,
+//     rama A o B) · 3 Ascensión Maestra (nv 40). Cada cambio exige nivel + misión.
+//   · Grados de equipo (EquipmentGrade) con nivel y etapa mínimos. Cada raza solo usa su
+//     tipo de armadura y sus tipos de arma.
 (function (factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else {
@@ -9,112 +19,501 @@
     V.Data = factory();
   }
 })(function () {
-  const MAX_LEVEL = 20;
+  const MAX_LEVEL = 50;
   const xpToNext = (lvl) => Math.floor(42 * Math.pow(lvl, 1.85) + 18);
+  const CRIT_MULT = 1.8;
+  const MOVE_SPEED = 7.2;
+  const SEXES = { m: 'Hombre', f: 'Mujer' };
 
-  // ---------- Clases ----------
+  // ---------- Grados de equipo (ADN Lineage 2) ----------
+
+  const EquipmentGrade = {
+    GRADE_WOOD: 'madera',
+    GRADE_COPPER: 'cobre',
+    GRADE_BLUE_CRYSTAL: 'azul',
+    GRADE_PURPLE_GOLD: 'morado',
+    GRADE_GOLD_DIAMOND: 'dorado',
+    GRADE_RAINBOW_CELESTIAL: 'arcoiris',
+  };
+  // lvl: nivel mínimo · stage: cambio de clase necesario · look: color de armadura
+  const GRADES = {
+    madera: { id: 'GRADE_WOOD', name: 'Madera', color: '#b9b2a4', lvl: 1, stage: 0, atk: 4, def: 3, hp: 15, price: 30, look: 0x8a6a46 },
+    cobre: { id: 'GRADE_COPPER', name: 'Cobre', color: '#8fd37a', lvl: 5, stage: 0, atk: 10, def: 7, hp: 40, price: 140, look: 0xb5703f },
+    azul: { id: 'GRADE_BLUE_CRYSTAL', name: 'Cristal Azul', color: '#74aaff', lvl: 10, stage: 1, atk: 20, def: 14, hp: 90, price: 520, look: 0x5d8fd8 },
+    morado: { id: 'GRADE_PURPLE_GOLD', name: 'Oro Morado', color: '#c895ff', lvl: 20, stage: 1, atk: 34, def: 22, hp: 150, price: 1500, look: 0x8a55c8 },
+    dorado: { id: 'GRADE_GOLD_DIAMOND', name: 'Diamante Dorado', color: '#ffc44d', lvl: 25, stage: 2, atk: 52, def: 32, hp: 230, price: 3800, look: 0xe0b040 },
+    arcoiris: { id: 'GRADE_RAINBOW_CELESTIAL', name: 'Arcoíris Celestial', color: '#ff8adf', lvl: 40, stage: 3, atk: 80, def: 46, hp: 340, price: 9500, look: 0xf0e0ff, rainbow: true },
+  };
+  const GRADE_ORDER = ['madera', 'cobre', 'azul', 'morado', 'dorado', 'arcoiris'];
+  const gradeIndex = (g) => GRADE_ORDER.indexOf(g);
+
+  // Colores de rareza (los grados más los objetos sin grado)
+  const RARITY = {
+    comun: { name: 'Común', color: '#cfc6b2' },
+    refinado: { name: 'Refinado', color: '#8fd37a' },
+  };
+  for (const [k, g] of Object.entries(GRADES)) RARITY[k] = { name: `Grado ${g.name}`, color: g.color, grade: true };
+
+  // ---------- Tipos de armadura y arma ----------
+
+  const ARMOR_TYPES = {
+    HEAVY_PLATE: { key: 'heavy', name: 'Pesada', def: 1.3, hp: 1.3, mp: 0 },
+    MEDIUM_SCALE: { key: 'medium', name: 'Media', def: 1.05, hp: 1.05, mp: 0 },
+    LIGHT_LEATHER: { key: 'light', name: 'Ligera', def: 0.8, hp: 0.85, mp: 0, evade: 0.03 },
+    CLOTH_ROBE: { key: 'cloth', name: 'Tela', def: 0.6, hp: 0.65, mp: 0.5 },
+    SACRED_ROBE: { key: 'sacred', name: 'Sagrada', def: 0.65, hp: 0.7, mp: 0.45, heal: 0.05 },
+  };
+  // model: forma 3D del arma (sword, hammer, bow, staff)
+  const WEAPON_TYPES = {
+    hammer: { name: 'Martillo', model: 'hammer', glyph: '⚒' },
+    mace: { name: 'Maza', model: 'hammer', glyph: '⚒' },
+    hammer2h: { name: 'Martillo a dos manos', model: 'hammer', glyph: '⚒', twoHanded: true },
+    longsword: { name: 'Espada larga', model: 'sword', glyph: '†' },
+    dualswords: { name: 'Espadas dobles', model: 'sword', glyph: '⚔' },
+    spear: { name: 'Lanza', model: 'sword', glyph: '↟' },
+    bow: { name: 'Arco', model: 'bow', glyph: '➶' },
+    crossbow: { name: 'Ballesta', model: 'bow', glyph: '➶' },
+    daggers: { name: 'Dagas dobles', model: 'sword', glyph: '⚔' },
+    crystalstaff: { name: 'Báculo de cristal', model: 'staff', glyph: '⚚' },
+    wand: { name: 'Varita mecánica', model: 'staff', glyph: '⚚' },
+    launcher: { name: 'Lanzapociones', model: 'staff', glyph: '⚗' },
+    book: { name: 'Libro flotante', model: 'staff', glyph: '❦' },
+    bell: { name: 'Campana mágica', model: 'staff', glyph: '♫' },
+    scepter: { name: 'Cetro estrella', model: 'staff', glyph: '✦' },
+  };
+
+  // ---------- Razas (arquetipos) ----------
   // base: [valor en nivel 1, aumento por nivel]
-  const CLASSES = {
-    guerrero: {
-      name: 'Guerrero',
-      names: { m: 'Guerrero', f: 'Guerrera' },
-      crit: 0.08,
-      role: 'Cuerpo a cuerpo · Resistente',
-      desc: 'Aguanta en primera línea con espada y armadura. Mucha vida, golpes potentes y ataques en área.',
-      base: { hp: [80, 22], mp: [40, 10], atk: [8, 3], def: [2, 1.5] },
-      range: 2.4,
-      atkSpeed: 1.05,
+  // combat: forma de combate heredada (melee = antiguo Guerrero, ranged = Arquero, magic = Mago)
+  // skills: 3 de nivel 1 + 2 del Despertar (nivel 10). branches: ramas del nivel 25 y 40.
+  //
+  // Tipos de habilidad (los resuelve sim.js):
+  //   dmg (a un objetivo; proj, dot, stun, root, hits, critIfBurning, knock, healAlly)
+  //   area (sobre el objetivo; radius, delay, slow, stun, count/spread, healAllies, dot)
+  //   aoe (a tu alrededor; taunt, allyShield, stun, slow) · cone (frente; dot) · line (en línea)
+  //   chain (rebota) · charge (embestida) · leap (salto atrás, con disparo) · blink (adelante)
+  //   buff (a ti o al grupo: atk, crit, speed, haste, dr, evade, thorns, cdr, ccImmune)
+  //   heal (a ti o al grupo: amount, shield, cleanse, revive) · bubble (bloquea el siguiente golpe)
+  //   mark (el objetivo recibe más daño) · zone (charco o rastro en el suelo)
+  //   turret (torreta o autómata) · poly (polimorfia) · pulse (golpes repetidos a tu alrededor)
+  //   dance (cortes saltando entre enemigos)
+  const ARCHETYPES = {
+    oso: {
+      name: 'Oso Pardo',
+      names: { m: 'Oso Pardo', f: 'Osa Parda' },
+      short: { m: 'Oso', f: 'Osa' },
+      glyph: '🐻',
+      combat: 'melee',
+      role: 'Tanque · Guardián',
+      desc: 'Un oso enorme con armadura pesada. Protege a sus amigos, atrae a los monstruos y aguanta golpes que nadie más soporta.',
+      crit: 0.06,
+      base: { hp: [96, 26], mp: [40, 9], atk: [7, 2.7], def: [3, 1.8] },
+      range: 2.5,
+      atkSpeed: 1.15,
       projectile: null,
       mpRegen: 1,
-      start: 'espada_corta',
-      look: { skin: 0xe2b78f, body: 0x34557d, legs: 0x3b3127, hair: 0x4a2c17, cape: 0x7a2630, weaponType: 'sword' },
+      armorType: 'HEAVY_PLATE',
+      weaponTypes: ['hammer', 'mace', 'hammer2h'],
+      look: { skin: 0x8a5a34, body: 0x6f7a86, legs: 0x4a3524, hair: 0x6b4426, ears: 'round', snout: 0x6b4426, tail: 'stub', scale: 1.12, weaponType: 'hammer' },
+      lookF: { skin: 0xa0703f, hair: 0x7d5030 },
+      awaken: 'Oso Guardián',
       skills: [
-        { id: 'golpe', name: 'Golpe Feroz', glyph: '⚔︎', type: 'dmg', mult: 2.2, mp: 8, cd: 4, range: 2.6, lvl: 1, desc: 'Un tajo potente: 220% de daño al objetivo.' },
-        { id: 'aliento', name: 'Segundo Aliento', glyph: '✚', type: 'heal', amount: 0.35, mp: 15, cd: 12, lvl: 3, desc: 'Recupera el 35% de tu vida al instante.' },
-        { id: 'torbellino', name: 'Torbellino', glyph: '❂', type: 'aoe', mult: 1.5, radius: 4.5, mp: 20, cd: 8, lvl: 5, desc: 'Golpea a todos los enemigos a tu alrededor con 150% de daño.' },
-        { id: 'grito', name: 'Grito de Guerra', glyph: '⚑', type: 'buff', pct: 0.3, dur: 15, mp: 25, cd: 35, lvl: 8, desc: '+30% de ataque durante 15 segundos.' },
-        { id: 'embestida', name: 'Embestida', glyph: '⇥', type: 'charge', mult: 1.6, stun: 2, mp: 22, cd: 12, range: 12, lvl: 11, desc: 'Cargas contra el objetivo desde hasta 12 m: 160% de daño y lo aturdes 2 segundos.' },
-        { id: 'sismo', name: 'Golpe Sísmico', glyph: '✸', type: 'aoe', mult: 2.2, radius: 6, slow: 3, mp: 35, cd: 14, lvl: 15, desc: 'Golpeas el suelo: 220% de daño a todo lo que te rodea y lo ralentizas 3 segundos.' },
+        { id: 'rugido', name: 'Rugido Protector', glyph: '◉', type: 'aoe', mult: 0.6, radius: 6, taunt: true, allyShield: 0.15, shieldDur: 6, mp: 12, cd: 10, desc: 'Ruges fuerte: los monstruos cercanos te atacan a ti y tus aliados cercanos reciben un escudo.' },
+        { id: 'salto_sismico', name: 'Salto Sísmico', glyph: '✸', type: 'aoe', mult: 1.6, radius: 4.5, stun: 1.5, mp: 16, cd: 9, desc: 'Saltas y caes con fuerza: 160% de daño alrededor y aturdes a los enemigos 1,5 s.' },
+        { id: 'muro_miel', name: 'Muro de Miel', glyph: '◍', type: 'zone', radius: 4, dur: 6, slow: true, tick: 0.3, fx: 0xf2b13a, mp: 14, cd: 14, desc: 'Un charco de miel pegajosa: ralentiza y daña poco a poco a los enemigos que lo pisan durante 6 s.' },
+        { id: 'piel_corteza', name: 'Piel de Corteza', glyph: '▦', type: 'buff', dr: 0.3, dur: 6, mp: 15, cd: 20, desc: 'Tu piel se vuelve corteza: recibes un 30% menos de daño durante 6 s.' },
+        { id: 'tronco', name: 'Lanzamiento de Tronco', glyph: '▬', type: 'line', mult: 2, length: 14, width: 2, stun: 1.2, mp: 20, cd: 11, desc: 'Arrojas un tronco cuadrado en línea recta: 200% de daño y derriba a los enemigos 1,2 s.' },
       ],
+      branches: {
+        a: {
+          name: 'Guardián de Roca',
+          master: 'Titán de Piedra Viva',
+          passive: { name: 'Corazón de Roca', hpPct: 0.25, block: 0.2, desc: '+25% de vida máxima y 20% de probabilidad de bloquear la mitad de un golpe con el escudo.' },
+          ultimate: { id: 'fortaleza', name: 'Fortaleza Cubo', glyph: '⛫', type: 'heal', group: true, radius: 10, amount: 0, shield: 0.5, shieldDur: 6, mp: 45, cd: 60, desc: 'Una cúpula de piedra cubre al grupo: cada aliado recibe un escudo enorme durante 6 s.' },
+          masterUlt: { name: 'Fortaleza Cubo Maestra', amount: 0.35, thorns: 0.6, desc: 'La cúpula también cura un 35% de vida al grupo y devuelve parte del daño a quien golpea.' },
+        },
+        b: {
+          name: 'Oso Berserker',
+          master: 'Coloso Tronador',
+          passive: { name: 'Furia Creciente', twoHanded: true, frenzy: 0.05, desc: 'Puede usar martillos a dos manos. Cada golpe acelera tus ataques un 5% (hasta 5 veces).' },
+          ultimate: { id: 'terremoto', name: 'Terremoto Estelar', glyph: '✺', type: 'pulse', mult: 2.2, radius: 7, count: 3, every: 0.5, stun: 0.6, mp: 45, cd: 45, desc: 'Golpeas el suelo 3 veces: ondas expansivas de 220% de daño cada una.' },
+          masterUlt: { name: 'Terremoto Estelar Maestro', lightning: 1.2, desc: 'Además caen rayos sobre los enemigos golpeados.' },
+        },
+      },
     },
-    arquera: {
-      name: 'Arquera',
-      names: { m: 'Arquero', f: 'Arquera' },
+    elfo: {
+      name: 'Elfo del Bosque Cubo',
+      names: { m: 'Elfo del Bosque Cubo', f: 'Elfa del Bosque Cubo' },
+      short: { m: 'Elfo', f: 'Elfa' },
+      glyph: '🏹',
+      combat: 'ranged',
+      role: 'Explorador · Arquero',
+      desc: 'Rápido y certero. Ataca desde lejos con su arco, marca a los enemigos y escapa de un salto cuando se acercan.',
       crit: 0.14,
-      role: 'A distancia · Ágil',
-      desc: 'Dispara desde lejos y se retira antes de que la alcancen. Menos vida, pero los monstruos rara vez llegan a tocarla.',
       base: { hp: [66, 17], mp: [45, 11], atk: [8, 3.05], def: [1.5, 1.1] },
       range: 15,
       atkSpeed: 1.15,
       projectile: 'arrow',
       mpRegen: 1,
-      start: 'arco_corto',
-      look: { skin: 0xe6bf9a, body: 0x3f6b3a, legs: 0x4a3a28, hair: 0x9a4a22, longHair: true, cape: 0x2f4a2a, weaponType: 'bow' },
+      armorType: 'LIGHT_LEATHER',
+      weaponTypes: ['bow', 'crossbow', 'daggers'],
+      look: { skin: 0xf0cfa8, body: 0x3f7a3a, legs: 0x4a3a28, hair: 0xd9b25f, ears: 'pointy', cape: 0x2f5a2a, weaponType: 'bow' },
+      lookF: { hair: 0xe8c878 },
+      awaken: 'Explorador del Bosque',
       skills: [
-        { id: 'certero', name: 'Disparo Certero', glyph: '➶', type: 'dmg', proj: 'arrow', mult: 2.3, mp: 8, cd: 4, range: 16, lvl: 1, desc: 'Una flecha apuntada con calma: 230% de daño.' },
-        { id: 'retirada', name: 'Salto de Retirada', glyph: '↶', type: 'leap', dist: 7, slow: 4, mp: 12, cd: 10, lvl: 3, desc: 'Saltas 7 metros hacia atrás y ralentizas a tu objetivo durante 4 segundos.' },
-        { id: 'lluvia', name: 'Lluvia de Flechas', glyph: '⇣', type: 'area', fx: 'rain', mult: 1.4, radius: 4.5, delay: 0.55, mp: 22, cd: 9, range: 16, lvl: 5, desc: 'Una descarga cae sobre el objetivo y todo lo que lo rodea: 140% de daño.' },
-        { id: 'halcon', name: 'Ojo de Halcón', glyph: '◉', type: 'buff', pct: 0.35, crit: 0.1, dur: 20, mp: 25, cd: 40, lvl: 8, desc: '+35% de ataque y +10% de probabilidad de crítico durante 20 segundos.' },
-        { id: 'veneno', name: 'Flecha Venenosa', glyph: '☣', type: 'dmg', proj: 'arrow', mult: 1.4, dot: { mult: 2.4, dur: 6 }, mp: 18, cd: 9, range: 16, lvl: 11, desc: '140% de daño y veneno: un 240% adicional repartido en 6 segundos.' },
-        { id: 'tormenta', name: 'Tormenta de Flechas', glyph: '⛆', type: 'area', fx: 'rain', mult: 2.4, radius: 6.5, delay: 0.6, mp: 38, cd: 16, range: 18, lvl: 15, desc: 'Cientos de flechas sobre el objetivo y su entorno: 240% de daño en un área amplia.' },
+        { id: 'bellotas', name: 'Lluvia de Bellotas', glyph: '⇣', type: 'area', fx: 'rain', mult: 1.4, radius: 4.5, delay: 0.5, mp: 12, cd: 8, range: 16, desc: 'Una lluvia de bellotas cae sobre el objetivo y todo lo que lo rodea: 140% de daño.' },
+        { id: 'salto_copa', name: 'Salto de Copa', glyph: '↶', type: 'leap', dist: 7, shot: 1.2, knock: 3, mp: 12, cd: 10, desc: 'Saltas 7 m hacia atrás y disparas una flecha que empuja al objetivo.' },
+        { id: 'halcon', name: 'Compañero Halcón', glyph: '🦅', type: 'mark', pct: 0.25, dur: 10, mp: 10, cd: 16, range: 22, desc: 'Tu halcón marca al objetivo: recibe un 25% más de daño de todo tu grupo durante 10 s.' },
+        { id: 'enredadera', name: 'Flecha Enredadera', glyph: '❦', type: 'dmg', proj: 'arrow', mult: 1.3, root: 3, mp: 16, cd: 12, range: 16, desc: 'Raíces cúbicas atrapan al objetivo: 130% de daño y no puede moverse durante 3 s.' },
+        { id: 'paso_veloz', name: 'Paso Veloz', glyph: '»', type: 'buff', speed: 0.35, evade: 0.25, dur: 8, mp: 14, cd: 20, desc: 'Corres como el viento: +35% de velocidad y +25% de esquivar durante 8 s.' },
       ],
+      branches: {
+        a: {
+          name: 'Francotirador Solar',
+          master: 'Centinela del Sol',
+          passive: { name: 'Ojo del Sol', rangePct: 0.3, farCrit: 0.5, desc: '+30% de alcance. Tus críticos hacen hasta un 50% más de daño cuanto más lejos está el objetivo.' },
+          ultimate: { id: 'rayo_solar', name: 'Rayo Solar', glyph: '☀', type: 'line', mult: 4.5, length: 28, width: 2.4, mp: 45, cd: 40, desc: 'Una flecha de luz gigante atraviesa a todos los enemigos en línea: 450% de daño.' },
+          masterUlt: { name: 'Rayo Solar Maestro', trail: { dur: 5, tick: 0.5 }, allyBuff: { speed: 0.25, dur: 6 }, desc: 'Deja un rastro de luz que quema a los enemigos y acelera a tus aliados.' },
+        },
+        b: {
+          name: 'Jinete del Viento',
+          master: 'Sombra del Vendaval',
+          passive: { name: 'Danza del Viento', moveAttack: true, speedPct: 0.1, desc: 'Puedes atacar mientras te mueves sin perder velocidad, y te mueves un 10% más rápido.' },
+          ultimate: { id: 'tornado', name: 'Tornado de Hojas', glyph: '🌪', type: 'pulse', mult: 0.9, radius: 4, count: 10, every: 0.4, selfBuff: { speed: 0.2, dur: 4 }, mp: 40, cd: 35, desc: 'Te conviertes en un torbellino que golpea rápido a tu alrededor mientras te mueves.' },
+          masterUlt: { name: 'Tornado de Hojas Maestro', mult: 1.5, count: 15, desc: 'Dos clones de viento giran contigo: más golpes y más fuertes durante 6 s.' },
+        },
+      },
     },
-    mago: {
-      name: 'Mago',
-      names: { m: 'Mago', f: 'Maga' },
+    gnomo: {
+      name: 'Gnomo Ingeniero',
+      names: { m: 'Gnomo Ingeniero', f: 'Gnoma Ingeniera' },
+      short: { m: 'Gnomo', f: 'Gnoma' },
+      glyph: '⚙',
+      combat: 'magic',
+      role: 'Mago elemental · Artificiero',
+      desc: 'Pequeño e ingenioso. Lanza rayos de cristal, construye torretas y convierte a los monstruos en ovejas.',
       crit: 0.1,
-      role: 'Magia · Daño en área',
-      desc: 'Domina el fuego y la escarcha. Poca defensa, pero el mayor daño del juego y mucho maná.',
       base: { hp: [56, 14], mp: [70, 18], atk: [9, 3.3], def: [1, 0.9] },
       range: 13,
       atkSpeed: 1.45,
       projectile: 'arcane',
       mpRegen: 1.5,
-      start: 'baculo_aprendiz',
-      look: { skin: 0xdcb08a, body: 0x3b3f8a, legs: 0x2a2c55, hair: 0xd8d4cc, beard: true, robe: true, hat: 0x2c2f6e, weaponType: 'staff' },
+      armorType: 'CLOTH_ROBE',
+      weaponTypes: ['crystalstaff', 'wand', 'launcher'],
+      look: { skin: 0xe8b894, body: 0x8a5a2a, legs: 0x3a3f55, hair: 0xe6e0d6, beard: true, goggles: 0x6fb8d8, scale: 0.78, weaponType: 'staff' },
+      lookF: { hair: 0xd8743a, beard: false },
+      awaken: 'Artificiero de Cristal',
       skills: [
-        { id: 'fuego', name: 'Bola de Fuego', glyph: '✺', type: 'dmg', proj: 'fire', mult: 2.6, mp: 10, cd: 3.5, range: 14, lvl: 1, desc: 'Lanza una esfera ardiente: 260% de daño.' },
-        { id: 'escudo', name: 'Escudo Arcano', glyph: '◈', type: 'shield', amount: 0.4, dur: 12, mp: 20, cd: 22, lvl: 3, desc: 'Un escudo absorbe daño igual al 40% de tu vida durante 12 segundos.' },
-        { id: 'nova', name: 'Nova de Escarcha', glyph: '❄', type: 'aoe', mult: 1.3, radius: 5, slow: 5, mp: 24, cd: 10, lvl: 5, desc: 'Hielo a tu alrededor: 130% de daño y ralentiza a los enemigos 5 segundos.' },
-        { id: 'meteoro', name: 'Meteoro', glyph: '☄', type: 'area', fx: 'meteor', mult: 3, radius: 5, delay: 0.75, mp: 40, cd: 18, range: 15, lvl: 8, desc: 'Un meteoro cae sobre el objetivo: 300% de daño en área.' },
-        { id: 'rayo', name: 'Cadena de Rayos', glyph: 'ϟ', type: 'chain', mult: 1.9, jumps: 3, jumpR: 8, mp: 26, cd: 8, range: 14, lvl: 11, desc: 'Un rayo golpea al objetivo y salta a 3 enemigos cercanos: 190% de daño a cada uno.' },
-        { id: 'ventisca', name: 'Ventisca', glyph: '❆', type: 'area', fx: 'frost', mult: 2.2, radius: 6.5, slow: 5, delay: 0.5, mp: 45, cd: 18, range: 15, lvl: 15, desc: 'Una tormenta de hielo sobre el objetivo: 220% de daño en área y ralentiza 5 segundos.' },
+        { id: 'rayo_cristal', name: 'Rayo de Cristal', glyph: 'ϟ', type: 'chain', mult: 1.6, jumps: 2, jumpR: 8, mp: 10, cd: 4, range: 14, desc: 'Un rayo de cristal golpea al objetivo y rebota hasta 3 enemigos: 160% de daño a cada uno.' },
+        { id: 'torreta', name: 'Torreta de Chispas', glyph: '⛯', type: 'turret', mult: 0.9, dur: 8, every: 1, reach: 12, mp: 16, cd: 14, desc: 'Construyes un tótem que dispara chispas al enemigo más cercano durante 8 s.' },
+        { id: 'polimorfia', name: 'Polimorfia Divertida', glyph: '🐑', type: 'poly', dur: 5, mp: 18, cd: 18, range: 14, desc: 'Conviertes al objetivo en una oveja cuadrada inofensiva durante 5 s. (No sirve con jefes.)' },
+        { id: 'pegamento', name: 'Bomba de Pegamento', glyph: '⚗', type: 'area', fx: 'glue', mult: 1.5, radius: 4, delay: 0.45, slow: 4, mp: 18, cd: 10, range: 14, desc: 'Un frasco explota sobre el objetivo: 150% de daño en área y ralentiza 4 s.' },
+        { id: 'propulsores', name: 'Propulsores de Mochila', glyph: '⇢', type: 'blink', dist: 8, mp: 12, cd: 12, desc: 'Tu mochila te lanza 8 m hacia adelante dejando una nube de humo.' },
       ],
+      branches: {
+        a: {
+          name: 'Maestro de Cristales',
+          master: 'Archimago Prismático',
+          passive: { name: 'Resonancia Prismática', freeEvery: 3, desc: 'Cada 3 hechizos, el siguiente no cuesta maná y hace el doble de daño.' },
+          ultimate: { id: 'meteoritos', name: 'Lluvia de Meteoritos Cubo', glyph: '☄', type: 'area', fx: 'meteor', mult: 2.8, radius: 3.5, count: 5, spread: 5, delay: 0.8, mp: 55, cd: 45, range: 16, desc: 'Caen 5 bloques de magma gigantes sobre un área amplia: 280% de daño cada uno.' },
+          masterUlt: { name: 'Meteoritos Prismáticos', stun: 2, slow: 4, fx: 'frost', desc: 'Los meteoritos son de cristal prismático: además congelan y aturden 2 s.' },
+        },
+        b: {
+          name: 'Inventor de Autómatas',
+          master: 'Gran Mecánico Estelar',
+          passive: { name: 'Taller Portátil', turretMax: 2, turretPct: 0.2, desc: 'Puedes tener 2 torretas o robots a la vez, y hacen un 20% más de daño.' },
+          ultimate: { id: 'mecha', name: 'Invocar Mecha-Gólem', glyph: '🤖', type: 'turret', big: true, mult: 2.2, dur: 15, every: 1, reach: 10, mp: 55, cd: 60, desc: 'Un robot gigante pelea a tu lado durante 15 s, disparando bolas de fuego (220% de daño cada una).' },
+          masterUlt: { name: 'Mecha-Gólem Pilotado', selfShield: 0.6, selfBuff: { atk: 0.3, dur: 15 }, desc: 'Te subes al Mecha-Gólem: ganas un gran escudo y cañones láser (+30% de ataque).' },
+        },
+      },
+    },
+    hada: {
+      name: 'Hada-Gato (Sylph)',
+      names: { m: 'Hada-Gato (Sylph)', f: 'Hada-Gata (Sylph)' },
+      short: { m: 'Hada-Gato', f: 'Hada-Gata' },
+      glyph: '🐱',
+      combat: 'magic',
+      role: 'Sanador · Soporte',
+      desc: 'Una gatita con alas de hada. Cura al grupo con canciones, protege con burbujas y hace a todos más rápidos.',
+      crit: 0.08,
+      base: { hp: [62, 16], mp: [80, 20], atk: [7.5, 2.8], def: [1.3, 1], heal: [1, 0] },
+      range: 12,
+      atkSpeed: 1.4,
+      projectile: 'arcane',
+      mpRegen: 1.7,
+      armorType: 'SACRED_ROBE',
+      weaponTypes: ['book', 'bell', 'scepter'],
+      look: { skin: 0xf2e2d0, body: 0xb48ce0, legs: 0x8a6ac0, hair: 0xf6f0ff, ears: 'cat', tail: 'cat', wings: 0xbfe6ff, robe: true, scale: 0.92, weaponType: 'staff' },
+      lookF: { hair: 0xffd6ec, body: 0xe0a0d0 },
+      awaken: 'Tejedor de Estrellas',
+      skills: [
+        { id: 'corazones', name: 'Canción de Corazones', glyph: '♥', type: 'heal', group: true, radius: 9, amount: 0.25, mp: 16, cd: 8, desc: 'Cantas y curas al instante un 25% de vida a ti y a los aliados cercanos.' },
+        { id: 'burbuja', name: 'Burbuja Estelar', glyph: '◯', type: 'bubble', dur: 10, reach: 16, mp: 14, cd: 14, desc: 'Una burbuja protege al aliado más herido (o a ti): bloquea por completo el siguiente golpe.' },
+        { id: 'bendicion', name: 'Bendición de Velocidad', glyph: '»', type: 'buff', group: true, radius: 12, speed: 0.2, haste: 0.2, dur: 15, mp: 20, cd: 30, desc: 'Tú y tu grupo se mueven y atacan un 20% más rápido durante 15 s.' },
+        { id: 'destello', name: 'Destello Purificador', glyph: '✧', type: 'heal', group: true, radius: 9, amount: 0.12, cleanse: true, mp: 14, cd: 12, desc: 'Quita veneno, quemaduras y ralentizaciones a tu grupo y lo cura un poco.' },
+        { id: 'ola_notas', name: 'Ola de Notas', glyph: '♫', type: 'dmg', proj: 'arcane', mult: 1.8, healAlly: 0.15, mp: 14, cd: 6, range: 14, desc: 'Una nota musical daña al enemigo (180%) y rebota hacia el aliado más herido para curarlo.' },
+      ],
+      branches: {
+        a: {
+          name: 'Oráculo Estelar',
+          master: 'Emperador Celestial',
+          passive: { name: 'Bendición del Oráculo', healPct: 0.3, partyMp: 0.5, desc: '+30% de curación y tu grupo cercano recupera maná un 50% más rápido.' },
+          ultimate: { id: 'estrellas', name: 'Lluvia de Estrellas Sanadoras', glyph: '✶', type: 'heal', group: true, radius: 14, amount: 1, shield: 0.2, shieldDur: 8, mp: 60, cd: 75, desc: 'Restaura el 100% de la vida de todo el grupo cercano y le da un escudo extra.' },
+          masterUlt: { name: 'Lluvia de Estrellas Maestra', revive: true, desc: 'Además revive al instante a los aliados caídos en el área.' },
+        },
+        b: {
+          name: 'Bardo Melódico',
+          master: 'Virtuoso Cósmico',
+          passive: { name: 'Aura de Canción', aura: { atk: 0.1, speed: 0.1, radius: 10 }, desc: 'Tus canciones dejan un aura: tu grupo cercano tiene +10% de ataque y velocidad siempre.' },
+          ultimate: { id: 'sinfonia', name: 'Sinfonía Heroica', glyph: '🎼', type: 'buff', group: true, radius: 14, atk: 0.4, speed: 0.4, haste: 0.4, cdr: 0.4, dur: 10, mp: 55, cd: 60, desc: 'Todo el grupo: +40% de daño y velocidad, y habilidades un 40% más rápidas durante 10 s.' },
+          masterUlt: { name: 'Sinfonía Cósmica', danceStun: { radius: 9, dur: 4 }, desc: 'Además los enemigos cercanos se ponen a bailar sin poder atacar durante 4 s.' },
+        },
+      },
+    },
+    lagarto: {
+      name: 'Caballero Lagarto',
+      names: { m: 'Caballero Lagarto', f: 'Dama Lagarto' },
+      short: { m: 'Lagarto', f: 'Lagarta' },
+      glyph: '🦎',
+      combat: 'melee',
+      role: 'Luchador · Espadachín',
+      desc: 'Un draconiano valiente con espada y escamas. Gira, escupe chispas y quema a los enemigos para golpes críticos.',
+      crit: 0.1,
+      base: { hp: [80, 22], mp: [42, 10], atk: [8.5, 3.1], def: [2, 1.4] },
+      range: 2.4,
+      atkSpeed: 1.0,
+      projectile: null,
+      mpRegen: 1,
+      armorType: 'MEDIUM_SCALE',
+      weaponTypes: ['longsword', 'dualswords', 'spear'],
+      look: { skin: 0x5a9a4a, body: 0xb06a2a, legs: 0x3a3024, snout: 0x4a8a3c, crest: 0xd9602a, tail: 'lizard', cape: 0x8a2a1a, weaponType: 'sword' },
+      lookF: { skin: 0x6aaa6a, crest: 0xe0a030 },
+      awaken: 'Guerrero Escama de Fuego',
+      skills: [
+        { id: 'torbellino', name: 'Torbellino de Escamas', glyph: '❂', type: 'aoe', mult: 1.5, radius: 4.5, mp: 14, cd: 7, desc: 'Giras con tu espada: 150% de daño a todos los enemigos a tu alrededor.' },
+        { id: 'aliento', name: 'Aliento de Chispa', glyph: '🔥', type: 'cone', mult: 1, radius: 7, angle: 70, burn: { mult: 1.6, dur: 4 }, mp: 14, cd: 9, desc: 'Escupes chispas al frente: 100% de daño y los quemas (160% más en 4 s).' },
+        { id: 'carga', name: 'Carga Heroica', glyph: '⇥', type: 'charge', mult: 1.6, stun: 1, mp: 14, cd: 11, range: 12, desc: 'Corres hacia el objetivo desde hasta 12 m: 160% de daño y lo aturdes 1 s.' },
+        { id: 'escudo_brasas', name: 'Escudo de Brasas', glyph: '♨', type: 'buff', thorns: 0.5, dur: 10, mp: 16, cd: 20, desc: 'Te rodeas de fuego: quien te golpee cuerpo a cuerpo se quema (50% de tu ataque) durante 10 s.' },
+        { id: 'corte_cruzado', name: 'Corte Cruzado', glyph: '✕', type: 'dmg', mult: 1.2, hits: 2, critIfBurning: true, mp: 16, cd: 8, range: 2.8, desc: 'Dos tajos rápidos de 120%. Si el enemigo se está quemando, ambos son críticos.' },
+      ],
+      branches: {
+        a: {
+          name: 'Paladín Escama Dorada',
+          master: 'Campeón Dracónico',
+          passive: { name: 'Escama Dorada', healEvery: 3, healPct: 0.04, desc: 'Cada 3er ataque básico te cura un 4% de vida a ti y al aliado más cercano.' },
+          ultimate: { id: 'juicio', name: 'Juicio del Dragón', glyph: '🗡', type: 'area', fx: 'sword', mult: 3.5, radius: 5, delay: 0.7, healAllies: 0.25, mp: 50, cd: 45, range: 14, desc: 'Una espada gigante de luz cae sobre el objetivo: 350% de daño en área y cura a tus aliados.' },
+          masterUlt: { name: 'Juicio del Dragón Maestro', selfBuff: { dr: 0.3, ccImmune: true, dur: 12 }, desc: 'Despliegas alas de luz 12 s: recibes un 30% menos de daño y nada puede aturdirte.' },
+        },
+        b: {
+          name: 'Danzante de Fuego',
+          master: 'Señor de las Llamas',
+          passive: { name: 'Ritmo Llameante', cdRefund: 1, desc: 'Especialista en espadas dobles: cada habilidad que usas reduce 1 s la recarga de las demás.' },
+          ultimate: { id: 'danza', name: 'Danza del Dragón de Fuego', glyph: '🐉', type: 'dance', mult: 1.1, hits: 8, jumpR: 10, mp: 50, cd: 40, range: 10, desc: '8 cortes ultrarrápidos saltando entre los enemigos cercanos: 110% de daño cada uno.' },
+          masterUlt: { name: 'Danza del Señor de las Llamas', finale: { mult: 3, radius: 6, burn: { mult: 2, dur: 4 } }, desc: 'Al terminar la danza, una explosión volcánica enorme quema todo alrededor.' },
+        },
+      },
     },
   };
-  const CLASS_IDS = Object.keys(CLASSES);
+  const ARCHETYPE_IDS = Object.keys(ARCHETYPES);
+  // Compatibilidad: el código antiguo llamaba "clase" a lo que ahora es la raza
+  const CLASSES = ARCHETYPES;
+  const CLASS_IDS = ARCHETYPE_IDS;
+  const isArchetype = (id) => typeof id === 'string' && Object.prototype.hasOwnProperty.call(ARCHETYPES, id);
+  const arch = (id) => ARCHETYPES[id] || ARCHETYPES.lagarto;
 
-  const SEXES = { m: 'Hombre', f: 'Mujer' };
-  const className = (cls, sex) => {
-    const c = CLASSES[cls] || CLASSES.guerrero;
-    return (c.names && c.names[sex]) || c.name;
+  // ---------- Etapas de clase y progresión ----------
+
+  const STAGES = [
+    { stage: 0, name: 'Inicio', lvl: 1 },
+    { stage: 1, name: 'Despertar', lvl: 10, quest: { title: 'Prueba del Gremio', kills: 12 }, unlocks: '2 habilidades nuevas y equipo de Cristal Azul' },
+    { stage: 2, name: 'Especialización', lvl: 25, quest: { title: 'Senda del Especialista', kills: 20 }, branch: true, unlocks: 'Elegir rama A o B: habilidad pasiva, Ultimate y equipo Diamante Dorado' },
+    { stage: 3, name: 'Ascensión Maestra', lvl: 40, quest: { title: 'Prueba de Ascensión', boss: true, group: true }, unlocks: 'Ultimate Maestra, Aura de Héroe y equipo Arcoíris Celestial' },
+  ];
+  // Hitos del árbol de progresión (soon: aún no está en el juego)
+  const PROGRESSION = [
+    { lvl: 1, text: 'Eliges raza: 3 habilidades y equipo de Madera' },
+    { lvl: 5, text: 'Huevo de Mascota (recoge el botín sola)', soon: true },
+    { lvl: 5, text: 'Equipo de Cobre' },
+    { lvl: 10, text: '1er cambio de clase: Despertar', stage: 1 },
+    { lvl: 20, text: 'La mascota evoluciona en Montura Terrestre', soon: true },
+    { lvl: 20, text: 'Equipo de Oro Morado' },
+    { lvl: 25, text: '2do cambio de clase: Especialización (rama A o B)', stage: 2 },
+    { lvl: 40, text: '3er cambio de clase: Ascensión Maestra', stage: 3 },
+    { lvl: 40, text: 'Montura Planeadora y Aura de Héroe', soon: true },
+  ];
+
+  // Nombre visible según raza, sexo y etapa (ej.: "Oso Guardián", "Titán de Piedra Viva")
+  const raceName = (cls, sex) => {
+    const a = arch(cls);
+    return (a.names && a.names[sex]) || a.name;
   };
-  // Aspecto según clase y sexo: las mujeres llevan pelo largo y figura más estilizada;
-  // los hombres, pelo corto (y barba el mago).
-  function lookFor(cls, sex) {
-    const base = { ...(CLASSES[cls] || CLASSES.guerrero).look };
-    if (sex === 'f') {
-      base.female = true;
-      base.longHair = true;
-      base.beard = false;
-      if (cls === 'guerrero') base.hair = 0x9a4a22;
-      if (cls === 'mago') base.hair = 0xe2d6b8;
-    } else {
-      base.female = false;
-      base.longHair = false;
-      if (cls === 'arquera') base.hair = 0x5a3a1c;
-    }
-    return base;
+  function className(cls, sex, stage = 0, branch = null) {
+    const a = arch(cls);
+    const b = branch && a.branches[branch];
+    if (stage >= 3 && b) return b.master;
+    if (stage >= 2 && b) return b.name;
+    if (stage >= 1) return a.awaken;
+    return raceName(cls, sex);
   }
+
+  // Habilidades activas: 5 de la raza + la Ultimate (bloqueada hasta elegir rama).
+  // Cada una lleva lvl y stage necesarios; en etapa 3 la Ultimate pasa a su versión Maestra.
+  const ULT_LOCKED = { id: 'ultimate', name: 'Ultimate', glyph: '★', type: 'none', mp: 0, cd: 1, lvl: 25, stage: 2, locked: true, desc: 'Se desbloquea al elegir tu especialización en el nivel 25.' };
+  function skillsFor(cls, stage = 0, branch = null) {
+    const a = arch(cls);
+    const list = a.skills.map((s, i) => ({ ...s, lvl: i < 3 ? 1 : 10, stage: i < 3 ? 0 : 1 }));
+    const b = branch && a.branches[branch];
+    if (!b) return [...list, ULT_LOCKED];
+    let ult = { ...b.ultimate, lvl: 25, stage: 2, ultimate: true };
+    if (stage >= 3) ult = { ...ult, ...b.masterUlt, master: true, lvl: 40, stage: 3 };
+    return [...list, ult];
+  }
+  const passiveFor = (cls, stage, branch) => (stage >= 2 && branch && arch(cls).branches[branch] ? arch(cls).branches[branch].passive : null);
+  const skillLock = (p, s) => (s.locked || p.level < s.lvl || (p.stage || 0) < s.stage ? (s.stage > (p.stage || 0) && p.level >= s.lvl ? 'Cambio de clase' : `Nv ${s.lvl}`) : '');
+
+  // ---------- Objetos ----------
+
+  const ITEMS = {
+    pocion_vida: { name: 'Poción de Vida', type: 'potion', stat: 'hp', amount: 0.35, price: 20, stack: true, glyph: '♥', rarity: 'comun', desc: 'Restaura el 35% de la vida.' },
+    pocion_mana: { name: 'Poción de Maná', type: 'potion', stat: 'mp', amount: 0.4, price: 25, stack: true, glyph: '◆', rarity: 'comun', desc: 'Restaura el 40% del maná.' },
+
+    piel: { name: 'Piel de Jabalí', type: 'junk', price: 4, stack: true, glyph: '▤', rarity: 'comun', desc: 'Se vende en el mercado.' },
+    colmillo: { name: 'Colmillo de Lobo', type: 'junk', price: 8, stack: true, glyph: '◣', rarity: 'comun', desc: 'Se vende en el mercado.' },
+    oreja_goblin: { name: 'Oreja de Goblin', type: 'junk', price: 13, stack: true, glyph: '◖', rarity: 'comun', desc: 'Prueba de caza. Se vende en el mercado.' },
+    amuleto_hueso: { name: 'Amuleto de Hueso', type: 'junk', price: 22, stack: true, glyph: '◎', rarity: 'comun', desc: 'Talismán orco. Se vende en el mercado.' },
+    nucleo_ceniza: { name: 'Núcleo de Ceniza', type: 'junk', price: 36, stack: true, glyph: '✹', rarity: 'refinado', desc: 'Aún está tibio. Se vende en el mercado.' },
+    mucosa: { name: 'Mucosa de Ciénaga', type: 'junk', price: 32, stack: true, glyph: '●', rarity: 'comun', desc: 'Viscosa. Se vende en el mercado.' },
+  };
+
+  // Armas por raza y grado: [tipo, nombre, descripción]
+  const WEAPON_NAMES = {
+    oso: [
+      ['mace', 'Mazo de Madera', 'Un tronco con mango. Pesa más de lo que parece.'],
+      ['mace', 'Maza de Piedra', 'Una piedra bien atada a un palo firme.'],
+      ['hammer', 'Martillo de Hierro Azul', 'Forjado en las minas de cristal.'],
+      ['hammer', 'Martillo de Amatista', 'La amatista retumba en cada golpe.'],
+      ['hammer', 'Martillo de Diamante Estelar', 'Brilla como una estrella al chocar.'],
+      ['hammer', 'Martillo Celestial', 'Deja una estela de arcoíris al moverse.'],
+    ],
+    elfo: [
+      ['bow', 'Arco de Rama', 'Una rama flexible y una cuerda de lino.'],
+      ['bow', 'Arco de Roble', 'Más alcance y más fuerza en cada tiro.'],
+      ['crossbow', 'Ballesta de Cristal Azul', 'Dispara virotes de cristal.'],
+      ['bow', 'Arco Compuesto de Amatista', 'Capas de madera y amatista encantada.'],
+      ['bow', 'Arco de Diamante Estelar', 'Sus flechas dejan polvo de estrellas.'],
+      ['bow', 'Arco Celestial del Alba', 'Dispara flechas de luz de arcoíris.'],
+    ],
+    gnomo: [
+      ['wand', 'Vara de Rama', 'Una ramita con una chispa en la punta.'],
+      ['wand', 'Varita Mecánica de Cobre', 'Engranajes que giran al lanzar hechizos.'],
+      ['crystalstaff', 'Báculo de Zafiro', 'El zafiro concentra el maná.'],
+      ['launcher', 'Lanzapociones de Amatista', 'Dispara frascos burbujeantes.'],
+      ['crystalstaff', 'Báculo de Diamante Estelar', 'Un diamante gira en su punta.'],
+      ['crystalstaff', 'Báculo Prismático Celestial', 'Descompone la luz en todos los colores.'],
+    ],
+    hada: [
+      ['scepter', 'Cetro de Rama', 'Una ramita con una estrellita.'],
+      ['bell', 'Campanita de Cobre', 'Su tintineo calma a los heridos.'],
+      ['book', 'Libro Flotante Azul', 'Sus páginas pasan solas.'],
+      ['book', 'Libro Rúnico Morado', 'Las runas cantan al abrirlo.'],
+      ['scepter', 'Cetro Estrella de Diamante', 'Una estrella de diamante late en la punta.'],
+      ['bell', 'Campana Celestial', 'Su sonido se escucha en todo el cielo.'],
+    ],
+    lagarto: [
+      ['longsword', 'Espada de Madera', 'Para entrenar… y para pelear de verdad.'],
+      ['spear', 'Lanza de Cobre', 'Larga y con punta afilada de cobre.'],
+      ['longsword', 'Espada Larga de Cristal Azul', 'Equilibrada y brillante.'],
+      ['dualswords', 'Espadas Dobles de Amatista', 'Un par de hojas moradas muy rápidas.'],
+      ['longsword', 'Espada de Diamante Estelar', 'Corta el aire con un silbido.'],
+      ['longsword', 'Hoja Celestial del Dragón', 'Arde con fuego de arcoíris.'],
+    ],
+  };
+  // Martillos a dos manos (solo Oso Berserker): +35% de ataque
+  const TWO_HANDED = [
+    ['dorado', 'gran_martillo_tronador', 'Gran Martillo Tronador', 'Hace temblar la tierra.'],
+    ['arcoiris', 'martillo_coloso', 'Martillo del Coloso', 'Solo un coloso puede levantarlo.'],
+  ];
+  const ARMOR_NAMES = {
+    HEAVY_PLATE: ['Peto de Tablas', 'Armadura de Cobre', 'Armadura de Cristal Azul', 'Armadura de Oro Encantado', 'Coraza de Diamante con Capa', 'Armadura Legendaria del Titán'],
+    MEDIUM_SCALE: ['Escamas de Corteza', 'Cota de Escamas de Cobre', 'Escamas de Cristal Azul', 'Escamas de Oro Encantado', 'Escamas de Diamante con Capa', 'Escamas Celestiales del Dragón'],
+    LIGHT_LEATHER: ['Chaleco de Hojas', 'Armadura de Cuero', 'Cuero de Cristal Azul', 'Cuero de Oro Encantado', 'Capa de Diamante del Explorador', 'Atuendo Celestial del Viento'],
+    CLOTH_ROBE: ['Ropa de Tela Simple', 'Túnica de Cobre', 'Túnica de Cristal Azul', 'Túnica de Oro Encantado', 'Túnica de Diamante con Capa', 'Túnica Prismática Celestial'],
+    SACRED_ROBE: ['Vestido de Pétalos', 'Hábito de Cobre', 'Vestiduras de Cristal Azul', 'Vestiduras de Oro Encantado', 'Manto Sagrado de Diamante', 'Manto Celestial de las Estrellas'],
+  };
+
+  const WEAPON_TIERS = {}; // raza → ids de arma por grado (madera … arcoiris)
+  const ARMOR_TIERS = {}; // tipo de armadura → ids por grado
+  for (const cls of ARCHETYPE_IDS) {
+    WEAPON_TIERS[cls] = GRADE_ORDER.map((g, i) => {
+      const [wt, name, desc] = WEAPON_NAMES[cls][i];
+      const G = GRADES[g];
+      const id = `w_${cls}_${g}`;
+      ITEMS[id] = { name, type: 'weapon', weaponType: wt, cls, grade: g, atk: G.atk, lvl: G.lvl, price: G.price, crit: i >= 3 ? 0.01 * (i - 1) : 0, glyph: WEAPON_TYPES[wt].glyph, rarity: g, desc };
+      return id;
+    });
+  }
+  for (const [g, id, name, desc] of TWO_HANDED) {
+    const G = GRADES[g];
+    ITEMS[id] = { name, type: 'weapon', weaponType: 'hammer2h', cls: 'oso', grade: g, atk: Math.round(G.atk * 1.35), lvl: G.lvl, price: Math.round(G.price * 1.3), crit: 0.02, glyph: '⚒', rarity: g, desc: `${desc} Martillo a dos manos: solo para el Oso Berserker.` };
+  }
+  for (const [type, names] of Object.entries(ARMOR_NAMES)) {
+    const T = ARMOR_TYPES[type];
+    ARMOR_TIERS[type] = GRADE_ORDER.map((g, i) => {
+      const G = GRADES[g];
+      const id = `a_${T.key}_${g}`;
+      ITEMS[id] = {
+        name: names[i],
+        type: 'armor',
+        armorType: type,
+        grade: g,
+        def: Math.round(G.def * T.def),
+        hp: Math.round(G.hp * T.hp),
+        mp: Math.round(G.hp * T.mp * 0.6),
+        evade: T.evade || 0,
+        heal: T.heal || 0,
+        lvl: G.lvl,
+        price: G.price,
+        glyph: '▣',
+        rarity: g,
+        look: G.look,
+        desc: `Armadura ${T.name.toLowerCase()} de grado ${G.name}.`,
+      };
+      return id;
+    });
+  }
+  const weaponFor = (cls, grade) => WEAPON_TIERS[cls][Math.max(0, gradeIndex(grade))];
+  const armorFor = (cls, grade) => ARMOR_TIERS[arch(cls).armorType][Math.max(0, gradeIndex(grade))];
+  const startGear = (cls) => ({ weapon: weaponFor(cls, 'madera'), armor: armorFor(cls, 'madera') });
+
+  // ¿Puede este personaje equipar el objeto? Devuelve '' si sí, o el motivo si no.
+  // p: { cls, level, stage, branch }
+  function equipProblem(p, it) {
+    if (!it || (it.type !== 'weapon' && it.type !== 'armor')) return 'No se puede equipar.';
+    const a = arch(p.cls);
+    if (it.type === 'weapon') {
+      if (!a.weaponTypes.includes(it.weaponType)) return `${raceName(p.cls, p.sex)} no puede usar ${WEAPON_TYPES[it.weaponType].name.toLowerCase()}s.`;
+      if (it.cls && it.cls !== p.cls) return `Solo para ${ARCHETYPES[it.cls].name}.`;
+      if (WEAPON_TYPES[it.weaponType].twoHanded) {
+        const pas = passiveFor(p.cls, p.stage || 0, p.branch);
+        if (!pas || !pas.twoHanded) return 'Solo el Oso Berserker puede usar martillos a dos manos.';
+      }
+    } else if (it.armorType !== a.armorType) {
+      return `Tu raza usa armadura ${ARMOR_TYPES[a.armorType].name.toLowerCase()}.`;
+    }
+    if (p.level < it.lvl) return `Necesitas nivel ${it.lvl} (tienes ${p.level}).`;
+    const G = it.grade && GRADES[it.grade];
+    if (G && (p.stage || 0) < G.stage) return `El grado ${G.name} requiere el ${['', '1er', '2do', '3er'][G.stage]} cambio de clase (${STAGES[G.stage].name}).`;
+    return '';
+  }
+
+  // ---------- Fórmulas ----------
 
   function playerBaseStats(cls, lvl) {
-    const c = CLASSES[cls] || CLASSES.guerrero;
-    const b = c.base;
+    const a = arch(cls);
+    const b = a.base;
     const at = ([v, inc]) => v + inc * (lvl - 1);
-    return { maxHp: Math.round(at(b.hp)), maxMp: Math.round(at(b.mp)), atk: at(b.atk), def: at(b.def), crit: c.crit };
+    return { maxHp: Math.round(at(b.hp)), maxMp: Math.round(at(b.mp)), atk: at(b.atk), def: at(b.def), crit: a.crit };
   }
-  const CRIT_MULT = 1.8;
-  const MOVE_SPEED = 7.2;
 
   function mobStats(def, lvl) {
     const boss = !!def.boss;
@@ -126,6 +525,8 @@
       gold: [lvl * 2 * (boss ? 25 : 1), lvl * 5 * (boss ? 25 : 1)],
     };
   }
+
+  // ---------- Mundo ----------
 
   // ground: altura base a la que se aplana el terreno de la zona
   // trees: densidad de árboles; treeType: pine | round | dead | swamp
@@ -139,108 +540,67 @@
     { id: 'pantano', name: 'Pantano de Tharmok', lvl: '13–15 · Jefe', x: 108, z: 96, r: 26, ground: -1.1, trees: 0.3, treeType: 'swamp', tint: [0.24, 0.31, 0.2], desc: 'Ciénaga al noreste donde aguarda Tharmok, el jefe final.' },
   ];
 
+  // Botín: '@w:grado' = arma de ese grado para la raza de quien lo recibe; '@a:grado' = armadura.
   const MOBS = {
     jabali: {
       name: 'Jabalí Salvaje', kind: 'quad', lvl: [1, 2], zone: 'prados', count: 16,
       color: 0x6b4a32, scale: 0.85, tusks: true, mane: true, aggressive: false, speed: 4.6,
-      drops: [['piel', 0.55], ['pocion_vida', 0.12], ['@w0', 0.03], ['jubon', 0.05]],
+      drops: [['piel', 0.55], ['pocion_vida', 0.12], ['@w:madera', 0.03], ['@a:madera', 0.05]],
     },
     lobo: {
       name: 'Lobo Gris', kind: 'quad', lvl: [3, 4], zone: 'bosque', count: 15,
       color: 0x7b7f87, scale: 0.9, aggressive: true, speed: 5.6,
-      drops: [['colmillo', 0.5], ['pocion_vida', 0.15], ['pocion_mana', 0.1], ['jubon', 0.06]],
+      drops: [['colmillo', 0.5], ['pocion_vida', 0.15], ['pocion_mana', 0.1], ['@a:madera', 0.05], ['@w:cobre', 0.02]],
     },
     goblin: {
       name: 'Goblin Saqueador', kind: 'hum', lvl: [5, 7], zone: 'goblin', count: 15,
       skin: 0x76a03d, body: 0x5a3d22, legs: 0x3b2a1a, scale: 0.72, ears: true, aggressive: true, speed: 5.2,
       weaponColor: 0x8d8a80,
-      drops: [['oreja_goblin', 0.45], ['pocion_vida', 0.18], ['pocion_mana', 0.12], ['@w1', 0.05], ['cota_malla', 0.04]],
+      drops: [['oreja_goblin', 0.45], ['pocion_vida', 0.18], ['pocion_mana', 0.12], ['@w:cobre', 0.05], ['@a:cobre', 0.04]],
     },
     orco: {
       name: 'Orco Guerrero', kind: 'hum', lvl: [8, 11], zone: 'fuerte', count: 16,
       skin: 0x557043, body: 0x6e2a22, legs: 0x2f2a26, scale: 1.18, tusks: true, aggressive: true, speed: 5,
       club: true,
-      drops: [['amuleto_hueso', 0.4], ['pocion_vida', 0.2], ['pocion_mana', 0.15], ['@w1', 0.06], ['cota_malla', 0.06], ['@w2', 0.025], ['placas', 0.02]],
+      drops: [['amuleto_hueso', 0.4], ['pocion_vida', 0.2], ['pocion_mana', 0.15], ['@w:cobre', 0.05], ['@a:cobre', 0.05], ['@w:azul', 0.02], ['@a:azul', 0.02]],
     },
     golem: {
       name: 'Gólem de Ceniza', kind: 'hum', lvl: [12, 14], zone: 'ceniza', count: 14,
       skin: 0x5a5652, body: 0x46423e, legs: 0x3a3734, scale: 1.4, glow: 0xff6a2a, weapon: false, aggressive: true, speed: 4.4,
-      drops: [['nucleo_ceniza', 0.4], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w2', 0.05], ['placas', 0.05], ['@w3', 0.03], ['escamas', 0.03]],
+      drops: [['nucleo_ceniza', 0.4], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w:azul', 0.04], ['@a:azul', 0.04]],
     },
     sapo: {
       name: 'Sapo de Ciénaga', kind: 'quad', lvl: [13, 14], zone: 'pantano', count: 7,
       color: 0x4c6a36, scale: 1.05, aggressive: false, speed: 4,
-      drops: [['mucosa', 0.5], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w3', 0.03], ['escamas', 0.03]],
+      drops: [['mucosa', 0.5], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w:azul', 0.04], ['@a:azul', 0.04]],
     },
     tharmok: {
       name: 'Tharmok, Señor del Pantano', kind: 'hum', lvl: [15, 15], zone: 'pantano', count: 1, boss: true, respawn: 180,
       skin: 0x3d5a3a, body: 0x2c3a24, legs: 0x1f2a1a, scale: 2.3, tusks: true, glow: 0xb6ff5a, club: true, aggressive: true, speed: 4.8,
-      drops: [['@w4', 0.6], ['egida', 0.6], ['@w5', 0.12], ['mithril', 0.1], ['@w6', 0.03], ['aurora', 0.03], ['pocion_vida', 1], ['pocion_mana', 1]],
+      drops: [['@w:azul', 0.6], ['@a:azul', 0.6], ['@w:morado', 0.1], ['@a:morado', 0.1], ['pocion_vida', 1], ['pocion_mana', 1]],
     },
   };
+  // Nivel de monstruo más alto (sin jefes) y jefe más fuerte: lo usan las misiones de cambio de clase
+  const TOP_MOB_LVL = Math.max(...Object.values(MOBS).filter((m) => !m.boss).map((m) => m.lvl[1]));
+  const TOP_BOSS = Object.entries(MOBS)
+    .filter(([, m]) => m.boss)
+    .sort((a, b) => b[1].lvl[1] - a[1].lvl[1])[0][0];
+  // Misión del cambio a la etapa `stage`: monstruos de al menos este nivel (o el jefe)
+  function questFor(stage) {
+    const st = STAGES[stage];
+    if (!st || !st.quest) return null;
+    if (st.quest.boss) return { stage, title: st.quest.title, boss: TOP_BOSS, need: 1, group: !!st.quest.group, text: `Derrota a ${MOBS[TOP_BOSS].name} (puedes ir con tu grupo).` };
+    const minLvl = Math.max(1, Math.min(st.lvl - 4, TOP_MOB_LVL - 3));
+    return { stage, title: st.quest.title, minLvl, need: st.quest.kills, text: `Derrota ${st.quest.kills} monstruos de nivel ${minLvl} o más.` };
+  }
 
-  const RARITY = {
-    comun: { name: 'Común', color: '#cfc6b2' },
-    refinado: { name: 'Refinado', color: '#8fd37a' },
-    raro: { name: 'Raro', color: '#74aaff' },
-    epico: { name: 'Épico', color: '#c895ff' },
-    legendario: { name: 'Legendario', color: '#ffb347' },
+  const resolveDrop = (id, cls) => {
+    if (id[0] !== '@') return id;
+    const [kind, grade] = id.slice(1).split(':');
+    return kind === 'w' ? weaponFor(cls, grade) : armorFor(cls, grade);
   };
 
-  const ITEMS = {
-    pocion_vida: { name: 'Poción de Vida', type: 'potion', stat: 'hp', amount: 0.35, price: 20, stack: true, glyph: '♥', rarity: 'comun', desc: 'Restaura el 35% de la vida.' },
-    pocion_mana: { name: 'Poción de Maná', type: 'potion', stat: 'mp', amount: 0.4, price: 25, stack: true, glyph: '◆', rarity: 'comun', desc: 'Restaura el 40% del maná.' },
-
-    piel: { name: 'Piel de Jabalí', type: 'junk', price: 4, stack: true, glyph: '▤', rarity: 'comun', desc: 'Se vende en el mercado.' },
-    colmillo: { name: 'Colmillo de Lobo', type: 'junk', price: 8, stack: true, glyph: '◣', rarity: 'comun', desc: 'Se vende en el mercado.' },
-    oreja_goblin: { name: 'Oreja de Goblin', type: 'junk', price: 13, stack: true, glyph: '◖', rarity: 'comun', desc: 'Prueba de caza. Se vende en el mercado.' },
-    amuleto_hueso: { name: 'Amuleto de Hueso', type: 'junk', price: 22, stack: true, glyph: '◎', rarity: 'comun', desc: 'Talismán orco. Se vende en el mercado.' },
-    nucleo_ceniza: { name: 'Núcleo de Ceniza', type: 'junk', price: 36, stack: true, glyph: '✹', rarity: 'refinado', desc: 'Aún está tibio. Se vende en el mercado.' },
-    mucosa: { name: 'Mucosa de Ciénaga', type: 'junk', price: 32, stack: true, glyph: '●', rarity: 'comun', desc: 'Viscosa. Se vende en el mercado.' },
-
-    espada_corta: { name: 'Espada Corta', type: 'weapon', cls: 'guerrero', atk: 4, lvl: 1, price: 30, glyph: '†', rarity: 'comun', desc: 'Hoja sencilla de hierro.' },
-    espada_larga: { name: 'Espada Larga', type: 'weapon', cls: 'guerrero', atk: 10, lvl: 5, price: 140, glyph: '†', rarity: 'refinado', desc: 'Equilibrada y fiable.' },
-    hoja_azul: { name: 'Hoja de Acero Azul', type: 'weapon', cls: 'guerrero', atk: 18, lvl: 9, price: 450, glyph: '†', rarity: 'raro', desc: 'Forjada en las minas del norte.' },
-    hoja_runica: { name: 'Hoja Rúnica de Brezal', type: 'weapon', cls: 'guerrero', atk: 24, lvl: 11, price: 900, crit: 0.02, glyph: '†', rarity: 'raro', desc: 'Runas antiguas recorren el acero.' },
-    filo_crepusculo: { name: 'Filo del Crepúsculo', type: 'weapon', cls: 'guerrero', atk: 30, lvl: 13, price: 1600, crit: 0.03, glyph: '†', rarity: 'epico', desc: 'Arrebatada a Tharmok. Brilla al anochecer.' },
-    espada_dragon: { name: 'Espada del Dragón de Ceniza', type: 'weapon', cls: 'guerrero', atk: 40, lvl: 16, price: 3200, crit: 0.04, glyph: '†', rarity: 'epico', desc: 'Templada en el aliento de un dragón.' },
-    colmillo_rey: { name: 'Colmillo del Rey Caído', type: 'weapon', cls: 'guerrero', atk: 52, lvl: 19, price: 6000, crit: 0.06, glyph: '†', rarity: 'legendario', desc: 'Dicen que aún obedece a su antiguo dueño.' },
-
-    arco_corto: { name: 'Arco Corto', type: 'weapon', cls: 'arquera', atk: 4, lvl: 1, price: 30, glyph: '➶', rarity: 'comun', desc: 'Madera de fresno y cuerda de lino.' },
-    arco_largo: { name: 'Arco Largo de Tejo', type: 'weapon', cls: 'arquera', atk: 10, lvl: 5, price: 140, glyph: '➶', rarity: 'refinado', desc: 'Más alcance, más fuerza en cada tiro.' },
-    arco_plata: { name: 'Arco de Plata Élfica', type: 'weapon', cls: 'arquera', atk: 18, lvl: 9, price: 450, glyph: '➶', rarity: 'raro', desc: 'Ligero como una rama y duro como el acero.' },
-    arco_runico: { name: 'Arco Rúnico', type: 'weapon', cls: 'arquera', atk: 24, lvl: 11, price: 900, crit: 0.02, glyph: '➶', rarity: 'raro', desc: 'Las runas guían cada flecha.' },
-    arco_crepusculo: { name: 'Arco del Crepúsculo', type: 'weapon', cls: 'arquera', atk: 30, lvl: 13, price: 1600, crit: 0.03, glyph: '➶', rarity: 'epico', desc: 'Arrebatado a Tharmok. Sus flechas dejan estela violeta.' },
-    arco_dragon: { name: 'Arco de Hueso de Dragón', type: 'weapon', cls: 'arquera', atk: 40, lvl: 16, price: 3200, crit: 0.04, glyph: '➶', rarity: 'epico', desc: 'Tensado con tendones de dragón.' },
-    arco_vientos: { name: 'Arco de los Vientos Eternos', type: 'weapon', cls: 'arquera', atk: 52, lvl: 19, price: 6000, crit: 0.06, glyph: '➶', rarity: 'legendario', desc: 'El viento mismo empuja sus flechas.' },
-
-    baculo_aprendiz: { name: 'Báculo de Aprendiz', type: 'weapon', cls: 'mago', atk: 4, lvl: 1, price: 30, glyph: '⚚', rarity: 'comun', desc: 'Un cayado con un cristal opaco.' },
-    baculo_roble: { name: 'Báculo de Roble Antiguo', type: 'weapon', cls: 'mago', atk: 10, lvl: 5, price: 140, glyph: '⚚', rarity: 'refinado', desc: 'Tallado en el corazón de un roble milenario.' },
-    baculo_zafiro: { name: 'Báculo de Zafiro', type: 'weapon', cls: 'mago', atk: 18, lvl: 9, price: 450, glyph: '⚚', rarity: 'raro', desc: 'El zafiro concentra el maná del portador.' },
-    baculo_runico: { name: 'Báculo Rúnico', type: 'weapon', cls: 'mago', atk: 24, lvl: 11, price: 900, crit: 0.02, glyph: '⚚', rarity: 'raro', desc: 'Las runas laten al canalizar maná.' },
-    baculo_crepusculo: { name: 'Báculo del Crepúsculo', type: 'weapon', cls: 'mago', atk: 30, lvl: 13, price: 1600, crit: 0.03, glyph: '⚚', rarity: 'epico', desc: 'Arrebatado a Tharmok. Susurra en lenguas olvidadas.' },
-    baculo_dragon: { name: 'Báculo de Ascuas Dracónicas', type: 'weapon', cls: 'mago', atk: 40, lvl: 16, price: 3200, crit: 0.04, glyph: '⚚', rarity: 'epico', desc: 'Un ascua de dragón arde en su punta.' },
-    baculo_archimago: { name: 'Báculo del Archimago', type: 'weapon', cls: 'mago', atk: 52, lvl: 19, price: 6000, crit: 0.06, glyph: '⚚', rarity: 'legendario', desc: 'Perteneció al último archimago de Valdoria.' },
-
-    jubon: { name: 'Jubón de Cuero', type: 'armor', def: 3, hp: 15, lvl: 1, price: 30, glyph: '▣', rarity: 'comun', look: 0x6b4a2e, desc: 'Cuero curtido. Sirve a cualquier clase.' },
-    cota_malla: { name: 'Cota de Malla', type: 'armor', def: 7, hp: 40, lvl: 5, price: 140, glyph: '▣', rarity: 'refinado', look: 0x858b93, desc: 'Anillas de hierro remachadas.' },
-    placas: { name: 'Armadura de Placas', type: 'armor', def: 13, hp: 80, lvl: 9, price: 450, glyph: '▣', rarity: 'raro', look: 0xb4bac2, desc: 'Pesada pero casi impenetrable.' },
-    escamas: { name: 'Coraza de Escamas', type: 'armor', def: 16, hp: 110, lvl: 11, price: 900, glyph: '▣', rarity: 'raro', look: 0x5a7a6a, desc: 'Escamas de sapo gigante cosidas sobre cuero.' },
-    egida: { name: 'Égida del Pantano', type: 'armor', def: 20, hp: 140, lvl: 13, price: 1600, glyph: '▣', rarity: 'epico', look: 0x3f6b4a, desc: 'Escamas de Tharmok sobre bronce.' },
-    mithril: { name: 'Armadura de Mithril', type: 'armor', def: 26, hp: 190, lvl: 16, price: 3200, glyph: '▣', rarity: 'epico', look: 0xd6e0ea, desc: 'Ligera como la seda, dura como el diamante.' },
-    aurora: { name: 'Manto de la Aurora', type: 'armor', def: 34, hp: 260, lvl: 19, price: 6000, glyph: '▣', rarity: 'legendario', look: 0xe8b04a, desc: 'Brilla con la primera luz del día.' },
-  };
-
-  // Armas por nivel de cada clase (niveles 1, 5, 9, 11, 13, 16 y 19).
-  // Los botines '@w0'…'@w6' se convierten en el arma de ese nivel para la clase de quien mata.
-  const WEAPON_TIERS = {
-    guerrero: ['espada_corta', 'espada_larga', 'hoja_azul', 'hoja_runica', 'filo_crepusculo', 'espada_dragon', 'colmillo_rey'],
-    arquera: ['arco_corto', 'arco_largo', 'arco_plata', 'arco_runico', 'arco_crepusculo', 'arco_dragon', 'arco_vientos'],
-    mago: ['baculo_aprendiz', 'baculo_roble', 'baculo_zafiro', 'baculo_runico', 'baculo_crepusculo', 'baculo_dragon', 'baculo_archimago'],
-  };
-  const resolveDrop = (id, cls) => (id[0] === '@' ? WEAPON_TIERS[cls][+id.slice(2)] : id);
-
-  const shopFor = (cls) => ['pocion_vida', 'pocion_mana', WEAPON_TIERS[cls][0], 'jubon', WEAPON_TIERS[cls][1], 'cota_malla', WEAPON_TIERS[cls][2], 'placas'];
+  const shopFor = (cls) => ['pocion_vida', 'pocion_mana', ...['madera', 'cobre', 'azul'].flatMap((g) => [weaponFor(cls, g), armorFor(cls, g)])];
   const sellPrice = (item) => (item.type === 'junk' ? item.price : Math.floor(item.price * 0.4));
 
   // Personajes de la aldea. x, z: posición; se les habla con clic.
@@ -248,7 +608,7 @@
     {
       id: 'mercader', name: 'Mercader Orlen', title: 'Comerciante', x: 6.5, z: -5.5,
       look: { skin: 0xd9a77e, body: 0x6a4c7a, legs: 0x3a2e40, hair: 0xbfb8ab, robe: true, weapon: false },
-      desc: 'Vende pociones, armas básicas de tu clase y armaduras. También compra todo tu botín.',
+      desc: 'Vende pociones, armas de tu raza y armaduras de tu tipo (grados Madera, Cobre y Cristal Azul). También compra todo tu botín.',
     },
     {
       id: 'sanadora', name: 'Sanadora Ilwen', title: 'Sacerdotisa', x: -8, z: -2.5,
@@ -260,10 +620,64 @@
       look: { skin: 0xc99a74, body: 0x858b93, legs: 0x3b3127, hair: 0x2a1c12, cape: 0x34557d, weaponType: 'sword' },
       desc: 'Conoce las tierras de Valdoria: te recomienda a qué zona ir según tu nivel y te da consejos.',
     },
+    {
+      id: 'maestro', name: 'Maestro Aldric', title: 'Maestro de Clase', x: -6, z: 8.5,
+      look: { skin: 0xd6a882, body: 0x7a2630, legs: 0x2a1f1a, hair: 0xe6e0d6, beard: true, cape: 0xd9b25f, weapon: false },
+      desc: 'Guía los cambios de clase: Despertar (nivel 10), Especialización (nivel 25) y Ascensión Maestra (nivel 40).',
+    },
   ];
 
+  // Aspecto según raza y sexo
+  function lookFor(cls, sex) {
+    const a = arch(cls);
+    const base = { ...a.look };
+    if (sex === 'f') Object.assign(base, a.lookF || {}, { female: true, longHair: !!a.look.hair && a.look.ears !== 'round' });
+    else base.female = false;
+    return base;
+  }
+
+  // ---------- Migración de personajes antiguos (v0.6 → v0.7) ----------
+  // Guerrero → Caballero Lagarto · Arquera → Elfo · Mago → Gnomo. El equipo antiguo se
+  // cambia por el del grado equivalente de su nueva raza. Con nivel 10 o más se concede el
+  // Despertar (ya tenían esas habilidades).
+  const OLD_CLASS_MAP = { guerrero: 'lagarto', arquera: 'elfo', mago: 'gnomo' };
+  const OLD_WEAPON_LVL = {
+    espada_corta: 1, espada_larga: 5, hoja_azul: 9, hoja_runica: 11, filo_crepusculo: 13, espada_dragon: 16, colmillo_rey: 19,
+    arco_corto: 1, arco_largo: 5, arco_plata: 9, arco_runico: 11, arco_crepusculo: 13, arco_dragon: 16, arco_vientos: 19,
+    baculo_aprendiz: 1, baculo_roble: 5, baculo_zafiro: 9, baculo_runico: 11, baculo_crepusculo: 13, baculo_dragon: 16, baculo_archimago: 19,
+  };
+  const OLD_ARMOR_LVL = { jubon: 1, cota_malla: 5, placas: 9, escamas: 11, egida: 13, mithril: 16, aurora: 19 };
+  const oldGrade = (lvl) => (lvl >= 16 ? 'morado' : lvl >= 9 ? 'azul' : lvl >= 5 ? 'cobre' : 'madera');
+
+  function migrateCharacter(oldCls, data) {
+    if (isArchetype(oldCls) && data && data.v >= 4) return { cls: oldCls, data };
+    const cls = OLD_CLASS_MAP[oldCls] || (isArchetype(oldCls) ? oldCls : 'lagarto');
+    const d = { ...(data || {}) };
+    const conv = (id) => {
+      if (!id) return null;
+      if (OLD_WEAPON_LVL[id]) return weaponFor(cls, oldGrade(OLD_WEAPON_LVL[id]));
+      if (OLD_ARMOR_LVL[id]) return armorFor(cls, oldGrade(OLD_ARMOR_LVL[id]));
+      return ITEMS[id] ? id : null;
+    };
+    const lvl = Math.max(1, Math.min(MAX_LEVEL, Math.floor(+d.level || 1)));
+    d.cls = cls;
+    d.stage = lvl >= STAGES[1].lvl ? 1 : 0;
+    d.branch = null;
+    d.quest = null;
+    d.inv = Array.isArray(d.inv) ? d.inv.map((s) => s && { ...s, id: conv(s.id) }).filter((s) => s && s.id) : [];
+    const eq = d.equip || {};
+    d.equip = { weapon: conv(eq.weapon) || weaponFor(cls, 'madera'), armor: conv(eq.armor) || armorFor(cls, 'madera') };
+    d.v = 4;
+    return { cls, data: d, migrated: true };
+  }
+
   return {
-    MAX_LEVEL, xpToNext, CLASSES, CLASS_IDS, SEXES, className, lookFor, playerBaseStats, CRIT_MULT, MOVE_SPEED,
-    mobStats, ZONES, MOBS, RARITY, ITEMS, WEAPON_TIERS, resolveDrop, shopFor, sellPrice, NPCS,
+    MAX_LEVEL, xpToNext, CRIT_MULT, MOVE_SPEED, SEXES,
+    EquipmentGrade, GRADES, GRADE_ORDER, gradeIndex, RARITY, ARMOR_TYPES, WEAPON_TYPES,
+    ARCHETYPES, ARCHETYPE_IDS, CLASSES, CLASS_IDS, isArchetype, STAGES, PROGRESSION,
+    raceName, className, skillsFor, passiveFor, skillLock, lookFor, playerBaseStats, mobStats,
+    ITEMS, WEAPON_TIERS, ARMOR_TIERS, weaponFor, armorFor, startGear, equipProblem,
+    ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS,
+    OLD_CLASS_MAP, migrateCharacter,
   };
 });

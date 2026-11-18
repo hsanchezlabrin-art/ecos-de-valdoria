@@ -9,5 +9,5 @@
   } catch {
     /* sin location (Node) */
   }
-  V.Config = { SERVER_URL: url, PROTOCOL: 2 };
+  V.Config = { SERVER_URL: url, PROTOCOL: 3 };
 })();

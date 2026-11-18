@@ -3,7 +3,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const KEY = 'valdoria-admin';
-  const CLS = { guerrero: 'Guerrero', arquera: 'Arquera', mago: 'Mago' };
+  const CLS = { oso: 'Oso', elfo: 'Elfo', gnomo: 'Gnomo', hada: 'Hada-Gato', lagarto: 'Lagarto' };
   let token = null;
   try {
     token = sessionStorage.getItem(KEY);

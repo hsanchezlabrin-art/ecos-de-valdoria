@@ -25,7 +25,7 @@ const { VERSION } = require(path.join(SRC, 'version.js'));
 const C = Sim.cmd;
 
 const PORT = +process.env.PORT || 8080;
-const PROTOCOL = 2;
+const PROTOCOL = 3; // v3: razas, cambios de clase y grados de equipo (v0.7)
 const TICK_MS = 50; // 20 pasos de simulación por segundo
 const DT = TICK_MS / 1000;
 const SNAP_EVERY = 2; // estado a 10 Hz
@@ -41,6 +41,10 @@ process.on('uncaughtException', (e) => console.error('[error]', e && e.stack));
 process.on('unhandledRejection', (e) => console.error('[error]', e));
 
 // ---------- Mundo ----------
+
+// Personajes de versiones anteriores (Guerrero, Arquera, Mago) → nuevas razas
+const migrated = DB.migrateChars((cls, data) => Data.migrateCharacter(cls, data));
+if (migrated) console.log(`[migración] ${migrated} personajes convertidos a las nuevas razas`);
 
 const world = Sim.createWorld();
 Sim.spawnMobs(world);
@@ -62,7 +66,7 @@ const send = (c, msg) => {
 };
 const near = (a, b, r = VIEW_R) => Math.abs(a.x - b.x) < r && Math.abs(a.z - b.z) < r;
 const isItem = (id) => typeof id === 'string' && Object.prototype.hasOwnProperty.call(Data.ITEMS, id);
-const isClass = (id) => typeof id === 'string' && Object.prototype.hasOwnProperty.call(Data.CLASSES, id);
+const isClass = (id) => Data.isArchetype(id);
 const str = (v, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '');
 
 function cleanText(s) {
@@ -78,8 +82,8 @@ function broadcastChat(msg) {
 
 // Partida guardada → datos válidos para la simulación
 function charData(ch) {
-  const d = ch.data || {};
-  const base = Sim.newCharacter(ch.name, ch.cls, ch.sex);
+  const d = Data.migrateCharacter(ch.cls, ch.data || {}).data;
+  const base = Sim.newCharacter(ch.name, d.cls, ch.sex);
   const pos = d.pos && Number.isFinite(+d.pos.x) && Number.isFinite(+d.pos.z) && Math.hypot(d.pos.x, d.pos.z) < 185 ? { x: +d.pos.x, z: +d.pos.z } : base.pos;
   return {
     ...base,
@@ -88,6 +92,9 @@ function charData(ch) {
     gold: int(d.gold, 0, 1e9, base.gold),
     inv: Array.isArray(d.inv) ? d.inv.filter((s) => s && isItem(s.id)).slice(0, 30) : base.inv,
     equip: d.equip && typeof d.equip === 'object' ? { weapon: isItem(d.equip.weapon) ? d.equip.weapon : null, armor: isItem(d.equip.armor) ? d.equip.armor : null } : base.equip,
+    stage: int(d.stage, 0, 3, 0),
+    branch: d.branch === 'a' || d.branch === 'b' ? d.branch : null,
+    quest: d.quest || null,
     pos,
     hp: Number.isFinite(+d.hp) ? +d.hp : null,
     mp: Number.isFinite(+d.mp) ? +d.mp : null,
@@ -101,7 +108,7 @@ function savePlayer(c) {
 // ---------- Estado que se envía a cada jugador ----------
 
 function playerRow(q) {
-  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0];
+  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0];
 }
 
 function mobRow(m) {
@@ -116,12 +123,14 @@ function meData(c) {
     xp: p.xp,
     level: p.level,
     gold: p.gold,
-    stats: p.stats,
+    stats: Sim.liveStats(p),
     cds: p.cds,
-    buffT: r2(p.buffT),
-    buffPct: p.buffPct,
-    buffCrit: p.buffCrit,
-    buffName: p.buffName,
+    buffs: Sim.buffList(p),
+    stage: p.stage,
+    branch: p.branch,
+    quest: p.quest,
+    bubble: p.bubble ? 1 : 0,
+    freeNext: p.freeNext ? 1 : 0,
     shield: Math.round(p.shield),
     shieldT: r2(p.shieldT),
     combatT: r2(p.combatT),
@@ -243,7 +252,7 @@ function onAccount(c, msg) {
   switch (msg.t) {
     case 'createChar': {
       if (c.p) return;
-      const cls = isClass(msg.cls) ? msg.cls : 'guerrero';
+      const cls = isClass(msg.cls) ? msg.cls : 'lagarto';
       const sex = msg.sex === 'f' ? 'f' : 'm';
       const r = DB.createChar(c.acc, str(msg.name, 40), cls, sex, Sim.newCharacter('', cls, sex));
       if (!r.ok) return send(c, { t: 'charError', msg: r.error });
@@ -317,6 +326,8 @@ function onCommand(c, msg) {
       return;
     case 'respawn':
       return C.respawn(world, p);
+    case 'classQuest':
+      return C.classQuest(world, p, str(msg.action, 10), msg.branch === 'a' || msg.branch === 'b' ? msg.branch : null);
     case 'invite':
       if (typeof msg.id === 'string') C.partyInvite(world, p, msg.id);
       return;

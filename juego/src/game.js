@@ -8,11 +8,11 @@
   const G = V.G;
   const { buildHumanoid, buildQuadruped, animateModel, animateDeath, setWeaponLook, setArmorLook } = V.Models;
   const { heightAt } = V.Terrain;
-  const { ITEMS, CLASSES, MOBS, lookFor } = V.Data;
+  const { ITEMS, CLASSES, MOBS, lookFor, skillsFor } = V.Data;
   const UI = new Proxy({}, { get: (_, k) => V.UI[k] }); // ui.js se carga después
 
   const THREE = window.THREE;
-  const PROTOCOL = 2;
+  const PROTOCOL = 3;
   const d2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
   const PROJ_SPEED = { arrow: 38, fire: 24, arcane: 26 };
 
@@ -257,6 +257,8 @@
   function makeMe(row) {
     const cls = row[10];
     const cdef = CLASSES[cls];
+    const stage = row[18] || 0;
+    const branch = row[19] || null;
     P = {
       id: row[0],
       kind: 'player',
@@ -264,7 +266,11 @@
       cls,
       sex: row[15],
       cdef,
-      skills: cdef.skills,
+      stage,
+      branch,
+      quest: null,
+      skills: skillsFor(cls, stage, branch),
+      buffs: [],
       pos: { x: row[1], y: row[2], z: row[3] },
       facing: row[4],
       height: 2.5,
@@ -304,7 +310,7 @@
       if (id === net.myId && !net.players.has(id)) net.players.set(id, P);
       if (!q) {
         const cdef = CLASSES[row[10]];
-        q = { id, kind: 'player', name: row[11], cls: row[10], sex: row[15], cdef, pos: { x: 0, y: 0, z: 0 }, facing: 0, height: 2.5, equip: { weapon: null, armor: null }, stats: { maxHp: row[8] } };
+        q = { id, kind: 'player', name: row[11], cls: row[10], sex: row[15], cdef, stage: 0, branch: null, pos: { x: 0, y: 0, z: 0 }, facing: 0, height: 2.5, equip: { weapon: null, armor: null }, stats: { maxHp: row[8] } };
         net.players.set(id, q);
         attachView(q, V.Actors.buildHero(q.cls, q.sex));
         q.model.root.traverse((o) => (o.userData.player = q));
@@ -318,6 +324,8 @@
         q.stats.maxHp = row[8];
         q.level = row[9];
         q.partyId = row[16] || null;
+        q.stage = row[18] || 0;
+        q.branch = row[19] || null;
       }
       q.leap = !!row[14];
       q.swimming = !!row[17];
@@ -394,10 +402,10 @@
       gold: d.gold,
       stats: d.stats,
       cds: d.cds,
-      buffT: d.buffT,
-      buffPct: d.buffPct,
-      buffCrit: d.buffCrit,
-      buffName: d.buffName,
+      buffs: d.buffs || [],
+      quest: d.quest || null,
+      bubble: d.bubble,
+      freeNext: d.freeNext,
       shield: d.shield,
       shieldT: d.shieldT,
       combatT: d.combatT,
@@ -407,6 +415,13 @@
       party: d.party,
     });
     if (d.dead !== P.dead) P.dead = d.dead;
+    // Cambio de clase: habilidades nuevas en la barra
+    if (d.stage !== P.stage || (d.branch || null) !== P.branch) {
+      P.stage = d.stage;
+      P.branch = d.branch || null;
+      P.skills = skillsFor(P.cls, P.stage, P.branch);
+      UI.classChanged();
+    }
     if (!G.npcSel && !G.playerSel) P.target = d.target ? net.mobs.get(d.target) || null : null;
     if (d.inv) {
       P.inv = d.inv;
@@ -528,6 +543,7 @@
   const buyItem = (id, q) => send({ t: 'buy', id, q });
   const respawnPlayer = () => send({ t: 'respawn' });
   const sendChat = (text) => send({ t: 'chat', text });
+  const classQuest = (action, branch) => send({ t: 'classQuest', action, branch });
   const invite = (id) => send({ t: 'invite', id });
   const inviteByName = (name) => send({ t: 'inviteByName', name });
   const answerInvite = (accept) => send({ t: 'inviteAnswer', accept });
@@ -547,7 +563,7 @@
         spawnRing(ev.pos, ev.color, ev.r, ev.life);
         break;
       case 'faller':
-        if (ev.fx === 'meteor') spawnFaller('meteor', ev.at, ev.dur);
+        if (ev.fx === 'meteor' || ev.fx === 'glue' || ev.fx === 'sword') spawnFaller(ev.fx, ev.at, ev.dur);
         else {
           const n = ev.r > 5 ? 26 : 14;
           for (let k = 0; k < n; k++) spawnFaller(ev.fx === 'frost' ? 'ice' : 'arrow', { x: ev.at.x + (Math.random() * 2 - 1) * ev.r * 0.8, y: ev.at.y, z: ev.at.z + (Math.random() * 2 - 1) * ev.r * 0.8 }, ev.dur * (0.7 + Math.random() * 0.3));
@@ -586,6 +602,30 @@
         break;
       case 'openShop':
         if (mine(ev)) UI.openShop();
+        break;
+      case 'openMaster':
+        if (mine(ev)) UI.openMaster();
+        break;
+      case 'quest':
+        if (mine(ev)) setTimeout(() => UI.refreshMaster(), 150); // el estado llega en la siguiente instantánea
+        break;
+      case 'zone':
+        spawnZone(ev.at, ev.r, ev.color, ev.dur);
+        break;
+      case 'turret':
+        spawnTurret(ev.at, ev.dur, ev.big);
+        break;
+      case 'beam':
+        spawnBeam(ev.from, ev.to, ev.w, ev.color);
+        break;
+      case 'cone':
+        spawnCone(ev.at, ev.dir, ev.r, ev.color);
+        break;
+      case 'dome':
+        spawnDome(ev.at, ev.r, ev.dur);
+        break;
+      case 'poly':
+        if (ev.ent && ev.ent.model) ev.ent.polyUntil = G.time + ev.dur;
         break;
       case 'partyInvite':
         if (mine(ev)) UI.showInvite(ev.name);
@@ -741,17 +781,122 @@
       mesh.add(new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 8), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xff7a2a, 2.3), transparent: true, opacity: 0.35, depthWrite: false })));
     } else if (kind === 'ice') {
       mesh = PROJ_MESH.ice();
+    } else if (kind === 'glue') {
+      // Frasco de pegamento
+      mesh = new THREE.Group();
+      mesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), new THREE.MeshStandardMaterial({ color: 0xf2b13a, emissive: 0x5a3a08, roughness: 0.3 })));
+      mesh.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.3, 8), new THREE.MeshStandardMaterial({ color: 0x8a6a44 })).translateY(0.4));
+    } else if (kind === 'sword') {
+      // Espada gigante de luz que cae del cielo
+      mesh = new THREE.Group();
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.5, 5, 0.18), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xffe9a0, 2.3), transparent: true, opacity: 0.85 }));
+      blade.position.y = 2.5;
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(2, 0.3, 0.3), new THREE.MeshBasicMaterial({ color: 0xffd36b }));
+      guard.position.y = 5.1;
+      mesh.add(blade, guard);
     } else {
       mesh = PROJ_MESH.arrow();
       mesh.rotation.x = Math.PI / 2;
     }
-    const h = kind === 'meteor' ? 22 : 12;
+    const h = kind === 'meteor' ? 22 : kind === 'sword' ? 16 : 12;
     const off = kind === 'meteor' ? 8 : 0;
     G.scene.add(mesh);
     fallers.push({ mesh, from: new THREE.Vector3(at.x - off, at.y + h, at.z - off), to: new THREE.Vector3(at.x, at.y, at.z), t: 0, dur });
   }
 
+  // Objetos temporales en el mundo: charcos, torretas, rayos, conos y cúpulas
+  const props = [];
+  function addProp(obj, life, fade = 0.4, baseOpacity = null) {
+    G.scene.add(obj);
+    const mats = [];
+    obj.traverse((o) => o.material && mats.push(o.material));
+    props.push({ obj, mats, t: 0, life, fade, base: mats.map((m) => (baseOpacity != null ? baseOpacity : m.opacity)) });
+    return obj;
+  }
+  const flatMat = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
+  function spawnZone(at, r, color, dur) {
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(r, 32).rotateX(-Math.PI / 2), flatMat(color, 0.38));
+    disc.position.set(at.x, heightAt(at.x, at.z) + 0.08, at.z);
+    addProp(disc, dur, 0.6);
+  }
+  function spawnTurret(at, dur, big) {
+    const g = new THREE.Group();
+    const metal = new THREE.MeshStandardMaterial({ color: big ? 0x8a8f9a : 0xb5703f, metalness: 0.3, roughness: 0.6 });
+    const glow = new THREE.MeshBasicMaterial({ color: V.Gfx.hot(big ? 0xff9a4a : 0x9fd8ff, 2.2) });
+    if (big) {
+      // Mecha-Gólem: cuerpo de bloques con ojos brillantes
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.8, 1.1), metal).translateY(2.2));
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 0.8), metal).translateY(3.5));
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.1), glow).translateY(3.6).translateZ(0.42));
+      for (const x of [-0.45, 0.45]) g.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.3, 0.6), metal).translateX(x).translateY(0.65));
+      for (const x of [-1.05, 1.05]) g.add(new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.4, 0.45), metal).translateX(x).translateY(2.1));
+    } else {
+      // Tótem de chispas: columna de cobre con un cristal arriba
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.2, 0.45), metal).translateY(0.6));
+      g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), glow).translateY(1.55));
+      g.userData.spin = g.children[1];
+    }
+    g.traverse((o) => (o.castShadow = true));
+    g.position.set(at.x, heightAt(at.x, at.z), at.z);
+    addProp(g, dur, 0.3, 1);
+  }
+  function spawnBeam(from, to, w, color) {
+    const len = Math.hypot(to.x - from.x, to.z - from.z);
+    const wood = color === 0x8a5a34;
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, w * 0.6, len), new THREE.MeshBasicMaterial({ color: wood ? color : V.Gfx.hot(color, 2.2), transparent: true, opacity: 0.8, depthWrite: false }));
+    beam.position.set((from.x + to.x) / 2, from.y, (from.z + to.z) / 2);
+    beam.lookAt(to.x, to.y, to.z);
+    addProp(beam, 0.5, 0.4);
+  }
+  function spawnCone(at, dir, r, color) {
+    const geo = new THREE.CircleGeometry(r, 20, -0.62, 1.24).rotateX(-Math.PI / 2);
+    const cone = new THREE.Mesh(geo, flatMat(V.Gfx.hot(color, 1.8), 0.55));
+    cone.position.set(at.x, heightAt(at.x, at.z) + 1, at.z);
+    // El sector apunta a +X: se gira hacia la dirección del aliento
+    cone.rotation.y = Math.atan2(-dir.z, dir.x);
+    addProp(cone, 0.45, 0.4);
+  }
+  function spawnDome(at, r, dur) {
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(r * 0.75, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), flatMat(0xc9b48a, 0.22));
+    dome.position.set(at.x, heightAt(at.x, at.z), at.z);
+    addProp(dome, dur, 0.6);
+  }
+  // Polimorfia: el monstruo se ve como una oveja de bloques
+  let sheepProto = null;
+  function sheepFor() {
+    if (!sheepProto) {
+      sheepProto = new THREE.Group();
+      const wool = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.95, flatShading: true });
+      const face = new THREE.MeshStandardMaterial({ color: 0x3a3430, flatShading: true });
+      sheepProto.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 1.2), wool).translateY(0.8));
+      sheepProto.add(new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.4), face).translateY(1.1).translateZ(0.75));
+      for (const [x, z] of [[-0.3, 0.4], [0.3, 0.4], [-0.3, -0.4], [0.3, -0.4]]) sheepProto.add(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), face).translateX(x).translateY(0.25).translateZ(z));
+    }
+    const s = sheepProto.clone();
+    G.scene.add(s);
+    return s;
+  }
+
   function updateEffects(dt) {
+    for (let i = props.length - 1; i >= 0; i--) {
+      const pr = props[i];
+      pr.t += dt;
+      const left = pr.life - pr.t;
+      const a = left < pr.fade ? Math.max(0, left / pr.fade) : 1;
+      pr.mats.forEach((m, k) => {
+        if (a < 1) m.transparent = true;
+        m.opacity = pr.base[k] * a;
+      });
+      if (pr.obj.userData.spin) pr.obj.userData.spin.rotation.y += dt * 3;
+      if (left <= 0) {
+        G.scene.remove(pr.obj);
+        pr.obj.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) o.material.dispose();
+        });
+        props.splice(i, 1);
+      }
+    }
     for (let i = effects.length - 1; i >= 0; i--) {
       const e = effects[i];
       e.t += dt;
@@ -863,6 +1008,20 @@
       root.visible = !(ent.kind === 'mob' && ent.deadT < ent.respawnTime - 4);
       return;
     }
+    // Polimorfia: se dibuja una oveja mientras dure (o hasta que lo golpeen)
+    const sheep = ent.polyUntil > G.time && ent.stunned;
+    if (sheep) {
+      if (!v.sheep) v.sheep = sheepFor(ent);
+      v.sheep.position.set(ent.pos.x, ent.pos.y, ent.pos.z);
+      v.sheep.rotation.y = ent.facing;
+      root.visible = false;
+      return;
+    }
+    if (v.sheep) {
+      G.scene.remove(v.sheep);
+      v.sheep = null;
+      ent.polyUntil = 0;
+    }
     if (!root.visible) root.visible = true;
     if (v.deathK) {
       v.deathK = 0;
@@ -909,8 +1068,13 @@
     }
     interpolate(dt);
     for (const raw of net.queue.splice(0)) {
-      const ev = resolveEvent(raw);
-      if (ev) handleEvent(ev);
+      // Un evento con un problema no debe detener el juego: se registra y se sigue
+      try {
+        const ev = resolveEvent(raw);
+        if (ev) handleEvent(ev);
+      } catch (e) {
+        console.error('[evento]', raw && raw.type, e);
+      }
     }
     for (const q of net.players.values()) if (q.model) drawEntity(q, dt);
     for (const m of net.mobs.values()) if (m.model) drawEntity(m, dt);
@@ -923,7 +1087,7 @@
   V.Game = {
     PROTOCOL, connect, register, login, resume, logout, createChar, deleteChar, play,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
-    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat,
+    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat, classQuest,
     invite, inviteByName, answerInvite, leaveParty, kickFromParty,
     get online() {
       return true;

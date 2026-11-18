@@ -1,7 +1,7 @@
 # Ecos de Valdoria
 
 RPG de fantasía en 3D para Windows, hecho con three.js y Electron.
-Tres clases (Guerrero, Arquera y Mago), siete tierras alrededor de la Aldea de Brezal y un jefe final, Tharmok.
+Cinco razas (Oso Pardo, Elfo del Bosque Cubo, Gnomo Ingeniero, Hada-Gato y Caballero Lagarto) con tres cambios de clase (niveles 10, 25 y 40), equipo por grados, siete tierras alrededor de la Aldea de Brezal y un jefe final, Tharmok.
 
 - Web y guía: https://ecos-de-valdoria.vercel.app
 - Jugar en el navegador: https://ecos-de-valdoria.vercel.app/jugar
@@ -17,7 +17,7 @@ Tres clases (Guerrero, Arquera y Mago), siete tierras alrededor de la Aldea de B
 | `index.html`, `guia.html`, `site.*` | Web de presentación y guía (Vercel). Reutiliza `juego/src/data.js` |
 | `.github/workflows/` | Compila el instalador de Windows en GitHub Actions |
 
-`juego/src/data.js` es la única fuente de clases, habilidades, zonas, monstruos, objetos y NPCs. La guía de la web se genera a partir de ese archivo.
+`juego/src/data.js` es la única fuente de razas, etapas de clase, grados de equipo, habilidades, zonas, monstruos, objetos y NPCs. La guía de la web se genera a partir de ese archivo.
 
 ### Arquitectura (preparada para el modo online)
 
@@ -29,7 +29,7 @@ Tres clases (Guerrero, Arquera y Mago), siete tierras alrededor de la Aldea de B
 | `game.js` | Cliente: envía comandos a la simulación y dibuja su estado y eventos | Navegador |
 | `models.js`, `world.js`, `ui.js`, `main.js` | Modelos 3D, escenario, interfaz y arranque | Navegador |
 
-`test/sim.test.js` ejecuta la simulación en Node con bots de las tres clases y varios jugadores. Corre en GitHub Actions en cada push (`node test/sim.test.js`).
+`test/sim.test.js` ejecuta la simulación en Node con bots de las cinco razas y varios jugadores. Corre en GitHub Actions en cada push (`node test/sim.test.js`).
 
 ## Publicar una versión
 

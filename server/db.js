@@ -138,7 +138,7 @@ function logout(acc, token) {
 
 // ---------- Personajes ----------
 
-const summary = (c) => ({ id: c.id, name: c.name, cls: c.cls, sex: c.sex, level: c.data.level, equip: c.data.equip, created: c.created, last: c.last || null });
+const summary = (c) => ({ id: c.id, name: c.name, cls: c.cls, sex: c.sex, level: c.data.level, stage: c.data.stage || 0, branch: c.data.branch || null, equip: c.data.equip, created: c.created, last: c.last || null });
 
 function listChars(acc) {
   return acc.chars.map((id) => db.chars[id]).filter(Boolean).map(summary);
@@ -187,6 +187,20 @@ const nameAvailable = (name) => {
 
 const counts = () => ({ accounts: Object.keys(db.accounts).length, characters: Object.keys(db.chars).length });
 
+// Convierte los personajes guardados con un formato antiguo. fn(cls, data) → { cls, data, migrated }
+function migrateChars(fn) {
+  let n = 0;
+  for (const c of Object.values(db.chars)) {
+    const r = fn(c.cls, c.data);
+    if (!r || !r.migrated) continue;
+    c.cls = r.cls;
+    c.data = { ...r.data, name: c.name, cls: r.cls, sex: c.sex };
+    n++;
+  }
+  if (n) persist(true);
+  return n;
+}
+
 // ---------- Administración ----------
 
 // Cuentas para el panel (sin datos de contraseña ni sesiones)
@@ -216,4 +230,4 @@ function deleteAccount(user) {
   return { ok: true };
 }
 
-module.exports = { register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, listAccounts, deleteAccount, flush: () => persist(true), MAX_CHARS, DIR };
+module.exports = { register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, listAccounts, deleteAccount, migrateChars, flush: () => persist(true), MAX_CHARS, DIR };

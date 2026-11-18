@@ -10,7 +10,7 @@ const WebSocket = require(path.join(__dirname, '..', 'server', 'node_modules', '
 const PORT = 18000 + Math.floor(Math.random() * 1000);
 const URL = `ws://127.0.0.1:${PORT}/ws`;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const V = 2;
+const V = 3;
 
 // Cliente de prueba: guarda todo lo que recibe y permite esperar un tipo de mensaje
 function connect() {
@@ -68,6 +68,16 @@ async function enter(user, email, pass, charName, cls, sex) {
 
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'valdoria-'));
+  // Una cuenta de la versión anterior con un Guerrero nivel 12: debe migrarse a Caballero Lagarto
+  const salt = 'sal-de-prueba';
+  const hash = require('crypto').scryptSync('clave-vieja', salt, 64).toString('hex');
+  const oldDb = {
+    accounts: { viejo: { user: 'viejo', email: 'viejo@example.com', salt, hash, created: Date.now(), chars: ['c1'], sessions: [] } },
+    chars: { c1: { id: 'c1', account: 'viejo', name: 'Veterano', cls: 'guerrero', sex: 'm', created: Date.now(), data: { v: 3, name: 'Veterano', cls: 'guerrero', sex: 'm', level: 12, xp: 50, gold: 900, inv: [{ id: 'hoja_azul', qty: 1 }, { id: 'piel', qty: 3 }], equip: { weapon: 'hoja_runica', armor: 'placas' }, pos: { x: 0, z: 5 } } } },
+    names: { veterano: 'c1' },
+    nextChar: 2,
+  };
+  fs.writeFileSync(path.join(dataDir, 'db.json'), JSON.stringify(oldDb));
   const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir, ADMIN_PASSWORD: 'clave-de-prueba-admin' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((resolve) => srv.stdout.on('data', (d) => String(d).includes('servidor en el puerto') && resolve()));
   let checks = 0;
@@ -81,6 +91,19 @@ async function main() {
     const status = await (await fetch(`http://127.0.0.1:${PORT}/status`)).json();
     ok(status.ok && status.protocol === V && /^\d+\.\d+\.\d+$/.test(status.version), `el servidor responde (v${status.version})`);
 
+    // ---------- Migración de personajes antiguos ----------
+    const old = await connect();
+    old.send({ t: 'login', v: V, user: 'viejo', pass: 'clave-vieja' });
+    const oldAuth = await old.next(['auth', 'authError']);
+    ok(oldAuth.t === 'auth' && oldAuth.chars[0].cls === 'lagarto' && oldAuth.chars[0].stage === 1 && oldAuth.chars[0].level === 12, 'la cuenta antigua conserva su Guerrero, ahora Caballero Lagarto con el Despertar');
+    old.send({ t: 'play', id: oldAuth.chars[0].id });
+    await old.next('welcome');
+    await wait(300);
+    const oldMe = { ...old.last.me, ...old.snaps.find((x) => x.me && x.me.inv).me };
+    ok(oldMe.equip.weapon === 'w_lagarto_azul' && oldMe.equip.armor === 'a_medium_azul' && oldMe.gold === 900 && oldMe.inv.some((s) => s.id === 'piel'), 'su equipo pasa al grado equivalente y conserva oro y botín');
+    old.ws.close();
+    await wait(300);
+
     // ---------- Cuentas ----------
     const x = await connect();
     x.send({ t: 'register', v: V, user: 'a', email: 'malo', pass: '1' });
@@ -93,7 +116,7 @@ async function main() {
     ok((await x.next('authError')).code === 'version', 'se rechaza una versión antigua del juego');
     x.ws.close();
 
-    const a = await enter('ana_01', 'ana@example.com', 'secreto1', 'Selene', 'arquera', 'f');
+    const a = await enter('ana_01', 'ana@example.com', 'secreto1', 'Selene', 'elfo', 'f');
     ok(!!a.id && !!a.session, 'Ana crea su cuenta, entra al instante y juega con su personaje');
     const meA = { ...a.last.me, ...a.snaps.find((x) => x.me && x.me.inv).me }; // el inventario llega solo cuando cambia
     ok(meA.level === 1 && meA.inv.length > 0 && meA.stats.crit > 0, 'el personaje nuevo empieza en nivel 1 con estadísticas de crítico');
@@ -107,22 +130,22 @@ async function main() {
     ok((await dup.next('authError')).msg.includes('incorrectos'), 'contraseña incorrecta rechazada');
     dup.ws.close();
 
-    const b = await enter('beto', 'beto@example.com', 'clave123', 'Orion', 'guerrero', 'm');
+    const b = await enter('beto', 'beto@example.com', 'clave123', 'Orion', 'lagarto', 'm');
     ok(b.id && b.id !== a.id, 'Beto entra con su propia cuenta');
 
     // Nombres de personaje únicos y válidos
     const c3 = await connect();
     c3.send({ t: 'register', v: V, user: 'ciro', email: 'ciro@example.com', pass: 'clave123' });
     await c3.next('auth');
-    c3.send({ t: 'createChar', name: 'selene', cls: 'mago', sex: 'm' });
+    c3.send({ t: 'createChar', name: 'selene', cls: 'gnomo', sex: 'm' });
     ok((await c3.next('charError')).msg.includes('ya pertenece'), 'no se repiten nombres de personaje');
-    c3.send({ t: 'createChar', name: 'Brisa', cls: 'mago', sex: 'm' });
+    c3.send({ t: 'createChar', name: 'Brisa', cls: 'gnomo', sex: 'm' });
     ok((await c3.next('charError')).msg.includes('reservado'), 'los nombres de NPC están reservados');
-    c3.send({ t: 'createChar', name: '<b>', cls: 'mago', sex: 'm' });
+    c3.send({ t: 'createChar', name: '<b>', cls: 'gnomo', sex: 'm' });
     ok((await c3.next('charError')).t === 'charError', 'nombres inválidos rechazados');
     c3.send({ t: 'createChar', name: 'Merlo', cls: '__proto__', sex: 'x' });
     const made = await c3.next('chars');
-    ok(made.chars.length === 1 && made.chars[0].cls === 'guerrero' && made.chars[0].sex === 'm', 'clase y sexo inválidos se corrigen');
+    ok(made.chars.length === 1 && made.chars[0].cls === 'lagarto' && made.chars[0].sex === 'm', 'raza y sexo inválidos se corrigen');
     const avail = await (await fetch(`http://127.0.0.1:${PORT}/name-available?name=Selene`)).json();
     const free = await (await fetch(`http://127.0.0.1:${PORT}/name-available?name=Nadie`)).json();
     ok(!avail.available && free.available, '/name-available indica si un nombre está libre');
@@ -225,7 +248,7 @@ async function main() {
     const db = JSON.parse(fs.readFileSync(path.join(dataDir, 'db.json'), 'utf8'));
     const raw = JSON.stringify(db);
     ok(!raw.includes('secreto1') && !raw.includes(a.session), 'contraseñas y sesiones no se guardan en claro');
-    ok(Object.keys(db.accounts).length === 2 && Object.keys(db.chars).length === 2 && !db.accounts.ciro, 'cuentas y personajes guardados en disco');
+    ok(Object.keys(db.accounts).length === 3 && Object.keys(db.chars).length === 3 && !db.accounts.ciro, 'cuentas y personajes guardados en disco');
     console.log(`\nServidor OK: ${checks} comprobaciones superadas.`);
   } finally {
     srv.kill();

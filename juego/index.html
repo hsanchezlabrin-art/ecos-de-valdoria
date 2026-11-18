@@ -88,9 +88,11 @@
   #chatInput:focus { border-color: var(--gold); outline: none; }
   #log p.chat { color: #f1e9d6; }
   #log p.chat b { font-weight: 700; }
-  #log p.chat .who-guerrero { color: #8fb8ff; }
-  #log p.chat .who-arquera { color: #9fe08a; }
-  #log p.chat .who-mago { color: #d0a8ff; }
+  #log p.chat .who-oso { color: #e0b080; }
+  #log p.chat .who-elfo { color: #9fe08a; }
+  #log p.chat .who-gnomo { color: #8fd0ff; }
+  #log p.chat .who-hada { color: #f0a8e0; }
+  #log p.chat .who-lagarto { color: #ffa070; }
   #log p.chat-sys { color: #7fb6ff; font-style: italic; }
   .online { font-size: 12px; color: #7fe08a; font-variant-numeric: tabular-nums; }
   .np.np-other { color: #a9cbff; }
@@ -228,8 +230,8 @@
   #btnDice { width: 48px; border: 1px solid var(--edge); border-radius: 3px; background: rgba(0,0,0,.5); font-size: 20px; }
   #btnDice:hover { border-color: var(--gold); }
   .pick-label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
-  .class-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .class-pick button { display: grid; justify-items: center; gap: 4px; padding: 10px 8px; background: rgba(0,0,0,.45); border: 1px solid var(--edge-soft); border-radius: 3px; font: 700 14px var(--display); letter-spacing: .04em; color: var(--muted); transition: border-color .15s, background .15s, color .15s; }
+  .class-pick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .class-pick button { display: grid; justify-items: center; gap: 4px; padding: 9px 2px; font-size: 12px !important; background: rgba(0,0,0,.45); border: 1px solid var(--edge-soft); border-radius: 3px; font: 700 14px var(--display); letter-spacing: .04em; color: var(--muted); transition: border-color .15s, background .15s, color .15s; }
   .class-pick button b { font-size: 22px; line-height: 1; color: var(--muted); font-family: var(--body); }
   .class-pick button:hover { border-color: var(--edge); color: var(--parch); }
   .class-pick button.on { border-color: var(--gold); color: var(--parch); background: rgba(217,181,106,.14); box-shadow: inset 0 0 18px rgba(217,181,106,.12); }
@@ -461,6 +463,30 @@
   .st-grid dt.sep, .st-grid dd.sep { border-top: 1px solid #23211d; padding-top: 6px; margin-top: 2px; }
   .st-grid .up { color: #8fd37a; }
   #dropPanel { left: 50%; transform: translate(-50%, -50%); width: min(340px, calc(100% - 24px)); z-index: 6; }
+  #masterPanel { left: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 24px)); z-index: 6; }
+  .ms-head strong { display: block; font: 700 19px var(--display); color: var(--gold); }
+  .ms-head small { color: var(--muted); font-size: 13px; }
+  .ms-steps { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
+  .ms-steps li { padding: 7px 10px; border: 1px solid #2a2721; border-radius: 3px; background: rgba(0,0,0,.25); }
+  .ms-steps li b { display: block; font-size: 14px; color: var(--muted); }
+  .ms-steps li small { font-size: 12px; color: #9a907c; }
+  .ms-steps li.done b { color: #8fd37a; }
+  .ms-steps li.cur { border-color: var(--gold); background: rgba(217,181,106,.08); }
+  .ms-steps li.cur b { color: var(--parch); }
+  .ms-next h3 { margin: 4px 0 6px; font: 700 16px var(--display); color: var(--parch); }
+  .ms-next p { margin: 0 0 8px; font-size: 14px; line-height: 1.45; color: #cfc3aa; }
+  .ms-branch { color: var(--gold) !important; }
+  .ms-bar { height: 10px; border-radius: 5px; background: #1a1d22; border: 1px solid #2a2721; overflow: hidden; }
+  .ms-bar i { display: block; height: 100%; background: linear-gradient(90deg, #8a6a2a, var(--gold)); }
+  .ms-count { margin-top: 4px !important; font-weight: 700; color: var(--gold) !important; }
+  .ms-branches { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .ms-card { display: grid; gap: 6px; align-content: start; padding: 10px; border: 1px solid var(--edge-soft); border-radius: 3px; background: rgba(0,0,0,.3); }
+  .ms-card b { font: 700 15px var(--display); color: var(--gold); }
+  .ms-card small { color: var(--muted); font-size: 12px; }
+  .ms-card p { font-size: 13px !important; margin: 0 !important; }
+  .ms-card button { margin-top: 4px; padding: 9px 10px; border: 1px solid var(--edge); border-radius: 3px; background: #1d1a12; color: var(--gold); font-weight: 700; }
+  .ms-card button:disabled { opacity: .4; }
+  @media (max-width: 560px) { .ms-branches { grid-template-columns: 1fr; } }
   #dropList { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
   #dropList li { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; font-size: 14px; }
   #dropList .islot { width: 34px; font-size: 16px; color: var(--r); }
@@ -608,6 +634,11 @@
     <p class="hint">Vende el botín haciendo clic en tu inventario mientras la tienda está abierta.</p>
   </section>
 
+  <section class="panel" id="masterPanel" hidden role="dialog" aria-labelledby="masterTitle">
+    <header><h2 id="masterTitle">Maestro Aldric · Cambios de clase</h2><button class="x" data-close="master" aria-label="Cerrar">✕</button></header>
+    <div id="masterBody"></div>
+  </section>
+
   <section class="panel" id="dropPanel" hidden>
     <header><h2 id="dropTitle">Botín</h2><button class="x" data-close="drop" aria-label="Cerrar">✕</button></header>
     <ul id="dropList"></ul>
@@ -743,11 +774,13 @@
         <button type="button" data-sex="m">Hombre</button>
         <button type="button" data-sex="f">Mujer</button>
       </div>
-      <span class="pick-label">Clase</span>
-      <div class="class-pick" role="group" aria-label="Clase">
-        <button type="button" data-cls="guerrero"><b>⚔︎</b><span>Guerrero</span></button>
-        <button type="button" data-cls="arquera"><b>➶</b><span>Arquera</span></button>
-        <button type="button" data-cls="mago"><b>✺</b><span>Mago</span></button>
+      <span class="pick-label">Raza</span>
+      <div class="class-pick" role="group" aria-label="Raza">
+        <button type="button" data-cls="oso"><b>🐻</b><span>Oso</span></button>
+        <button type="button" data-cls="elfo"><b>🏹</b><span>Elfo</span></button>
+        <button type="button" data-cls="gnomo"><b>⚙</b><span>Gnomo</span></button>
+        <button type="button" data-cls="hada"><b>🐱</b><span>Hada-Gato</span></button>
+        <button type="button" data-cls="lagarto"><b>🦎</b><span>Lagarto</span></button>
       </div>
       <p class="class-desc" id="classDesc"></p>
       <p class="net-msg" id="createMsg" role="status"></p>

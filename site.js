@@ -69,12 +69,11 @@
     scene.add(sun, sun.target);
     const world = V.World.buildWorld(scene);
 
-    // Los tres héroes junto a la fogata
+    // Las cinco razas junto a la fogata
     const heroes = D.CLASS_IDS.map((id, i) => {
-      const c = D.CLASSES[id];
-      const m = V.Models.buildHumanoid(c.look);
+      const m = V.Models.buildHumanoid(D.lookFor(id, i % 2 ? 'f' : 'm'));
       V.Models.setWeaponLook(m, D.ITEMS[D.WEAPON_TIERS[id][2]]);
-      const a = -0.6 + i * 0.9;
+      const a = -0.9 + i * 0.75;
       const x = Math.cos(a) * 3.6;
       const z = Math.sin(a) * 3.6 + 0.5;
       m.root.position.set(x, V.World.heightAt(x, z), z);
@@ -134,7 +133,7 @@
     const ring = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.025, 6, 48), new THREE.MeshBasicMaterial({ color: 0x8a6d3b }));
     ring.rotation.x = Math.PI / 2;
     scene.add(disc, ring);
-    const m = V.Models.buildHumanoid(c.look);
+    const m = V.Models.buildHumanoid(D.lookFor(id, 'm'));
     V.Models.setWeaponLook(m, D.ITEMS[D.WEAPON_TIERS[id][2]]);
     scene.add(m.root);
 
@@ -160,7 +159,7 @@
     if (!box) return;
     for (const id of D.CLASS_IDS) {
       const c = D.CLASSES[id];
-      const stage = el('div', { class: 'class-stage' }, el('span', { class: 'glyph', 'aria-hidden': 'true' }, c.skills[0].glyph));
+      const stage = el('div', { class: 'class-stage' }, el('span', { class: 'glyph', 'aria-hidden': 'true' }, c.glyph));
       const card = el(
         'article',
         { class: 'class-card' },
@@ -171,7 +170,8 @@
           el('h3', {}, c.name),
           el('span', { class: 'role' }, c.role),
           el('p', {}, c.desc),
-          el('div', { class: 'skill-chips' }, c.skills.map((s) => el('span', { class: 'chip', title: s.desc }, el('b', {}, s.glyph), s.name)))
+          el('div', { class: 'skill-chips' }, c.skills.map((s) => el('span', { class: 'chip', title: s.desc }, el('b', {}, s.glyph), s.name))),
+          el('p', { class: 'role' }, `Nivel 25: ${c.branches.a.name} o ${c.branches.b.name}`)
         )
       );
       box.append(card);
@@ -241,8 +241,19 @@
     buff: 'Mejora temporal',
     shield: 'Escudo',
     leap: 'Movilidad',
+    blink: 'Movilidad',
     charge: 'Carga y aturdimiento',
-    chain: 'Rayo en cadena',
+    chain: 'Rebota entre enemigos',
+    cone: 'Cono al frente',
+    line: 'Línea recta',
+    mark: 'Marca al enemigo',
+    zone: 'Charco en el suelo',
+    turret: 'Invocación',
+    poly: 'Polimorfia',
+    bubble: 'Protección',
+    pulse: 'Ondas a tu alrededor',
+    dance: 'Cortes en cadena',
+    passive: 'Pasiva',
   };
 
   function guideClasses() {
@@ -252,24 +263,30 @@
       const c = D.CLASSES[id];
       const s1 = D.playerBaseStats(id, 1);
       const s20 = D.playerBaseStats(id, D.MAX_LEVEL);
-      const rows = c.skills.map((s) =>
+      const row = (when, s, type) =>
         el(
           'tr',
           {},
-          el('td', { class: 'num' }, String(s.lvl)),
-          el('td', {}, el('span', { class: 'g', 'aria-hidden': 'true' }, s.glyph), el('strong', {}, s.name)),
-          el('td', {}, skillType[s.type]),
-          el('td', { class: 'num' }, `${s.mp}`),
-          el('td', { class: 'num' }, `${s.cd} s`),
+          el('td', { class: 'num' }, when),
+          el('td', {}, el('span', { class: 'g', 'aria-hidden': 'true' }, s.glyph || '◇'), el('strong', {}, s.name)),
+          el('td', {}, skillType[type || s.type] || ''),
+          el('td', { class: 'num' }, s.mp ? `${s.mp}` : '—'),
+          el('td', { class: 'num' }, s.cd ? `${s.cd} s` : '—'),
           el('td', { class: 'num' }, s.range ? `${s.range} m` : '—'),
           el('td', {}, s.desc)
-        )
-      );
+        );
+      const rows = D.skillsFor(id, 1, null).slice(0, 5).map((s) => row(s.stage ? `${s.lvl} · ${c.awaken}` : String(s.lvl), s));
+      for (const key of ['a', 'b']) {
+        const b = c.branches[key];
+        rows.push(row(`25 · ${b.name}`, b.passive, 'passive'));
+        rows.push(row(`25 · ${b.name}`, { ...b.ultimate, name: `★ ${b.ultimate.name}` }));
+        rows.push(row(`40 · ${b.master}`, { ...b.ultimate, ...b.masterUlt, name: `★ ${b.masterUlt.name}` }));
+      }
       box.append(
         el(
           'div',
           { class: 'class-guide', id: `clase-${id}` },
-          el('header', {}, el('h3', {}, c.names ? `${c.names.m} / ${c.names.f}` : c.name), el('span', { class: 'role' }, c.role)),
+          el('header', {}, el('h3', {}, `${c.glyph} ${c.names.m} / ${c.names.f}`), el('span', { class: 'role' }, c.role)),
           el('p', {}, c.desc),
           el(
             'div',
@@ -279,7 +296,8 @@
             el('span', {}, 'Alcance ', el('b', {}, c.range > 3 ? `${c.range} m` : 'cuerpo a cuerpo')),
             el('span', {}, 'Ataque cada ', el('b', {}, `${c.atkSpeed} s`)),
             el('span', {}, 'Crítico ', el('b', {}, `${Math.round(c.crit * 100)}%`)),
-            el('span', {}, 'Arma inicial ', el('b', {}, D.ITEMS[c.start].name))
+            el('span', {}, 'Armadura ', el('b', {}, D.ARMOR_TYPES[c.armorType].name)),
+            el('span', {}, 'Armas ', el('b', {}, c.weaponTypes.map((t) => D.WEAPON_TYPES[t].name.toLowerCase()).join(', ')))
           ),
           table([['Nivel', 'num'], ['Habilidad'], ['Tipo'], ['Maná', 'num'], ['Recarga', 'num'], ['Alcance', 'num'], ['Efecto']], rows)
         )
@@ -294,11 +312,10 @@
     const rows = [];
     for (let lv = 1; lv <= D.MAX_LEVEL; lv++) {
       const need = lv < D.MAX_LEVEL ? D.xpToNext(lv) : null;
-      const unlocks = D.CLASS_IDS.map((id) => D.CLASSES[id].skills.find((s) => s.lvl === lv)).filter(Boolean);
-      const gear = Object.values(D.ITEMS).filter((it) => it.lvl === lv && (it.type === 'weapon' || it.type === 'armor'));
-      const notes = [];
-      if (unlocks.length) notes.push(`Habilidades: ${unlocks.map((s) => s.name).join(', ')}`);
-      if (gear.length && lv > 1) notes.push(`Equipo de nivel ${lv}`);
+      const unlocks = D.PROGRESSION.filter((x) => x.lvl === lv);
+      const grade = Object.values(D.GRADES).find((g) => g.lvl === lv && lv > 1);
+      const notes = unlocks.filter((x) => !/^Equipo/.test(x.text)).map((x) => `${x.text}${x.soon ? ' (próximamente)' : ''}`);
+      if (grade) notes.push(`Equipo de grado ${grade.name}${grade.stage ? ` (con el ${D.STAGES[grade.stage].name})` : ''}`);
       const zones = D.ZONES.filter((z) => z.lvl && +z.lvl.split('–')[0] === lv).map((z) => z.name);
       if (zones.length) notes.push(`Zona: ${zones.join(', ')}`);
       if (lv === D.MAX_LEVEL) notes.push('Nivel máximo');
@@ -332,7 +349,7 @@
             el('td', {}, m.boss ? el('span', { style: 'color:#c895ff;font-weight:700' }, m.name) : m.name),
             el('td', { class: 'num' }, m.lvl[0] === m.lvl[1] ? `${m.lvl[0]}` : `${m.lvl[0]}–${m.lvl[1]}`),
             el('td', {}, m.aggressive ? 'Te ataca al verte' : 'Solo si lo atacas'),
-            el('td', {}, m.drops.map(([id, ch]) => `${id[0] === '@' ? `Arma de tu clase (nivel ${D.ITEMS[D.resolveDrop(id, 'guerrero')].lvl})` : D.ITEMS[id].name} ${+(ch * 100).toFixed(1)}%`).join(', '))
+            el('td', {}, m.drops.map(([id, ch]) => `${id[0] === '@' ? `${id[1] === 'w' ? 'Arma' : 'Armadura'} de tu raza, grado ${D.GRADES[id.split(':')[1]].name}` : D.ITEMS[id].name} ${+(ch * 100).toFixed(1)}%`).join(', '))
           )
         );
       }
@@ -343,29 +360,38 @@
   function guideItems() {
     const w = $('#guideWeapons');
     if (w) {
-      const rows = D.WEAPON_TIERS.guerrero.map((_, tier) => {
+      const rows = D.GRADE_ORDER.map((g, tier) => {
         const ids = D.CLASS_IDS.map((c) => D.WEAPON_TIERS[c][tier]);
         const first = D.ITEMS[ids[0]];
+        const G = D.GRADES[g];
         return el(
           'tr',
           {},
-          el('td', { class: 'num' }, String(first.lvl)),
-          el('td', {}, rarity(first.rarity)),
+          el('td', {}, rarity(g)),
+          el('td', { class: 'num' }, `${G.lvl}${G.stage ? ` · ${D.STAGES[G.stage].name}` : ''}`),
           ids.map((id) => el('td', {}, D.ITEMS[id].name)),
           el('td', { class: 'num' }, `+${first.atk}`),
-          el('td', {}, tier <= 2 ? `Tienda (${first.price} oro) o botín` : tier === 3 ? 'Botín de gólems y sapos' : 'Solo Tharmok')
+          el('td', {}, tier <= 2 ? `Tienda (${first.price} oro) o botín` : tier === 3 ? 'Botín de Tharmok' : 'Regalo del gremio al cambiar de clase · nuevas zonas próximamente')
         );
       });
-      w.append(table([['Nivel', 'num'], ['Rareza'], ['Guerrero'], ['Arquera'], ['Mago'], ['Ataque', 'num'], ['Dónde']], rows));
+      w.append(table([['Grado'], ['Requiere', 'num'], ...D.CLASS_IDS.map((c) => [D.CLASSES[c].short.m]), ['Ataque', 'num'], ['Dónde']], rows));
     }
     const a = $('#guideArmor');
     if (a) {
-      const rows = Object.entries(D.ITEMS)
-        .filter(([, it]) => it.type === 'armor')
-        .map(([, it]) =>
-          el('tr', {}, el('td', { class: 'num' }, String(it.lvl)), el('td', {}, el('strong', {}, it.name)), el('td', {}, rarity(it.rarity)), el('td', { class: 'num' }, `+${it.def}`), el('td', { class: 'num' }, `+${it.hp}`), el('td', {}, it.desc))
-        );
-      a.append(table([['Nivel', 'num'], ['Armadura'], ['Rareza'], ['Defensa', 'num'], ['Vida', 'num'], ['Notas']], rows));
+      const types = Object.keys(D.ARMOR_TYPES);
+      const rows = D.GRADE_ORDER.map((g, tier) =>
+        el(
+          'tr',
+          {},
+          el('td', {}, rarity(g)),
+          types.map((t) => {
+            const it = D.ITEMS[D.ARMOR_TIERS[t][tier]];
+            return el('td', {}, el('strong', {}, it.name), el('br'), el('small', {}, `Def +${it.def} · Vida +${it.hp}${it.mp ? ` · Maná +${it.mp}` : ''}`));
+          })
+        )
+      );
+      const who = (t) => D.CLASS_IDS.filter((c) => D.CLASSES[c].armorType === t).map((c) => D.CLASSES[c].short.m).join(', ');
+      a.append(table([['Grado'], ...types.map((t) => [`${D.ARMOR_TYPES[t].name} (${who(t)})`])], rows));
     }
     const p = $('#guideMisc');
     if (p) {

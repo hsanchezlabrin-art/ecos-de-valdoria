@@ -17,7 +17,7 @@
   <div class="wrap">
     <a class="brand" href="./"><span class="mark">V</span>Ecos de Valdoria</a>
     <nav class="nav" aria-label="Principal">
-      <a href="./#clases">Clases</a>
+      <a href="./#clases">Razas</a>
       <a href="./#mundo">Mundo</a>
       <a href="guia.html" aria-current="page">Guía</a>
       <a href="cambios.html">Novedades</a>
@@ -39,7 +39,7 @@
     <a href="#primeros-pasos">Primeros pasos</a>
     <a href="#cuenta">Cuenta y personajes</a>
     <a href="#controles">Controles</a>
-    <a href="#clases">Clases y habilidades</a>
+    <a href="#clases">Razas y habilidades</a>
     <a href="#niveles">Niveles y experiencia</a>
     <a href="#zonas">Zonas y monstruos</a>
     <a href="#equipo">Equipo y objetos</a>
@@ -108,14 +108,14 @@
     </section>
 
     <section id="clases">
-      <h2>Clases y habilidades</h2>
-      <p>Cada clase aprende seis habilidades, en los niveles 1, 3, 5, 8, 11 y 15. Las habilidades gastan maná y tienen un tiempo de recarga. Las armas son exclusivas de cada clase; las armaduras sirven a todas.</p>
+      <h2>Razas, clases y habilidades</h2>
+      <p>Hay cinco razas. Cada una empieza con <strong>3 habilidades</strong>. Con el <strong>Maestro Aldric</strong> de la aldea haces tus cambios de clase, cada uno con una misión: <strong>Despertar</strong> (nivel 10, 2 habilidades nuevas), <strong>Especialización</strong> (nivel 25: eliges la rama A o B, con una pasiva y una Ultimate) y <strong>Ascensión Maestra</strong> (nivel 40: tu Ultimate se vuelve Maestra). Cada raza solo usa su tipo de armadura y sus armas.</p>
       <div id="guideClasses" style="display:grid;gap:18px"></div>
     </section>
 
     <section id="niveles">
       <h2>Niveles y experiencia</h2>
-      <p>Ganas experiencia al derrotar monstruos. Los que están 3 o más niveles por encima de ti dan un 20% extra; los que están 4 o más por debajo dan mucho menos. El nivel máximo es <strong>20</strong>. Al subir de nivel recuperas toda la vida y el maná, y aumentan tus estadísticas.</p>
+      <p>Ganas experiencia al derrotar monstruos. Los que están 3 o más niveles por encima de ti dan un 20% extra; los que están 4 o más por debajo dan mucho menos. El nivel máximo es <strong>50</strong>. Al subir de nivel recuperas toda la vida y el maná, y aumentan tus estadísticas. Si caes, no pierdes experiencia ni objetos: despiertas en un lugar seguro cerca.</p>
       <div id="guideLevels"></div>
     </section>
 
@@ -127,10 +127,10 @@
 
     <section id="equipo">
       <h2>Equipo y objetos</h2>
-      <p>Haz clic en un objeto del inventario para equiparlo o usarlo, y en tu equipo para quitártelo. Hay cinco rarezas: <span class="rar" style="color:#cfc6b2">Común</span>, <span class="rar" style="color:#8fd37a">Refinado</span>, <span class="rar" style="color:#74aaff">Raro</span>, <span class="rar" style="color:#c895ff">Épico</span> y <span class="rar" style="color:#ffb347">Legendario</span>. Las armas de rareza alta también aumentan tu probabilidad de crítico. Cuando un monstruo suelta un arma, siempre es para tu clase.</p>
-      <h3>Armas por clase</h3>
+      <p>Haz clic en un objeto del inventario para equiparlo o usarlo, y en tu equipo para quitártelo. El equipo tiene seis grados: <span class="rar" style="color:#b9b2a4">Madera</span> (nivel 1), <span class="rar" style="color:#8fd37a">Cobre</span> (5), <span class="rar" style="color:#74aaff">Cristal Azul</span> (10, con el Despertar), <span class="rar" style="color:#c895ff">Oro Morado</span> (20), <span class="rar" style="color:#ffc44d">Diamante Dorado</span> (25, con la Especialización) y <span class="rar" style="color:#ff8adf">Arcoíris Celestial</span> (40, con la Ascensión). Cuando un monstruo suelta un arma o armadura, siempre es para tu raza. En grupo, cada jugador recibe su propio botín.</p>
+      <h3>Armas por raza</h3>
       <div id="guideWeapons"></div>
-      <h3>Armaduras</h3>
+      <h3>Armaduras por tipo</h3>
       <div id="guideArmor"></div>
       <h3>Pociones y botín</h3>
       <div id="guideMisc"></div>
@@ -149,7 +149,7 @@
       <ul class="plain">
         <li>Haz clic sobre otro jugador para seleccionarlo y pulsa <strong>«Invitar al grupo»</strong>, o escribe <kbd>/invitar Nombre</kbd> en el chat.</li>
         <li>Quien recibe la invitación puede aceptarla o rechazarla. El líder (★) es quien invita y puede expulsar miembros.</li>
-        <li>La experiencia de cada monstruo se reparte entre los miembros que estén cerca (45 m), según su nivel, con un <strong>10% extra por cada miembro</strong>. El oro y el botín son para quien da el golpe final.</li>
+        <li>La experiencia de cada monstruo se reparte entre los miembros que estén cerca (45 m), según su nivel, con un <strong>10% extra por cada miembro</strong>. Cada miembro cercano recibe su propio oro y botín, y avanza en su misión de cambio de clase.</li>
         <li>Bajo tu marco ves la vida y el maná de tu grupo; en el mapa aparecen en verde.</li>
         <li>Empieza un mensaje con <kbd>#</kbd> para hablar solo con tu grupo.</li>
       </ul>
@@ -167,13 +167,15 @@
     <section id="consejos">
       <h2>Consejos</h2>
       <ul class="plain">
-        <li><strong>Guerrero:</strong> entra en grupos y usa Torbellino. Guarda Segundo Aliento para cuando tu vida baje de la mitad.</li>
-        <li><strong>Arquera:</strong> ataca desde el máximo alcance. Si un monstruo te alcanza, usa Salto de Retirada y sigue disparando mientras está ralentizado.</li>
-        <li><strong>Mago:</strong> activa el Escudo Arcano antes de entrar en combate. La Nova de Escarcha ralentiza a todo lo que te rodea y te da tiempo de alejarte.</li>
+        <li><strong>Oso Pardo:</strong> usa el Rugido Protector para que los monstruos te ataquen a ti y no a tus amigos. Piel de Corteza te salva en los apuros.</li>
+        <li><strong>Elfo del Bosque:</strong> marca al enemigo con tu halcón y dispara desde lejos. Si te alcanzan, Salto de Copa.</li>
+        <li><strong>Gnomo Ingeniero:</strong> pon una Torreta de Chispas antes de pelear y convierte en oveja al enemigo más peligroso.</li>
+        <li><strong>Hada-Gato:</strong> quédate detrás de tus amigos y cúralos con la Canción de Corazones. La Burbuja Estelar protege al más herido.</li>
+        <li><strong>Caballero Lagarto:</strong> quema a los enemigos con el Aliento de Chispa y remata con Corte Cruzado: ¡críticos seguros!</li>
         <li>Lleva siempre pociones: las teclas <kbd>7</kbd> y <kbd>8</kbd> las usan al instante.</li>
         <li>Cazar en grupo da más experiencia que cazar solo.</li>
         <li>La Sanadora Ilwen te cura gratis: vuelve a la aldea en lugar de gastar pociones si no hay prisa.</li>
-        <li>Tharmok tiene seis veces la vida de un monstruo normal y golpea muy fuerte. Llega al nivel 15 con equipo raro antes de intentarlo.</li>
+        <li>Tharmok tiene seis veces la vida de un monstruo normal y golpea muy fuerte. Llega al nivel 15 con equipo de Cristal Azul antes de intentarlo.</li>
       </ul>
     </section>
   </article>

@@ -2,7 +2,7 @@
 // selector y creador de personajes, entrada, cámara y bucle principal.
 (function () {
   const G = V.G;
-  const { ZONES, CLASSES, ITEMS, RARITY, className, lookFor } = V.Data;
+  const { ZONES, CLASSES, ARCHETYPE_IDS, ITEMS, RARITY, className, lookFor, startGear } = V.Data;
   const { buildWorld, heightAt } = V.World;
   const Game = V.Game;
   const UI = V.UI;
@@ -317,7 +317,7 @@
       pv.scene.add(pv.model.root);
     }
     $('pvName').textContent = info.name || 'Sin nombre';
-    $('pvClass').textContent = `${className(info.cls, info.sex)}${info.level ? ` · Nivel ${info.level}` : ''}`;
+    $('pvClass').textContent = `${className(info.cls, info.sex, info.stage || 0, info.branch || null)}${info.level ? ` · Nivel ${info.level}` : ''}`;
     const gear = $('pvGear');
     gear.innerHTML = '';
     for (const id of [info.equip.weapon, info.equip.armor]) {
@@ -437,16 +437,15 @@
       li.textContent = 'Todavía no tienes personajes.';
       list.append(li);
     }
-    const glyph = { guerrero: '⚔︎', arquera: '➶', mago: '✺' };
     for (const ch of chars) {
       const li = document.createElement('li');
       const b = document.createElement('button');
       b.type = 'button';
       b.dataset.id = ch.id;
       b.innerHTML = '<span class="cg"></span><span><strong></strong><small></small></span><span class="lv"></span>';
-      b.querySelector('.cg').textContent = glyph[ch.cls];
+      b.querySelector('.cg').textContent = CLASSES[ch.cls] ? CLASSES[ch.cls].glyph : '?';
       b.querySelector('strong').textContent = ch.name;
-      b.querySelector('small').textContent = className(ch.cls, ch.sex);
+      b.querySelector('small').textContent = className(ch.cls, ch.sex, ch.stage, ch.branch);
       b.querySelector('.lv').textContent = `Nv ${ch.level}`;
       b.addEventListener('click', () => selectChar(ch.id));
       b.addEventListener('dblclick', () => enterWorld());
@@ -465,7 +464,7 @@
     selected = id;
     document.querySelectorAll('#charList button').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
     const ch = chars.find((c) => c.id === id);
-    showPreview(ch && { name: ch.name, cls: ch.cls, sex: ch.sex, level: ch.level, equip: ch.equip || {} });
+    showPreview(ch && { name: ch.name, cls: ch.cls, sex: ch.sex, level: ch.level, stage: ch.stage, branch: ch.branch, equip: ch.equip || {} });
     delArmed = false;
     $('btnDelChar').textContent = 'Borrar';
   }
@@ -525,7 +524,7 @@
   }
 
   const nameInput = $('nameInput');
-  const creator = { cls: 'guerrero', sex: 'm' };
+  const creator = { cls: ARCHETYPE_IDS[0], sex: 'm' };
   let nameReq = 0;
   function newRandomName() {
     const req = ++nameReq;
@@ -545,15 +544,15 @@
       const on = b.dataset.cls === creator.cls;
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on);
-      b.querySelector('span').textContent = className(b.dataset.cls, creator.sex);
+      b.querySelector('span').textContent = CLASSES[b.dataset.cls].short[creator.sex];
     });
     document.querySelectorAll('.sex-pick button').forEach((b) => {
       const on = b.dataset.sex === creator.sex;
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on);
     });
-    $('classDesc').textContent = `${c.role}. ${c.desc}`;
-    showPreview({ name: nameInput.value.trim(), cls: creator.cls, sex: creator.sex, level: 1, equip: { weapon: c.start, armor: null } });
+    $('classDesc').textContent = `${className(creator.cls, creator.sex)} · ${c.role}. ${c.desc}`;
+    showPreview({ name: nameInput.value.trim(), cls: creator.cls, sex: creator.sex, level: 1, equip: startGear(creator.cls) });
   }
   document.querySelectorAll('.class-pick button').forEach((b) =>
     b.addEventListener('click', () => {

@@ -1,7 +1,8 @@
 // Interfaz (HUD) en HTML sobre el canvas 3D. Los botones funcionan con ratón y con toque.
 (function () {
 const G = V.G;
-const { ITEMS, RARITY, CLASSES, MOBS, shopFor, MAX_LEVEL, xpToNext, sellPrice, className, resolveDrop, WEAPON_TIERS } = V.Data;
+const { ITEMS, RARITY, CLASSES, MOBS, shopFor, MAX_LEVEL, xpToNext, sellPrice, className, raceName, resolveDrop, skillLock, passiveFor, STAGES, GRADES, ARMOR_TYPES, WEAPON_TYPES, questFor } = V.Data;
+const equipProblem = (it) => V.Data.equipProblem(G.player, it);
 const { zoneAt } = V.World;
 // game.js se carga después de este archivo: se llama a través de V.Game en tiempo de ejecución.
 const useSkill = (i) => V.Game.useSkill(i);
@@ -52,11 +53,13 @@ function initUI() {
     stats: $('statPanel'),
     map: $('mapPanel'),
     drop: $('dropPanel'),
+    master: $('masterPanel'),
   };
   E.hud.hidden = false;
   E.pName.textContent = G.player.name;
-  $('pClass').textContent = className(G.player.cls, G.player.sex);
+  $('pClass').textContent = className(G.player.cls, G.player.sex, G.player.stage, G.player.branch);
   buildHotbar();
+  bindMaster();
   $('btnInv').onclick = () => togglePanel('inv');
   $('btnHelp').onclick = () => togglePanel('help');
   $('btnStats').onclick = () => togglePanel('stats');
@@ -111,7 +114,7 @@ function buildHotbar() {
   const bar = $('hotbar');
   bar.innerHTML = '';
   const defs = [
-    ...G.player.skills.map((s, i) => ({ kind: 'skill', i, key: String(i + 1), glyph: s.glyph, title: `${s.name} (nivel ${s.lvl}) · ${s.mp} MP · ${s.cd} s\n${s.desc}` })),
+    ...G.player.skills.map((s, i) => ({ kind: 'skill', i, key: String(i + 1), glyph: s.glyph, title: skillTitle(s) })),
     { kind: 'pot', id: 'pocion_vida', key: '7', glyph: ITEMS.pocion_vida.glyph, title: `${ITEMS.pocion_vida.name}\n${ITEMS.pocion_vida.desc}` },
     { kind: 'pot', id: 'pocion_mana', key: '8', glyph: ITEMS.pocion_mana.glyph, title: `${ITEMS.pocion_mana.name}\n${ITEMS.pocion_mana.desc}` },
   ];
@@ -126,6 +129,21 @@ function buildHotbar() {
   });
 }
 
+function skillTitle(s) {
+  if (s.locked) return `${s.name}\n${s.desc}`;
+  const req = s.stage ? `${STAGES[s.stage].name} · nivel ${s.lvl}` : `nivel ${s.lvl}`;
+  return `${s.ultimate ? '★ ' : ''}${s.name} (${req}) · ${s.mp} MP · ${s.cd} s\n${s.desc}`;
+}
+
+// Tras un cambio de clase: barra, título y paneles
+function classChanged() {
+  if (!E) return;
+  buildHotbar();
+  $('pClass').textContent = className(G.player.cls, G.player.sex, G.player.stage, G.player.branch);
+  refreshPanels();
+  refreshMaster();
+}
+
 function updateHotbar() {
   const p = G.player;
   for (const s of E.slots) {
@@ -138,15 +156,16 @@ function updateHotbar() {
       const sk = p.skills[s.d.i];
       cd = p.cds[sk.id] || 0;
       total = sk.cd;
-      locked = p.level < sk.lvl;
-      low = p.mp < sk.mp;
-      s.lock.textContent = locked ? `Nv ${sk.lvl}` : '';
+      const lock = skillLock(p, sk);
+      locked = !!lock;
+      low = !p.freeNext && p.mp < sk.mp;
+      s.lock.textContent = lock === 'Cambio de clase' ? 'Clase' : lock;
     } else {
       cd = p.cds.pot || 0;
       qty = countItem(s.d.id);
       low = qty === 0;
     }
-    const st = `${Math.ceil(cd * 10)}|${locked}|${low}|${qty}`;
+    const st = `${Math.ceil(cd * 10)}|${locked}|${low}|${qty}|${s.lock.textContent}`;
     if (st === s.state) continue;
     s.state = st;
     s.b.style.setProperty('--p', (cd / total).toFixed(3));
@@ -452,7 +471,7 @@ function closeAll() {
     answerInvite(false);
     return true;
   }
-  for (const k of ['drop', 'map', 'stats', 'shop', 'inv', 'help']) {
+  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help']) {
     if (!E[k].hidden) {
       E[k].hidden = true;
       closed = true;
@@ -461,12 +480,38 @@ function closeAll() {
   return closed;
 }
 
+// Tipo de equipo: "Martillo · Oso Pardo" o "Armadura pesada"
+function gearKind(it) {
+  if (it.type === 'weapon') return `${WEAPON_TYPES[it.weaponType].name}${it.cls ? ` · ${CLASSES[it.cls].name}` : ''}`;
+  if (it.type === 'armor') return `Armadura ${ARMOR_TYPES[it.armorType].name.toLowerCase()}`;
+  return '';
+}
+function gearStats(it) {
+  const out = [];
+  if (it.atk) out.push(`Ataque +${it.atk}${it.crit ? ` · Crítico +${Math.round(it.crit * 100)}%` : ''}`);
+  if (it.def) out.push(`Defensa +${it.def} · Vida +${it.hp}${it.mp ? ` · Maná +${it.mp}` : ''}`);
+  if (it.evade) out.push(`Esquivar +${Math.round(it.evade * 100)}%`);
+  if (it.heal) out.push(`Curación +${Math.round(it.heal * 100)}%`);
+  return out;
+}
+function gearReq(it) {
+  const G2 = it.grade && GRADES[it.grade];
+  const req = [];
+  if (it.lvl) req.push(`Nivel ${it.lvl}`);
+  if (G2 && G2.stage) req.push(STAGES[G2.stage].name);
+  return req.join(' · ');
+}
+
 function itemTitle(it) {
   const lines = [`${it.name} · ${RARITY[it.rarity].name}`];
-  if (it.atk) lines.push(`Ataque +${it.atk}`);
-  if (it.def) lines.push(`Defensa +${it.def} · Vida +${it.hp}`);
-  if (it.cls) lines.push(`Clase: ${CLASSES[it.cls].name}`);
-  if (it.lvl) lines.push(`Requiere nivel ${it.lvl}`);
+  const kind = gearKind(it);
+  if (kind) lines.push(kind);
+  lines.push(...gearStats(it));
+  if (it.type === 'weapon' || it.type === 'armor') {
+    lines.push(`Requiere: ${gearReq(it)}`);
+    const problem = equipProblem(it);
+    if (problem) lines.push(`✕ ${problem}`);
+  }
   lines.push(it.desc);
   return lines.join('\n');
 }
@@ -503,13 +548,6 @@ function slotEl(id, qty, onClick, extraCls = '', onQuick = null) {
 
 // ---------- Ficha de objeto: detalles y acciones (Equipar, Usar, Vender, Quitar) ----------
 
-function equipProblem(it) {
-  const p = G.player;
-  if (it.cls && it.cls !== p.cls) return `Solo para la clase ${CLASSES[it.cls].name}`;
-  if (it.lvl && p.level < it.lvl) return `Necesitas nivel ${it.lvl} (tienes ${p.level})`;
-  return '';
-}
-
 function openItemMenu(anchor, source) {
   const p = G.player;
   const id = source.equipped ? p.equip[source.equipped] : p.inv[source.index] && p.inv[source.index].id;
@@ -539,15 +577,11 @@ function openItemMenu(anchor, source) {
   nm.append(strong, small);
   head.append(ic, nm);
 
-  const stats = [];
-  if (it.atk) stats.push(`Ataque +${it.atk}`);
-  if (it.def) stats.push(`Defensa +${it.def} · Vida +${it.hp}`);
+  const stats = gearStats(it);
+  if (gearKind(it)) stats.unshift(gearKind(it));
   if (it.type === 'potion') stats.push(it.desc);
   for (const s of stats) add('p', 'im-stat', s);
-  if (it.cls || it.lvl) {
-    const req = [it.cls ? `Clase: ${CLASSES[it.cls].name}` : '', it.lvl ? `Nivel ${it.lvl}` : ''].filter(Boolean).join(' · ');
-    add('p', 'im-req', `Requiere: ${req}`);
-  }
+  if (it.type === 'weapon' || it.type === 'armor') add('p', 'im-req', `Requiere: ${gearReq(it)}`);
   if (it.type !== 'potion') add('p', 'im-desc', it.desc);
 
   const actions = add('div', 'im-actions');
@@ -649,7 +683,9 @@ function refreshPanels() {
       nm.textContent = it.name;
       nm.style.color = RARITY[it.rarity].color;
       const meta = document.createElement('small');
-      meta.textContent = it.atk ? `Ataque +${it.atk} · Nv ${it.lvl}` : it.def ? `Defensa +${it.def} · Vida +${it.hp} · Nv ${it.lvl}` : it.desc;
+      const problem = it.type === 'weapon' || it.type === 'armor' ? equipProblem(it) : '';
+      meta.textContent = it.atk || it.def ? `${gearStats(it)[0]} · ${gearReq(it)}${problem ? ' · Aún no puedes usarlo' : ''}` : it.desc;
+      if (problem) meta.title = problem;
       info.append(nm, meta);
       const buy = document.createElement('button');
       buy.className = 'buy';
@@ -766,7 +802,9 @@ function updateUI() {
     E.online.textContent = `● ${n} ${n === 1 ? 'jugador' : 'jugadores'} en línea`;
   }
   const parts = [];
-  if (p.buffT > 0) parts.push(`${p.buffName} · ${Math.ceil(p.buffT)} s`);
+  for (const b of p.buffs || []) parts.push(`${b.name} · ${Math.ceil(b.t)} s`);
+  if (p.bubble) parts.push('Burbuja Estelar');
+  if (p.freeNext) parts.push('Resonancia: próximo hechizo gratis');
   if (p.shield > 0) parts.push(`Escudo ${Math.ceil(p.shield)} · ${Math.ceil(p.shieldT)} s`);
   const buff = parts.join('  ·  ');
   if (E.buffs.textContent !== buff) E.buffs.textContent = buff;
@@ -785,7 +823,7 @@ function updateUI() {
     E.tLvl.textContent = ply.level || '?';
     E.tName.textContent = ply.name;
     const inParty = p.party && p.party.members.some((m) => m.id === ply.id);
-    tTitle.textContent = `${className(ply.cls, ply.sex)}${inParty ? ' · De tu grupo' : ''}`;
+    tTitle.textContent = `${className(ply.cls, ply.sex, ply.stage, ply.branch)}${inParty ? ' · De tu grupo' : ''}`;
     tTitle.hidden = false;
     tBar.hidden = false;
     bar(E.tHp, E.tHpT, ply.hp, ply.stats.maxHp);
@@ -834,6 +872,7 @@ function updateUI() {
       lastZone = z;
       E.zone.textContent = z ? z.name : 'Tierras salvajes';
     }
+    if (!E.master.hidden && !masterNear()) togglePanel('master', false);
     if (shopOpen() && Math.hypot(p.pos.x - G.world.merchant.root.position.x, p.pos.z - G.world.merchant.root.position.z) > 8) {
       togglePanel('shop', false);
     }
@@ -847,21 +886,28 @@ function renderStats() {
   const s = p.stats;
   $('stLvl').textContent = p.level;
   $('stName').textContent = p.name;
-  $('stClass').textContent = `${className(p.cls, p.sex)} · Nivel ${p.level}`;
-  const atk = s.atk * (1 + (p.buffT > 0 ? p.buffPct : 0));
-  const crit = s.crit + (p.buffT > 0 ? p.buffCrit || 0 : 0);
+  $('stClass').textContent = `${className(p.cls, p.sex, p.stage, p.branch)} · Nivel ${p.level}`;
   const need = p.level >= MAX_LEVEL ? 0 : xpToNext(p.level);
+  const buffed = (p.buffs || []).length > 0;
+  const pas = passiveFor(p.cls, p.stage, p.branch);
   const rows = [
-    ['Vida', `${Math.round(p.hp)} / ${s.maxHp}`],
+    ['Raza', raceName(p.cls, p.sex)],
+    ['Etapa de clase', `${STAGES[p.stage].name}${p.branch ? ` · Rama ${p.branch.toUpperCase()}` : ''}`],
+    ['Pasiva', pas ? pas.name : 'Nivel 25 (Especialización)'],
+    ['Vida', `${Math.round(p.hp)} / ${s.maxHp}`, false, 'sep'],
     ['Maná', `${Math.round(p.mp)} / ${s.maxMp}`],
     ['Experiencia', need ? `${p.xp.toLocaleString('es')} / ${need.toLocaleString('es')}` : 'Nivel máximo'],
-    ['Ataque', Math.round(atk), p.buffT > 0 && p.buffPct, 'sep'],
+    ['Ataque', Math.round(s.atk), buffed, 'sep'],
     ['Defensa', Math.round(s.def)],
-    ['Prob. de crítico', `${(crit * 100).toFixed(1)}%`, p.buffT > 0 && p.buffCrit],
+    ['Prob. de crítico', `${(s.crit * 100).toFixed(1)}%`],
     ['Daño crítico', `×${(s.critMult || 1.8).toFixed(1)}`],
-    ['Vel. de ataque', `${(1 / s.atkSpeed).toFixed(2)} golpes/s`],
-    ['Vel. de movimiento', `${(s.speed || 7.2).toFixed(1)} m/s${p.swimming ? ' (nadando: 60%)' : ''}`],
+    ['Vel. de ataque', `${(1 / s.atkSpeed).toFixed(2)} golpes/s`, buffed],
+    ['Vel. de movimiento', `${(s.speed || 7.2).toFixed(1)} m/s${p.swimming ? ' (nadando: 60%)' : ''}`, buffed],
     ['Alcance', s.range > 3 ? `${s.range} m` : 'Cuerpo a cuerpo'],
+    ['Esquivar', `${Math.round((s.evade || 0) * 100)}%`],
+    ['Daño recibido', s.dr ? `−${Math.round(s.dr * 100)}%` : 'Normal', !!s.dr],
+    ['Bloqueo', s.block ? `${Math.round(s.block * 100)}%` : '—'],
+    ['Curación', `${Math.round((s.heal || 1) * 100)}%`],
     ['Arma', p.equip.weapon ? ITEMS[p.equip.weapon].name : 'Ninguna', false, 'sep'],
     ['Armadura', p.equip.armor ? ITEMS[p.equip.armor].name : 'Ninguna'],
     ['Oro', p.gold.toLocaleString('es')],
@@ -880,6 +926,121 @@ function renderStats() {
     }
     dl.append(dt, dd);
   }
+}
+
+// ---------- Maestro de Clase: cambios de clase (nivel 10, 25 y 40) ----------
+
+function bindMaster() {
+  const panel = $('masterPanel');
+  if (panel) panel.addEventListener('keydown', (e) => e.stopPropagation());
+}
+
+function openMaster() {
+  togglePanel('master', true);
+  refreshMaster();
+}
+
+function masterNear() {
+  const n = G.world.npcs.find((x) => x.id === 'maestro');
+  if (!n) return false;
+  const np = n.root.position;
+  return Math.hypot(G.player.pos.x - np.x, G.player.pos.z - np.z) < 8;
+}
+
+function refreshMaster() {
+  if (!E || !E.master || E.master.hidden) return;
+  const p = G.player;
+  const box = $('masterBody');
+  box.innerHTML = '';
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const btn = (label, fn, primary, disabled) => {
+    const b = el('button', primary ? 'buy' : '', label);
+    b.type = 'button';
+    b.disabled = !!disabled;
+    b.onclick = fn;
+    return b;
+  };
+
+  // Título actual
+  const head = el('div', 'ms-head');
+  head.append(el('strong', '', className(p.cls, p.sex, p.stage, p.branch)), el('small', '', `${raceName(p.cls, p.sex)} · Nivel ${p.level} · ${STAGES[p.stage].name}`));
+  box.append(head);
+
+  // Línea de progreso: Despertar → Especialización → Ascensión
+  const steps = el('ol', 'ms-steps');
+  for (const st of STAGES.slice(1)) {
+    const done = p.stage >= st.stage;
+    const cur = p.stage + 1 === st.stage;
+    const li = el('li', done ? 'done' : cur ? 'cur' : '');
+    li.append(el('b', '', `${done ? '✓ ' : ''}Nivel ${st.lvl} · ${st.name}`), el('small', '', st.unlocks));
+    steps.append(li);
+  }
+  box.append(steps);
+
+  const next = STAGES[p.stage + 1];
+  const area = el('div', 'ms-next');
+  box.append(area);
+  if (!next) {
+    area.append(el('p', '', '¡Alcanzaste la Ascensión Maestra! Eres de los héroes más fuertes de Valdoria.'));
+    return;
+  }
+  const q = p.quest;
+  const def = questFor(next.stage);
+  if (q && q.stage === next.stage) {
+    const ready = q.kills >= def.need;
+    area.append(el('h3', '', def.title));
+    if (q.branch) area.append(el('p', 'ms-branch', `Especialización elegida: ${CLASSES[p.cls].branches[q.branch].name}`));
+    area.append(el('p', '', def.text));
+    const bar = el('div', 'ms-bar');
+    const fill = el('i');
+    fill.style.width = `${Math.min(100, (q.kills / def.need) * 100)}%`;
+    bar.append(fill);
+    area.append(bar, el('p', 'ms-count', ready ? '¡Misión cumplida!' : `${q.kills} / ${def.need}`));
+    const row = el('div', 'im-actions');
+    row.append(
+      btn('Completar cambio de clase', () => V.Game.classQuest('complete'), true, !ready || !masterNear()),
+      btn('Abandonar', () => {
+        if (confirm('¿Abandonar la misión? Perderás el progreso.')) V.Game.classQuest('abandon');
+      })
+    );
+    area.append(row);
+    return;
+  }
+  if (p.level < next.lvl) {
+    area.append(el('p', '', `Vuelve cuando seas nivel ${next.lvl} para el ${next.name}. Te faltan ${next.lvl - p.level} niveles.`));
+    return;
+  }
+  if (next.branch) {
+    area.append(el('h3', '', 'Elige tu especialización'), el('p', 'hint', 'La elección es para siempre: piensa qué te gusta más.'));
+    const cards = el('div', 'ms-branches');
+    for (const key of ['a', 'b']) {
+      const b = CLASSES[p.cls].branches[key];
+      const card = el('div', 'ms-card');
+      card.append(
+        el('b', '', `Rama ${key.toUpperCase()}: ${b.name}`),
+        el('small', '', `En el nivel 40: ${b.master}`),
+        el('p', '', `Pasiva · ${b.passive.name}: ${b.passive.desc}`),
+        el('p', '', `Ultimate · ${b.ultimate.name}: ${b.ultimate.desc}`),
+        btn(`Elegir ${b.name}`, () => {
+          if (confirm(`¿Elegir ${b.name}? No se puede cambiar después.`)) V.Game.classQuest('accept', key);
+        }, true, !masterNear())
+      );
+      cards.append(card);
+    }
+    area.append(cards);
+    return;
+  }
+  area.append(el('h3', '', def.title), el('p', '', def.text));
+  if (next.stage === 1) area.append(el('p', 'hint', `Al completarla aprendes ${CLASSES[p.cls].skills[3].name} y ${CLASSES[p.cls].skills[4].name}, y te conviertes en ${CLASSES[p.cls].awaken}.`));
+  if (def.group) area.append(el('p', 'hint', 'Misión épica: lo mejor es ir con tu grupo. Todos los miembros cercanos cuentan.'));
+  const row = el('div', 'im-actions');
+  row.append(btn('Aceptar misión', () => V.Game.classQuest('accept'), true, !masterNear()));
+  area.append(row);
 }
 
 // ---------- Grupo ----------
@@ -1106,5 +1267,6 @@ V.UI = {
   initUI, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
   floatText, log, logLoot, banner, showDeath, showInvite, openDrops,
   togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI, openTrade,
+  classChanged, openMaster, refreshMaster,
 };
 })();
