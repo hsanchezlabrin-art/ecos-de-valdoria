@@ -131,7 +131,7 @@
       for (let i = 0; i < 70; i++) {
         const x = r() * size;
         const y = r() * size;
-        c.fillStyle = r() < 0.5 ? 'rgba(235,225,150,.75)' : 'rgba(220,200,235,.7)';
+        c.fillStyle = r() < 0.5 ? 'rgba(200,190,130,.35)' : 'rgba(190,175,205,.3)';
         wrapDraw(c, size, x, y, (q) => q.fillRect(0, 0, 2, 2));
       }
     } else if (kind === 'dirt') {
@@ -145,14 +145,15 @@
         d[i * 4 + 3] = 255;
       }
       c.putImageData(img, 0, 0);
-      // Piedritas con luz arriba y sombra abajo
-      for (let i = 0; i < 1300; i++) {
+      // Piedritas suaves, de color parecido a la tierra: con mucho contraste parpadeaban a lo
+      // lejos como brillitos al mover la cámara
+      for (let i = 0; i < 420; i++) {
         const x = r() * size;
         const y = r() * size;
-        const rad = 1 + r() * r() * 5;
-        const v = 110 + r() * 80;
+        const rad = 2 + r() * r() * 5;
+        const v = 92 + r() * 30;
         wrapDraw(c, size, x, y, (q) => {
-          q.fillStyle = 'rgba(30,22,14,.45)';
+          q.fillStyle = 'rgba(30,22,14,.18)';
           q.beginPath();
           q.ellipse(0.8, 1.2, rad, rad * 0.75, 0, 0, Math.PI * 2);
           q.fill();

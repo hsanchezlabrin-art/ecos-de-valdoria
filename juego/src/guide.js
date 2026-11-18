@@ -1,4 +1,4 @@
-// Navegación asistida: partículas doradas que marcan el camino hacia tu próximo objetivo.
+// Navegación asistida: flechas doradas en el suelo que marcan el camino hacia tu próximo objetivo.
 // Objetivo: tu misión de cambio de clase (zona o jefe), el Maestro Aldric cuando toca
 // cambiar de clase o la zona recomendada para tu nivel. Siguen los caminos: si estás lejos
 // del camino hacia el objetivo, primero te llevan de vuelta a la aldea.
@@ -25,9 +25,20 @@
 
   function build() {
     sparks = [];
-    const geo = new THREE.OctahedronGeometry(0.16, 0);
+    // Flecha plana (punta hacia +Z), sin brillo: se lee como guía y no como destello
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0.45);
+    shape.lineTo(0.38, 0);
+    shape.lineTo(0.18, 0);
+    shape.lineTo(0.18, -0.35);
+    shape.lineTo(-0.18, -0.35);
+    shape.lineTo(-0.18, 0);
+    shape.lineTo(-0.38, 0);
+    shape.closePath();
+    const geo = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2);
+    geo.scale(1, 1, -1); // la punta mira hacia +Z
     for (let i = 0; i < N; i++) {
-      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xffe08a, 1.5), transparent: true, opacity: 0.85, depthWrite: false }));
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xe8c45a, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide }));
       m.raycast = () => {};
       m.visible = false;
       G.scene.add(m);
@@ -139,10 +150,10 @@
       const x = ax + (pts[seg + 1].x - ax) * k;
       const z = az + (pts[seg + 1].z - az) * k;
       s.visible = true;
-      s.position.set(x, Math.max(heightAt(x, z), -1.7) + 0.6 + Math.sin(G.time * 4 + i) * 0.12, z);
-      s.rotation.y += dt * 3;
+      s.position.set(x, Math.max(heightAt(x, z), -1.7) + 0.12, z);
+      s.rotation.y = Math.atan2(pts[seg + 1].x - ax, pts[seg + 1].z - az); // apunta hacia el destino
       // Las más lejanas se desvanecen
-      s.material.opacity = 0.85 * (1 - i / N) + 0.1;
+      s.material.opacity = 0.7 * (1 - i / N) + 0.08;
       segPos += STEP;
     }
   }

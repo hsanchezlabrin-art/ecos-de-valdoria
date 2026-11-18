@@ -8,6 +8,15 @@
 })(function () {
   return [
     {
+      version: '0.10.1',
+      date: '2026-11-18',
+      title: 'Caminos sin brillitos',
+      items: [
+        'Arreglado: los caminos de tierra mostraban puntitos que parpadeaban como brillitos al mover la cámara (las piedritas del suelo tenían demasiado contraste).',
+        'La guía ahora son flechas doradas planas en el suelo que apuntan hacia tu destino, en vez de chispas brillantes.',
+      ],
+    },
+    {
       version: '0.10.0',
       date: '2026-11-18',
       title: 'Un mundo nuevo: seis tierras y cuatro jefes',
