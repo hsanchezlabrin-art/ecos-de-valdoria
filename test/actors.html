@@ -18,6 +18,7 @@
   <span id="anims"></span>
   <select id="weapon"></select>
   <select id="grade"></select>
+  <select id="armor"></select>
   <span id="msg"></span>
 </header>
 <canvas id="c"></canvas>
@@ -70,6 +71,10 @@
     raceSel.value = V.Actors.has('elfo', 'm') ? 'elfo' : raceSel.value;
     const gradeSel = document.getElementById('grade');
     for (const g of GRADE_ORDER) gradeSel.add(new Option(g, g));
+    const armorSel = document.getElementById('armor');
+    armorSel.add(new Option('sin armadura', ''));
+    for (const [id, a] of Object.entries(V.Data.ARMOR_TYPES || {})) armorSel.add(new Option(a.name || id, id));
+    armorSel.onchange = () => equip();
     const weaponSel = document.getElementById('weapon');
     weaponSel.add(new Option('(armas de la raza)', ''));
     for (const [id, w] of Object.entries(WEAPON_TYPES)) weaponSel.add(new Option(w.name, id));
@@ -93,6 +98,8 @@
       const race = ARCHETYPES[raceSel.value];
       const wt = weaponSel.value || (race.weaponTypes || [])[0] || 'longsword';
       for (const m of heroes) V.Models.setWeaponLook(m, { weaponType: wt, grade: gradeSel.value });
+      const at = armorSel.value;
+      for (const m of heroes) V.Models.setArmorLook(m, at ? { type: 'armor', grade: gradeSel.value, armorType: at, look: 0x8a8f9a } : null);
     }
     const anims = document.getElementById('anims');
     for (const k of ['idle', 'walk', 'attack', 'celebrate', 'sit', 'die', 'turn']) {

@@ -728,5 +728,5 @@
     if (m.weaponGrade === 'arcoiris' && m.bladeMat) m.rainbowMats.push(m.bladeMat);
   }
 
-  V.Models = { mat, buildHumanoid, buildQuadruped, buildBlob, buildMob, buildPet, animateModel, animateDeath, setWeaponLook, setArmorLook };
+  V.Models = { mat, buildHumanoid, buildQuadruped, buildBlob, buildMob, buildPet, animateModel, animateDeath, setWeaponLook, setArmorLook, syncRainbow, ARMOR_STYLE: { GRADE_IDX, TRIM, GEM } };
 })();

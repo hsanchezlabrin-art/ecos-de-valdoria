@@ -132,7 +132,166 @@
   };
   const hipLength = (scene) => hipRest(scene).length();
 
-  function prepare(gltf) {
+  // Colas con movimiento: por raza, qué vértices son la cola (en proporción a la altura del modelo):
+  // detrás de la cadera más de `back`, y entre `down` por debajo y `up` por encima de ella.
+  const TAILS = {
+    lagarto: { back: 0.16, up: 0.1, down: 0.12 },
+  };
+
+  // Le agrega a la malla dos huesos de cola (hijos de la cadera) y le pasa esos vértices: así la cola
+  // se mueve sola por código y deja de seguir a la pierna. Se hace una vez por modelo (la geometría y
+  // el esqueleto los comparten todas las copias).
+  function addTail(scene, cfg) {
+    let mesh = null;
+    scene.traverse((o) => {
+      if (o.isSkinnedMesh) mesh = o;
+    });
+    if (!mesh) return;
+    const sk = mesh.skeleton;
+    const hips = sk.bones.find((b) => b.name === 'Hips');
+    if (!hips) return;
+    scene.updateMatrixWorld(true);
+    const geo = mesh.geometry;
+    const pos = geo.attributes.position;
+    geo.computeBoundingBox();
+    const H = geo.boundingBox.max.y - geo.boundingBox.min.y;
+    const hp = hips.getWorldPosition(new THREE.Vector3());
+    const zCut = hp.z - cfg.back * H;
+    const idx = [];
+    let zMin = Infinity;
+    let ySum = 0;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      if (v.z < zCut && v.y < hp.y + cfg.up * H && v.y > hp.y - cfg.down * H) {
+        idx.push(i);
+        zMin = Math.min(zMin, v.z);
+        ySum += v.y;
+      }
+    }
+    if (idx.length < 20 || zCut - zMin < 0.05 * H) return;
+    const yMid = ySum / idx.length;
+    // Hueso A en la raíz de la cola (con los ejes del mundo en reposo) y B a mitad de la cola
+    const A = new THREE.Bone();
+    A.name = 'TailA';
+    hips.add(A);
+    A.quaternion.copy(hips.getWorldQuaternion(new THREE.Quaternion())).invert();
+    A.position.copy(hips.worldToLocal(new THREE.Vector3(hp.x, yMid, zCut)));
+    A.updateMatrixWorld(true);
+    const B = new THREE.Bone();
+    B.name = 'TailB';
+    A.add(B);
+    B.position.copy(A.worldToLocal(new THREE.Vector3(hp.x, yMid, (zCut + zMin) / 2)));
+    B.updateMatrixWorld(true);
+    const ih = sk.bones.indexOf(hips);
+    const invA = new THREE.Matrix4().copy(A.matrix).invert().multiply(sk.boneInverses[ih]);
+    const invB = new THREE.Matrix4().copy(B.matrix).invert().multiply(invA);
+    const bones = [...sk.bones, A, B];
+    mesh.bind(new THREE.Skeleton(bones, [...sk.boneInverses, invA, invB]), mesh.bindMatrix);
+    const ia = bones.length - 2;
+    const ib = bones.length - 1;
+    const si = geo.attributes.skinIndex;
+    const sw = geo.attributes.skinWeight;
+    for (const i of idx) {
+      v.fromBufferAttribute(pos, i);
+      const t = Math.min(1, (zCut - v.z) / (zCut - zMin));
+      const wh = Math.max(0, 1 - t / 0.12);
+      const wb = Math.min(1, Math.max(0, (t - 0.35) / 0.4));
+      const wa = Math.max(0, 1 - wh - wb);
+      const sum = wh + wa + wb || 1;
+      si.setXYZW(i, ih, ia, ib, 0);
+      sw.setXYZW(i, wh / sum, wa / sum, wb / sum, 0);
+    }
+    si.needsUpdate = true;
+    sw.needsUpdate = true;
+  }
+
+  // Medidas del cuerpo en reposo (pecho, cintura y cabeza), para ajustar las piezas de armadura.
+  // En estos modelos la posición de cada vértice coincide con la de los huesos en la escena.
+  function measureBody(scene) {
+    let mesh = null;
+    const B = {};
+    scene.traverse((o) => {
+      if (o.isSkinnedMesh) mesh = o;
+      if (o.isBone) B[o.name] = o;
+    });
+    if (!mesh || !B.Hips || !B.Spine || !B.Head || !B.LeftArm) return null;
+    scene.updateMatrixWorld(true);
+    const P = (n) => B[n].getWorldPosition(new THREE.Vector3());
+    const hips = P('Hips');
+    const chest = P('Spine'); // en este esqueleto «Spine» es la parte alta (pecho)
+    const head = P('Head');
+    const pos = mesh.geometry.attributes.position;
+    mesh.geometry.computeBoundingBox();
+    const bb = mesh.geometry.boundingBox;
+    const H = bb.max.y - bb.min.y;
+    // Ancho de hombros: el hueso de hombro/brazo más alejado del centro (en algunos esqueletos el
+    // primero queda casi al centro); si aun así es muy angosto, una proporción de la altura
+    let armX = 0;
+    for (const n of ['LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm']) if (B[n]) armX = Math.max(armX, Math.abs(P(n).x - hips.x));
+    armX = Math.min(Math.max(armX, 0.14 * H), 0.3 * H);
+    const band = (y0, y1, maxX) => {
+      const r = { half: 0, front: -Infinity, back: Infinity, top: -Infinity };
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        if (v.y < y0 || v.y > y1 || Math.abs(v.x - hips.x) > maxX) continue;
+        r.half = Math.max(r.half, Math.abs(v.x - hips.x));
+        r.front = Math.max(r.front, v.z);
+        r.back = Math.min(r.back, v.z);
+        r.top = Math.max(r.top, v.y);
+      }
+      return r;
+    };
+    const chestBand = band(chest.y - 0.1 * H, chest.y + 0.02 * H, armX * 0.9);
+    const waist = band(hips.y, hips.y + 0.08 * H, armX * 0.95);
+    // Cabeza: el «techo» sólido de la cabeza, sin puntas angostas (gorro de gnomo) ni orejas o
+    // cuernos a los lados (para que el casco y la corona se apoyen en la cabeza y no floten)
+    const headBand = (() => {
+      const y0 = head.y + 0.05 * H;
+      const sh = 0.02 * H;
+      const sl = [];
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        // Sin los brazos (en pose T pueden quedar a la altura de la cabeza)
+        if (v.y < y0 || Math.abs(v.x - hips.x) > armX * 1.3) continue;
+        const k = Math.floor((v.y - y0) / sh);
+        const r = (sl[k] = sl[k] || { x0: Infinity, x1: -Infinity, front: -Infinity, back: Infinity, center: false });
+        r.x0 = Math.min(r.x0, v.x);
+        r.x1 = Math.max(r.x1, v.x);
+        r.front = Math.max(r.front, v.z);
+        r.back = Math.min(r.back, v.z);
+        if (Math.abs(v.x - hips.x) < 0.06 * H) r.center = true;
+      }
+      let maxW = 0;
+      for (const r of sl) if (r) maxW = Math.max(maxW, r.x1 - r.x0);
+      let top = -1;
+      for (let k = sl.length - 1; k >= 0; k--) {
+        const r = sl[k];
+        if (r && r.center && r.x1 - r.x0 >= 0.6 * maxW) {
+          top = k;
+          break;
+        }
+      }
+      if (top < 0) return { half: 0, front: -Infinity, back: Infinity, top: -Infinity };
+      const out = { half: 0, front: -Infinity, back: Infinity, top: y0 + (top + 1) * sh };
+      for (let k = Math.max(0, top - 5); k <= top; k++) {
+        const r = sl[k];
+        if (!r) continue;
+        out.half = Math.max(out.half, (r.x1 - r.x0) / 2);
+        out.front = Math.max(out.front, r.front);
+        out.back = Math.min(out.back, r.back);
+      }
+      return out;
+    })();
+    if (!isFinite(chestBand.front) || !isFinite(waist.front) || !isFinite(headBand.front)) return null;
+    return { H, hips, chest, head, chestBand, waist, headBand, top: bb.max.y };
+  }
+
+  function prepare(gltf, race) {
+    if (TAILS[race]) addTail(gltf.scene, TAILS[race]);
+    const body = measureBody(gltf.scene);
     gltf.scene.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
@@ -170,7 +329,7 @@
     for (const clip of gltf.animations) if (['idle', 'walk', 'die'].includes(clip.name)) clips[clip.name] = fitClip(clip, 1, rest);
     for (const def of Object.values(ATTACKS)) if (clips[def.clip]) clips[def.clip] = subclip(clips[def.clip], def.range[0], def.range[1]);
     if (clips.celebrate) clips.celebrate = subclip(clips.celebrate, CELEBRATE[0], CELEBRATE[1]);
-    return { gltf, scale: HEIGHT / h, clips };
+    return { gltf, scale: HEIGHT / h, clips, body };
   }
 
   let loader = null;
@@ -216,7 +375,7 @@
       loading[k] = preload()
         .then(() => load(FILES[k]))
         .then((g) => {
-          assets[k] = prepare(g);
+          assets[k] = prepare(g, cls);
           return true;
         })
         .catch((e) => {
@@ -284,6 +443,46 @@
     return y;
   }
 
+  // Anclas de armadura: un grupo por hueso que lo sigue; en la pose quieta sus ejes son los del
+  // personaje, así las piezas se colocan con medidas simples (arriba, al frente, a los lados).
+  const ANCHORS = { hips: 'Hips', chest: 'Spine', head: 'Head', lArm: 'LeftArm', rArm: 'RightArm', lFore: 'LeftForeArm', rFore: 'RightForeArm' };
+  function rigQuat(m, bone, out) {
+    m.rig.getWorldQuaternion(_qr).invert();
+    bone.getWorldQuaternion(out);
+    return out.premultiply(_qr);
+  }
+  function syncAnchors(m) {
+    for (const an of Object.values(m.anchors)) {
+      if (!an.group.children.length) continue;
+      an.bone.getWorldPosition(_p);
+      an.group.position.copy(m.rig.worldToLocal(_p));
+      an.group.quaternion.copy(rigQuat(m, an.bone, _q)).multiply(an.calib);
+    }
+    if (m.cape && m.cape.pin.parent) {
+      m.rig.updateMatrixWorld(true);
+      m.cape.pin.getWorldPosition(_p);
+      m.cape.cape.position.copy(m.rig.worldToLocal(_p));
+      m.cape.cape.rotation.set(m.capeLift || 0, 0, 0);
+    }
+  }
+
+  // Anclas calibradas en la pose original del modelo (la misma en que se midió el cuerpo): así cada
+  // pieza queda pegada a su hueso aunque la animación gire la cabeza o el pecho
+  function calibrateAnchors(m, handOf) {
+    m.rig.updateMatrixWorld(true);
+    for (const [key, an] of Object.entries(m.anchors)) {
+      an.calib = rigQuat(m, an.bone, new THREE.Quaternion()).invert();
+      an.bone.getWorldPosition(_p);
+      const at = m.rig.worldToLocal(_p).clone();
+      // Antebrazos: hacia dónde queda la mano (para el brazalete)
+      const hand = handOf[key];
+      if (hand) {
+        hand.getWorldPosition(_p);
+        an.toHand = m.rig.worldToLocal(_p).clone().sub(at);
+      }
+    }
+  }
+
   // Calibra el agarre en la pose quieta: desde ahí el arma sigue el giro real de la muñeca
   function calibrate(m) {
     m.rig.updateMatrixWorld(true);
@@ -302,6 +501,7 @@
 
   function syncArms(m) {
     m.rig.updateMatrixWorld(true);
+    if (m.armorParts.length) syncAnchors(m);
     if (m.hips) {
       m.hips.getWorldPosition(_p);
       m.curHipY = m.rig.worldToLocal(_p).y; // altura actual de la cadera (para la montura)
@@ -367,6 +567,14 @@
       scene.updateMatrixWorld(true);
       hipY = bones.Hips.getWorldPosition(new THREE.Vector3()).y;
     }
+    const anchors = {};
+    for (const [key, name] of Object.entries(ANCHORS)) {
+      if (!bones[name]) continue;
+      const group = new THREE.Group();
+      rig.add(group);
+      anchors[key] = { group, bone: bones[name], calib: new THREE.Quaternion(), toHand: null };
+    }
+    const tail = bones.TailA && bones.TailB ? [bones.TailA, bones.TailB] : null;
     const left = bones.LeftHand ? armProxy(rig, bones.LeftHand) : null;
     const right = bones.RightHand ? armProxy(rig, bones.RightHand) : null;
     // Tamaño de la raza (el Oso es más grande y el Gnomo más pequeño), igual que las figuras de código
@@ -377,7 +585,7 @@
       skinned: true,
       root,
       rig,
-      body: scene,
+      scene,
       mixer,
       actions,
       hips: bones.Hips || null,
@@ -402,12 +610,148 @@
       sitting: false,
       dying: false,
       feet: ['LeftFoot', 'RightFoot', 'LeftToeBase', 'RightToeBase'].map((n) => bones[n]).filter(Boolean),
+      anchors,
+      armorParts: [],
+      armorRainbow: [],
+      body: a.body ? scaleBody(a.body, a.scale) : null,
+      tail,
+      tailRest: tail ? tail.map((b) => b.quaternion.clone()) : null,
       footRest: 0,
     };
+    calibrateAnchors(m, { lFore: bones.LeftHand, rFore: bones.RightHand });
     // Pose quieta (primer cuadro) para calibrar cómo se sujetan las armas
     mixer.update(0);
     calibrate(m);
     return m;
+  }
+
+  // La cola se balancea: suave al estar quieto y más rápido al correr (la punta va un poco atrasada)
+  const _qt = new THREE.Quaternion();
+  const _up = new THREE.Vector3(0, 1, 0);
+  function swayTail(m, t, moving) {
+    const amp = 0.16 + 0.22 * moving;
+    const sp = 2.2 + 6.5 * moving;
+    m.tail[0].quaternion.copy(m.tailRest[0]).multiply(_qt.setFromAxisAngle(_up, Math.sin(t * sp) * amp));
+    m.tail[1].quaternion.copy(m.tailRest[1]).multiply(_qt.setFromAxisAngle(_up, Math.sin(t * sp - 0.9) * amp * 1.3));
+  }
+
+  const scaleBody = (b, k) => {
+    const v = (p) => p.clone().multiplyScalar(k);
+    const band = (r) => ({ half: r.half * k, front: r.front * k, back: r.back * k, top: r.top * k });
+    return { H: b.H * k, hips: v(b.hips), chest: v(b.chest), head: v(b.head), chestBand: band(b.chestBand), waist: band(b.waist), headBand: band(b.headBand), top: b.top * k };
+  };
+
+  // ---------- Armadura en los modelos 3D: las mismas piezas por grado que las figuras de bloques ----------
+  function setArmorSkinned(m, item) {
+    for (const g of m.armorParts) if (g.parent) g.parent.remove(g);
+    m.armorParts = [];
+    m.armorRainbow = [];
+    m.armorGrade = item ? item.grade || null : null;
+    const d = m.body;
+    const A = m.anchors;
+    if (!item || !item.grade || !d || !A.hips || !A.chest || !A.head) return M.syncRainbow(m);
+    const { GRADE_IDX, TRIM, GEM } = M.ARMOR_STYLE;
+    const gi = GRADE_IDX[item.grade];
+    const type = item.armorType;
+    const robe = type === 'CLOTH_ROBE' || type === 'SACRED_ROBE';
+    const heavy = type === 'HEAVY_PLATE';
+    const metal = gi >= 2 && !robe;
+    const trim = M.mat(TRIM[item.grade], { metalness: metal ? 0.3 : 0.05, roughness: metal ? 0.5 : 0.8 });
+    const H = d.H;
+    const add = (anchor, w, h, dep, mt, x, y, z) => {
+      const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, dep), mt);
+      o.position.set(x, y, z);
+      o.castShadow = true;
+      o.raycast = () => {};
+      anchor.group.add(o);
+      m.armorParts.push(o);
+      return o;
+    };
+    // Posición respecto al hueso del ancla (medidas tomadas en reposo)
+    const rel = (anchor, p) => p.clone().sub(anchor);
+    const cb = d.chestBand;
+    const wb = d.waist;
+    const torsoHalf = Math.min(cb.half, wb.half * 1.1); // sin contar los brazos que cuelgan al lado
+    const hb = d.headBand;
+    // Cobre en adelante: cinturón y brazaletes
+    if (gi >= 1) {
+      const c = rel(d.hips, new THREE.Vector3(d.hips.x, d.hips.y + 0.04 * H, (wb.front + wb.back) / 2));
+      add(A.hips, wb.half * 2 + 0.04 * H, 0.055 * H, wb.front - wb.back + 0.03 * H, trim, c.x, c.y, c.z);
+      for (const fore of [A.lFore, A.rFore]) {
+        if (!fore || !fore.toHand) continue;
+        // Brazalete a mitad del antebrazo, orientado como el antebrazo
+        const dir = fore.toHand.clone();
+        const len = dir.length();
+        const g = new THREE.Group();
+        g.position.copy(dir).multiplyScalar(0.5);
+        g.quaternion.setFromUnitVectors(_up, dir.normalize());
+        fore.group.add(g);
+        m.armorParts.push(g);
+        const o = new THREE.Mesh(new THREE.BoxGeometry(0.075 * H, Math.min(0.08 * H, len * 0.6), 0.075 * H), trim);
+        o.castShadow = true;
+        o.raycast = () => {};
+        g.add(o);
+      }
+    }
+    // Cristal Azul en adelante: hombreras (o cuello en las túnicas) y gema en el pecho
+    if (gi >= 2) {
+      if (robe) {
+        const c = rel(d.chest, new THREE.Vector3(d.chest.x, cb.top - 0.01 * H, (cb.front + cb.back) / 2));
+        add(A.chest, torsoHalf * 2 * 0.95, 0.05 * H, cb.front - cb.back + 0.03 * H, trim, c.x, c.y, c.z);
+      } else {
+        const sz = ((heavy ? 0.14 : type === 'LIGHT_LEATHER' ? 0.1 : 0.12) + (gi - 2) * 0.015) * H;
+        for (const [arm, sx] of [[A.lArm, 1], [A.rArm, -1]]) if (arm) add(arm, sz, sz * 0.5, sz, trim, sx * 0.01 * H, 0.025 * H, 0);
+      }
+      const gem = M.mat(GEM[item.grade], { emissive: GEM[item.grade], emissiveIntensity: gi >= 4 ? 0.35 : 0.2 });
+      const c = rel(d.chest, new THREE.Vector3(d.chest.x, d.chest.y - 0.05 * H, cb.front + 0.008 * H));
+      add(A.chest, 0.055 * H, 0.055 * H, 0.02 * H, gem, c.x, c.y, c.z);
+      if (item.grade === 'arcoiris') m.armorRainbow.push(gem);
+    }
+    // Oro Morado en adelante: franja decorada en el pecho
+    if (gi >= 3) {
+      const c = rel(d.chest, new THREE.Vector3(d.chest.x, d.chest.y - 0.13 * H, cb.front + 0.004 * H));
+      add(A.chest, 0.045 * H, 0.2 * H, 0.012 * H, trim, c.x, c.y, c.z);
+    }
+    // Diamante Dorado en adelante: capa en la espalda. Cuelga derecha desde los hombros (no se
+    // inclina con el pecho) y se levanta un poco al correr.
+    if (gi >= 4) {
+      const capeM = M.mat(item.grade === 'arcoiris' ? 0xffffff : 0xb03a2a, { side: THREE.DoubleSide });
+      const hang = 0.36 * H;
+      const pin = new THREE.Object3D(); // punto de la espalda donde se sujeta (sigue al pecho)
+      pin.position.copy(rel(d.chest, new THREE.Vector3(d.chest.x, d.chest.y + 0.02 * H, cb.back - 0.045 * H)));
+      A.chest.group.add(pin);
+      m.armorParts.push(pin);
+      const cape = new THREE.Group();
+      m.rig.add(cape);
+      m.armorParts.push(cape);
+      const o = new THREE.Mesh(new THREE.BoxGeometry(torsoHalf * 2 * 0.9, hang, 0.015 * H), capeM);
+      o.position.y = -hang / 2;
+      o.castShadow = true;
+      o.raycast = () => {};
+      cape.add(o);
+      m.cape = { pin, cape };
+      if (item.grade === 'arcoiris') m.armorRainbow.push(capeM);
+    } else m.cape = null;
+    // Arcoíris: casco épico (armaduras pesada y media) o corona (las demás)
+    if (gi >= 5) {
+      const top = rel(d.head, new THREE.Vector3(d.head.x, hb.top, (hb.front + hb.back) / 2));
+      const depth = hb.front - hb.back;
+      if (heavy || type === 'MEDIUM_SCALE') {
+        add(A.head, hb.half * 2 * 1.06, 0.09 * H, depth * 1.06, trim, top.x, top.y - 0.03 * H, top.z);
+        add(A.head, 0.03 * H, 0.1 * H, depth * 0.7, trim, top.x, top.y + 0.04 * H, top.z);
+      } else {
+        const r = Math.min(hb.half, depth / 2) * 0.95;
+        for (let i = 0; i < 5; i++) {
+          const ang = (i / 5) * Math.PI * 2;
+          add(A.head, 0.04 * H, 0.07 * H, 0.04 * H, trim, top.x + Math.sin(ang) * r, top.y + 0.025 * H, top.z + Math.cos(ang) * r);
+        }
+      }
+      m.armorRainbow.push(trim);
+    } else if (item.grade === 'arcoiris') m.armorRainbow.push(trim);
+    M.syncRainbow(m);
+    // Coloca las piezas ya en este cuadro
+    m.rig.updateMatrixWorld(true);
+    syncAnchors(m);
   }
 
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
@@ -461,17 +805,20 @@
     for (const d of Object.values(ATTACKS)) if (A[d.clip]) A[d.clip].setEffectiveWeight(def === d ? wa : 0);
     if (A.celebrate) A.celebrate.setEffectiveWeight(wc);
     if (A.die) A.die.setEffectiveWeight(0);
-    m.body.rotation.y = (def && def.aim ? def.aim : 0) * Math.min(1, wa * 1.2);
+    m.scene.rotation.y = (def && def.aim ? def.aim : 0) * Math.min(1, wa * 1.2);
     m.rig.rotation.x = swim > 0.01 ? -1.1 * swim : 0;
     m.rig.position.y = swim > 0.01 ? 1.0 * swim : 0;
-    m.body.position.y = 0;
+    m.scene.position.y = 0;
     m.mixer.update(dt);
+    if (m.tail) swayTail(m, t, moving);
+    // La capa se levanta hacia atrás al correr (con un leve aleteo)
+    m.capeLift = 0.08 + 0.5 * moving + Math.sin(t * 9) * 0.06 * moving;
     // Pies en el suelo: las animaciones compartidas vienen de otro cuerpo y pueden dejarlo flotando
     // (no al saltar de alegría, al nadar ni sentado en la montura)
     if (m.feet.length && wc < 0.3 && !sit && swim <= 0.01) {
       m.rig.updateMatrixWorld(true);
       const lift = lowestFoot(m) - m.footRest;
-      if (lift > 0.005) m.body.position.y = -Math.min(0.4, lift);
+      if (lift > 0.005) m.scene.position.y = -Math.min(0.4, lift);
     }
     syncArms(m);
   }
@@ -490,7 +837,7 @@
       m.dying = true;
       m.rig.rotation.x = 0;
       m.rig.position.y = 0;
-      m.body.rotation.y = 0;
+      m.scene.rotation.y = 0;
       m.celebLeft = 0;
       m.atk = null;
       for (const [name, act] of Object.entries(A)) act.setEffectiveWeight(name === 'die' ? 1 : 0);
@@ -516,7 +863,7 @@
   const baseDeath = M.animateDeath;
   M.animateDeath = (m, k) => (m.skinned ? deathSkinned(m, k) : baseDeath(m, k));
   const baseArmor = M.setArmorLook;
-  M.setArmorLook = (m, item) => (m.skinned ? null : baseArmor(m, item));
+  M.setArmorLook = (m, item) => (m.skinned ? setArmorSkinned(m, item) : baseArmor(m, item));
 
   V.Actors = { preload, request, buildHero, celebrate, has: (cls, sex) => !!assets[`${cls}_${sex}`] };
 })();

@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.17.0',
+      date: '2026-11-18',
+      title: 'Armaduras que se ven en 3D',
+      items: [
+        'Los personajes 3D ahora lucen su armadura según el grado: cinturón y brazaletes, hombreras y gema, franja decorada, capa, y casco o corona en Arcoíris.',
+        'Las piezas se ajustan al cuerpo de cada raza y siguen sus movimientos; la capa se levanta al correr.',
+        'La cola del Lagarto se balancea sola: suave al estar quieto y más rápido al correr.',
+      ],
+    },
+    {
       version: '0.16.0',
       date: '2026-11-18',
       title: 'Botón Salir y monstruos con aviso',
