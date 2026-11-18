@@ -737,7 +737,7 @@
     let mesh;
     if (kind === 'meteor') {
       mesh = new THREE.Group();
-      mesh.add(new THREE.Mesh(new THREE.DodecahedronGeometry(0.9, 0), new THREE.MeshStandardMaterial({ color: 0x3a2a20, emissive: 0xff5a1a, emissiveIntensity: 1.3, flatShading: true })));
+      mesh.add(new THREE.Mesh(new THREE.DodecahedronGeometry(0.9, 0), new THREE.MeshStandardMaterial({ color: 0x3a2a20, emissive: 0xff5a1a, emissiveIntensity: 1.0, flatShading: true })));
       mesh.add(new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 8), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xff7a2a, 2.0), transparent: true, opacity: 0.35, depthWrite: false })));
     } else if (kind === 'ice') {
       mesh = PROJ_MESH.ice();

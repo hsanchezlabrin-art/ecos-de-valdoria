@@ -653,6 +653,10 @@
   const btnGfx = document.getElementById('btnGfx');
   const syncGfx = () => (btnGfx.firstChild.textContent = `Gráficos: ${V.Gfx.preset().label} `);
   syncGfx();
+  addEventListener('valdoria-gfx', () => {
+    syncGfx();
+    UI.log(`El juego iba lento: calidad gráfica ajustada a ${V.Gfx.preset().label}. Puedes cambiarla con el botón Gráficos.`, 'sys');
+  });
   btnGfx.addEventListener('click', () => {
     V.Gfx.cycleQuality();
     syncGfx();

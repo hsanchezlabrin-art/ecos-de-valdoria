@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.5.2',
+      date: '2026-11-17',
+      title: 'Menos destellos, más fluidez',
+      items: [
+        'Arreglado: fogatas, lava y ojos de monstruos ya no forman grandes destellos de día.',
+        'Brillo más suave y calidad Alta y Media más livianas.',
+        'Si el juego va lento, la calidad gráfica baja sola al empezar (si no la elegiste tú).',
+      ],
+    },
+    {
       version: '0.5.1',
       date: '2026-11-17',
       title: 'El primer héroe realista',

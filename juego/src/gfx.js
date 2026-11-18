@@ -10,8 +10,8 @@
 
   const PRESETS = {
     baja: { label: 'Baja', pixel: 1, shadows: false, shadowSize: 1024, post: false, grass: 0, grassR: 0, msaa: 0, aniso: 2 },
-    media: { label: 'Media', pixel: 1.25, shadows: true, shadowSize: 1024, post: true, grass: 6000, grassR: 24, msaa: 2, aniso: 4 },
-    alta: { label: 'Alta', pixel: 2, shadows: true, shadowSize: 2048, post: true, grass: 18000, grassR: 36, msaa: 4, aniso: 8 },
+    media: { label: 'Media', pixel: 1, shadows: true, shadowSize: 1024, post: true, grass: 4500, grassR: 22, msaa: 0, aniso: 4 },
+    alta: { label: 'Alta', pixel: 1.5, shadows: true, shadowSize: 2048, post: true, grass: 11000, grassR: 30, msaa: 2, aniso: 8 },
   };
   const ORDER = ['baja', 'media', 'alta'];
   const KEY = 'valdoria-graficos';
@@ -672,7 +672,7 @@
     const mk = (depth) =>
       new THREE.WebGLRenderTarget(1, 1, { type, depthBuffer: depth, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     const main = mk(true);
-    const levels = [mk(false), mk(false), mk(false), mk(false), mk(false)];
+    const levels = [mk(false), mk(false), mk(false), mk(false)];
     const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
     quad.frustumCulled = false;
@@ -727,7 +727,7 @@
          c *= 1.0 - dot(d, d) * 0.55;
          gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
        }`,
-      { tDiffuse: { value: null }, tBloom: { value: null }, bloom: { value: 0.75 }, tint: { value: sky.tint } }
+      { tDiffuse: { value: null }, tBloom: { value: null }, bloom: { value: 0.5 }, tint: { value: sky.tint } }
     );
     const pass = (m, target) => {
       quad.material = m;
@@ -841,7 +841,50 @@
     }
     apply();
   }
-  const cycleQuality = () => setQuality(ORDER[(ORDER.indexOf(quality) + 1) % ORDER.length]);
+  // Elección manual del jugador: desde ahí no se ajusta sola
+  const MANUAL_KEY = 'valdoria-graficos-manual';
+  let manual = false;
+  try {
+    manual = localStorage.getItem(MANUAL_KEY) === '1';
+  } catch {
+    /* sin almacenamiento */
+  }
+  const cycleQuality = () => {
+    manual = true;
+    try {
+      localStorage.setItem(MANUAL_KEY, '1');
+    } catch {
+      /* sin almacenamiento */
+    }
+    setQuality(ORDER[(ORDER.indexOf(quality) + 1) % ORDER.length]);
+  };
+
+  // Ajuste automático: los primeros 90 s de juego, si va a menos de 32 cuadros por segundo
+  // durante 5 s seguidos, baja un nivel de calidad
+  const perf = { start: 0, win: 0, frames: 0, last: 0 };
+  function autoTune() {
+    if (manual || !G.started || quality === 'baja') return;
+    const now = performance.now();
+    if (!perf.start) perf.start = perf.win = perf.last = now;
+    const gap = now - perf.last;
+    perf.last = now;
+    if (gap > 400) {
+      // pestaña en segundo plano o carga: se reinicia la medición
+      perf.win = now;
+      perf.frames = 0;
+      return;
+    }
+    if (now - perf.start > 90000) return;
+    perf.frames++;
+    if (now - perf.win < 5000) return;
+    const fps = (perf.frames * 1000) / (now - perf.win);
+    perf.win = now;
+    perf.frames = 0;
+    if (fps < 32) {
+      setQuality(ORDER[ORDER.indexOf(quality) - 1]);
+      dispatchEvent(new CustomEvent('valdoria-gfx', { detail: { auto: true, fps: Math.round(fps) } }));
+    }
+  }
 
   // Materiales que brillan (llamas, lava, ventanas): su color sube cuando hay bloom
   const glows = [];
@@ -852,6 +895,7 @@
 
   function update(dt, center, player) {
     const { scene, sun, hemi, skyMesh, water } = ctx;
+    autoTune();
     updateSky(dayPhase());
     const hdr = preset().post && post.hdr ? 1 : 0;
     sun.color.copy(sky.sunColor);

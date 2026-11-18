@@ -103,7 +103,7 @@ function buildVegetation(scene) {
 
   // Grietas de lava en la Llanura de Ceniza
   const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff7a2a });
-  V.Gfx.glow(lavaMat, 2.8);
+  V.Gfx.glowNight(lavaMat, 1.7, 0.6);
   const lavaMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.1, 3), lavaMat, L.lava.length);
   L.lava.forEach((t, i) => {
     dummy.position.set(t.x, t.y, t.z);
@@ -128,7 +128,7 @@ function campfire(scene, x, z, big = false) {
     g.add(l);
   }
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.1, 6), new THREE.MeshBasicMaterial({ color: 0xffa340 }));
-  V.Gfx.glowNight(flame.material, 2.8, 0.3);
+  V.Gfx.glowNight(flame.material, 1.6, 0.7);
   flame.position.y = 0.6;
   g.add(flame);
   const light = new THREE.PointLight(0xff9a4a, big ? 1.8 : 1.3, big ? 24 : 17, 2);

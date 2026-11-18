@@ -66,7 +66,7 @@
       cone.rotation.x = -0.22;
       head.add(cone);
     }
-    const eyeM = o.glow ? mat(o.glow, { emissive: o.glow, emissiveIntensity: 1.6 }) : mat(0x1a1410);
+    const eyeM = o.glow ? mat(o.glow, { emissive: o.glow, emissiveIntensity: 0.7 }) : mat(0x1a1410);
     head.add(part(box(0.07, 0.07, 0.04), eyeM, 0.11, 0.03, 0.28));
     head.add(part(box(0.07, 0.07, 0.04), eyeM, -0.11, 0.03, 0.28));
     if (o.tusks) {
