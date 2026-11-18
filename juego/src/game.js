@@ -994,6 +994,20 @@
     return s;
   }
 
+  // Chispita del equipo Arcoíris: sube despacio y se desvanece (sin brillo fuerte)
+  const sparkleGeo = new THREE.OctahedronGeometry(0.07, 0);
+  const _wp = new THREE.Vector3();
+  function spawnSparkle(ent, hue) {
+    const src = ent.model.weapon && ent.model.weapon.visible ? ent.model.weapon : ent.model.rig;
+    src.getWorldPosition(_wp);
+    const m = new THREE.Mesh(sparkleGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(hue, 0.8, 0.7), transparent: true, opacity: 0.85, depthWrite: false }));
+    m.position.set(_wp.x + (Math.random() - 0.5) * 0.5, _wp.y + (src === ent.model.rig ? 1.2 : 0.3) + Math.random() * 0.3, _wp.z + (Math.random() - 0.5) * 0.5);
+    G.scene.add(m);
+    const y0 = m.position.y;
+    const t0 = G.time;
+    props.push({ obj: m, mats: [m.material], t: 0, life: 0.8, fade: 0.6, base: [0.85], tick: () => ((m.position.y = y0 + (G.time - t0) * 0.8), (m.rotation.y += 0.1)) });
+  }
+
   // Aviso de un jefe: un círculo en el suelo que se va llenando hasta que explota
   function spawnTelegraph(at, r, dur, color) {
     const g = new THREE.Group();
@@ -1472,6 +1486,17 @@
     if (ent.hidden || ent.riding) {
       root.visible = false;
       return;
+    }
+    // Equipo de grado Arcoíris: cambia de color y deja chispitas al moverse o atacar
+    const rm = ent.model.rainbowMats;
+    if (rm && rm.length) {
+      const h = (G.time * 0.12) % 1;
+      rm.forEach((mm, i) => mm.color.setHSL((h + i * 0.13) % 1, 0.75, 0.62));
+      v.trailT = (v.trailT || 0) - dt;
+      if (v.trailT <= 0 && (ent.moving || v.atkAnim > 0)) {
+        v.trailT = 0.12;
+        spawnSparkle(ent, h);
+      }
     }
     // Gemas de Poder activas: el arma brilla con luz neón (sin destellos grandes)
     if (ent.kind === 'player' && ent.model.bladeMat) {

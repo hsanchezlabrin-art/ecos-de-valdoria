@@ -835,7 +835,7 @@
   // Aspecto según raza y sexo
   function lookFor(cls, sex) {
     const a = arch(cls);
-    const base = { ...a.look };
+    const base = { ...a.look, bigHead: true }; // cabeza grande y cúbica, estilo bloques
     if (sex === 'f') Object.assign(base, a.lookF || {}, { female: true, longHair: !!a.look.hair && a.look.ears !== 'round' });
     else base.female = false;
     return base;

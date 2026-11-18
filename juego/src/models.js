@@ -25,6 +25,161 @@
     return g;
   }
 
+  // ---------- Armas: forma según el tipo ----------
+  // shape: forma 3D · familia (para colores y animación): sword | hammer | bow | staff
+  const WEAPON_SHAPE = {
+    hammer: 'hammer', mace: 'mace', hammer2h: 'hammer2h', longsword: 'sword', dualswords: 'dual', spear: 'spear', daggers: 'daggers',
+    bow: 'bow', crossbow: 'crossbow', crystalstaff: 'staff', wand: 'wand', launcher: 'launcher', book: 'book', bell: 'bell', scepter: 'scepter',
+    sword: 'sword', club: 'club', staff: 'staff',
+  };
+  const FAMILY = { hammer: 'hammer', mace: 'hammer', hammer2h: 'hammer', sword: 'sword', dual: 'sword', spear: 'sword', daggers: 'sword', club: 'sword', bow: 'bow', crossbow: 'bow', staff: 'staff', wand: 'staff', launcher: 'staff', book: 'staff', bell: 'staff', scepter: 'staff' };
+
+  function swordInto(g, blade, guard, grip, len) {
+    g.add(part(box(0.07, len, 0.17), blade, 0, 0.13 + len / 2, 0));
+    g.add(part(box(0.38 * Math.min(1, len + 0.2), 0.07, 0.12), guard, 0, 0.1, 0));
+    g.add(part(box(0.07, 0.3, 0.07), grip, 0, -0.07, 0));
+  }
+
+  // Construye (o cambia) el arma del modelo. Devuelve el material que cambia de color por grado.
+  function makeWeapon(m, shape, color) {
+    for (const g of m.weaponParts || []) if (g.parent) g.parent.remove(g);
+    m.weaponParts = [];
+    m.floatBook = null;
+    const dark = mat(0x2a2119);
+    const wood = mat(0x5b4129);
+    const gold = mat(0x8a6d3b, { metalness: 0.25, roughness: 0.6 });
+    let blade = mat(color || 0xc9ccd2, { metalness: 0.3, roughness: 0.62 });
+    const holder = (parent, upright) => {
+      const g = new THREE.Group();
+      if (upright) {
+        g.position.set(0, -0.8, 0.08);
+        g.rotation.x = 0.12;
+      } else {
+        g.position.set(0, -0.82, 0.04);
+        g.rotation.x = Math.PI / 2;
+      }
+      parent.add(g);
+      m.weaponParts.push(g);
+      return g;
+    };
+    let main = null;
+    switch (shape) {
+      case 'hammer':
+      case 'mace':
+      case 'hammer2h': {
+        const big = shape === 'hammer2h';
+        main = holder(m.rArm);
+        main.add(part(box(0.1, big ? 1.5 : 1.15, 0.1), wood, 0, big ? 0.65 : 0.5, 0));
+        if (shape === 'mace') {
+          main.add(part(box(0.34, 0.34, 0.34), blade, 0, 1.1, 0));
+          for (const [x, z] of [[0.22, 0], [-0.22, 0], [0, 0.22], [0, -0.22]]) main.add(part(box(0.1, 0.1, 0.1), blade, x, 1.1, z));
+        } else main.add(part(box(big ? 0.72 : 0.5, big ? 0.42 : 0.32, big ? 0.42 : 0.32), blade, 0, big ? 1.45 : 1.1, 0));
+        break;
+      }
+      case 'sword':
+      case 'dual':
+        main = holder(m.rArm);
+        swordInto(main, blade, gold, dark, 1.1);
+        if (shape === 'dual') swordInto(holder(m.lArm), blade, gold, dark, 0.95);
+        break;
+      case 'daggers':
+        main = holder(m.rArm);
+        swordInto(main, blade, gold, dark, 0.5);
+        swordInto(holder(m.lArm), blade, gold, dark, 0.5);
+        break;
+      case 'spear':
+        main = holder(m.rArm);
+        main.add(part(box(0.07, 2.3, 0.07), wood, 0, 0.75, 0));
+        main.add(part(geo('spearTip', () => new THREE.ConeGeometry(0.11, 0.42, 4)), blade, 0, 2.05, 0));
+        break;
+      case 'club':
+        main = holder(m.rArm);
+        main.add(part(box(0.16, 1.0, 0.16), wood, 0, 0.48, 0));
+        main.add(part(box(0.3, 0.36, 0.3), mat(0x4a3826), 0, 0.95, 0));
+        blade = null;
+        break;
+      case 'bow': {
+        main = new THREE.Group();
+        main.position.set(0, -0.8, 0.06);
+        m.lArm.add(main);
+        m.weaponParts.push(main);
+        const inner = new THREE.Group();
+        inner.rotation.y = -Math.PI / 2;
+        main.add(inner);
+        blade = mat(color || 0x6b4a2e);
+        const arc = part(geo('bow', () => new THREE.TorusGeometry(0.72, 0.04, 4, 14, Math.PI)), blade, -0.3, 0, 0);
+        arc.rotation.z = -Math.PI / 2;
+        arc.scale.set(0.42, 1, 1);
+        inner.add(arc, part(box(0.015, 1.44, 0.015), mat(0xe8e0cc), -0.3, 0, 0));
+        break;
+      }
+      case 'crossbow': {
+        // Ballesta: culata hacia adelante y arco horizontal
+        main = holder(m.rArm);
+        blade = mat(color || 0x6b4a2e);
+        main.add(part(box(0.12, 0.9, 0.14), wood, 0, 0.35, 0));
+        const arc = part(geo('xbow', () => new THREE.TorusGeometry(0.42, 0.04, 4, 12, Math.PI)), blade, 0, 0.72, 0);
+        arc.rotation.x = Math.PI / 2;
+        main.add(arc, part(box(0.84, 0.015, 0.015), mat(0xe8e0cc), 0, 0.72, 0));
+        break;
+      }
+      case 'staff':
+        main = holder(m.rArm, true);
+        main.add(part(geo('staff', () => new THREE.CylinderGeometry(0.045, 0.06, 2.3, 6)), wood, 0, 0.35, 0));
+        main.add(part(geo('staffcap', () => new THREE.ConeGeometry(0.13, 0.3, 6)), gold, 0, 1.45, 0));
+        blade = mat(0x9fc4ff, { emissive: 0x3a6ad0, emissiveIntensity: 0.4, flatShading: true });
+        main.add(part(geo('staffgem', () => new THREE.OctahedronGeometry(0.2, 0)), blade, 0, 1.72, 0));
+        break;
+      case 'wand':
+        main = holder(m.rArm, true);
+        main.add(part(box(0.06, 0.9, 0.06), mat(0x8a8f9a, { metalness: 0.4 }), 0, 0.1, 0));
+        blade = mat(0xd9b25f, { metalness: 0.4, roughness: 0.4 });
+        main.add(part(geo('wgear', () => new THREE.CylinderGeometry(0.16, 0.16, 0.06, 8)), blade, 0, 0.6, 0).rotateX(Math.PI / 2));
+        break;
+      case 'launcher':
+        main = holder(m.rArm);
+        main.add(part(geo('ltube', () => new THREE.CylinderGeometry(0.09, 0.11, 0.9, 8)), mat(0x8a8f9a, { metalness: 0.4 }), 0, 0.35, 0));
+        blade = mat(0x9fe08a, { transparent: true, opacity: 0.85, emissive: 0x2f8a2a, emissiveIntensity: 0.3 });
+        main.add(part(sphere(0.17), blade, 0, 0.85, 0));
+        break;
+      case 'bell':
+        main = holder(m.rArm, true);
+        main.add(part(box(0.06, 0.5, 0.06), wood, 0, -0.05, 0));
+        blade = mat(0xd9b25f, { metalness: 0.45, roughness: 0.35 });
+        main.add(part(geo('bell', () => new THREE.CylinderGeometry(0.08, 0.22, 0.3, 8)), blade, 0, 0.32, 0));
+        break;
+      case 'scepter':
+        main = holder(m.rArm, true);
+        main.add(part(geo('sceptre', () => new THREE.CylinderGeometry(0.04, 0.05, 1.5, 6)), mat(0xf2efe6), 0, 0.15, 0));
+        blade = mat(0xffe08a, { emissive: 0xd0a020, emissiveIntensity: 0.35, flatShading: true });
+        {
+          const star = part(geo('star', () => new THREE.OctahedronGeometry(0.22, 0)), blade, 0, 1.0, 0);
+          star.scale.set(1, 1, 0.4);
+          main.add(star);
+        }
+        break;
+      case 'book': {
+        // Libro flotante al lado del personaje
+        main = new THREE.Group();
+        main.position.set(0.75, 1.55, 0.25);
+        m.rig.add(main);
+        m.weaponParts.push(main);
+        blade = mat(0x5d8fd8);
+        main.add(part(box(0.42, 0.08, 0.32), blade, 0, 0, 0));
+        main.add(part(box(0.38, 0.06, 0.3), mat(0xf4f0e6), 0, 0.07, 0));
+        main.rotation.set(-0.5, 0.3, 0);
+        m.floatBook = main;
+        break;
+      }
+      default:
+        break;
+    }
+    m.weapon = main;
+    m.bladeMat = blade;
+    m.weaponShape = shape;
+    m.weaponType = FAMILY[shape] || 'sword';
+  }
+
   function buildHumanoid(o) {
     const root = new THREE.Group();
     const rig = new THREE.Group();
@@ -46,33 +201,34 @@
     rig.add(part(box(fem ? 0.7 : 0.84, 0.14, 0.5), dark, 0, 0.99, 0));
 
     const head = new THREE.Group();
-    head.position.set(0, 2.13, 0);
+    head.position.set(0, o.bigHead ? 2.2 : 2.15, 0);
+    if (o.bigHead) head.scale.setScalar(1.18);
     rig.add(head);
-    head.add(part(sphere(0.3), skin));
-    if (o.hair && !o.hat) head.add(part(box(0.62, 0.2, 0.64), mat(o.hair), 0, 0.17, -0.05));
+    head.add(part(box(0.58, 0.58, 0.58), skin));
+    if (o.hair && !o.hat) head.add(part(box(0.64, 0.14, 0.64), mat(o.hair), 0, 0.3, -0.02));
     if (o.longHair) {
-      head.add(part(box(0.58, 0.66, 0.2), mat(o.hair), 0, -0.14, -0.25));
+      head.add(part(box(0.6, 0.66, 0.14), mat(o.hair), 0, -0.1, -0.3));
       if (fem) {
         // mechones a los lados de la cara
-        head.add(part(box(0.1, 0.5, 0.22), mat(o.hair), 0.28, -0.12, -0.04));
-        head.add(part(box(0.1, 0.5, 0.22), mat(o.hair), -0.28, -0.12, -0.04));
+        head.add(part(box(0.08, 0.5, 0.3), mat(o.hair), 0.31, -0.08, -0.08));
+        head.add(part(box(0.08, 0.5, 0.3), mat(o.hair), -0.31, -0.08, -0.08));
       }
     }
-    if (o.beard) head.add(part(box(0.4, 0.36, 0.16), mat(o.hair), 0, -0.25, 0.2));
+    if (o.beard) head.add(part(box(0.44, 0.3, 0.1), mat(o.hair), 0, -0.2, 0.31));
     if (o.hat) {
       const hm = mat(o.hat);
-      head.add(part(geo('brim', () => new THREE.CylinderGeometry(0.56, 0.56, 0.06, 10)), hm, 0, 0.2, 0));
-      const cone = part(geo('hatc', () => new THREE.ConeGeometry(0.34, 0.85, 8)), hm, 0, 0.6, -0.06);
+      head.add(part(geo('brim', () => new THREE.CylinderGeometry(0.56, 0.56, 0.06, 10)), hm, 0, 0.3, 0));
+      const cone = part(geo('hatc', () => new THREE.ConeGeometry(0.34, 0.85, 8)), hm, 0, 0.7, -0.06);
       cone.rotation.x = -0.22;
       head.add(cone);
     }
     const eyeM = o.glow ? mat(o.glow, { emissive: o.glow, emissiveIntensity: 0.7 }) : mat(0x1a1410);
-    head.add(part(box(0.07, 0.07, 0.04), eyeM, 0.11, 0.03, 0.28));
-    head.add(part(box(0.07, 0.07, 0.04), eyeM, -0.11, 0.03, 0.28));
+    head.add(part(box(0.09, 0.09, 0.03), eyeM, 0.13, 0.04, 0.295));
+    head.add(part(box(0.09, 0.09, 0.03), eyeM, -0.13, 0.04, 0.295));
     if (o.tusks) {
       const t = mat(0xece3c8);
-      head.add(part(box(0.06, 0.15, 0.06), t, 0.13, -0.14, 0.25));
-      head.add(part(box(0.06, 0.15, 0.06), t, -0.13, -0.14, 0.25));
+      head.add(part(box(0.06, 0.15, 0.06), t, 0.13, -0.16, 0.3));
+      head.add(part(box(0.06, 0.15, 0.06), t, -0.13, -0.16, 0.3));
     }
     if (o.ears === true) {
       const e1 = part(box(0.08, 0.1, 0.34), skin, 0.32, 0.06, -0.02);
@@ -90,30 +246,30 @@
     } else if (o.ears === 'round') {
       // Oso: orejas redondas (cubos) sobre la cabeza
       const em = mat(o.hair || o.skin);
-      head.add(part(box(0.17, 0.17, 0.1), em, 0.22, 0.3, -0.02), part(box(0.17, 0.17, 0.1), em, -0.22, 0.3, -0.02));
+      head.add(part(box(0.18, 0.18, 0.1), em, 0.22, 0.38, -0.02), part(box(0.18, 0.18, 0.1), em, -0.22, 0.38, -0.02));
     } else if (o.ears === 'cat') {
       // Hada-Gato: orejas de gato triangulares
       for (const sx of [1, -1]) {
-        const e = part(geo('catear', () => new THREE.ConeGeometry(0.11, 0.24, 4)), skin, 0.18 * sx, 0.34, -0.02);
+        const e = part(geo('catear', () => new THREE.ConeGeometry(0.12, 0.26, 4)), skin, 0.18 * sx, 0.42, -0.02);
         e.rotation.y = Math.PI / 4;
         head.add(e);
       }
     }
     if (o.snout) {
       // Hocico de oso o de lagarto
-      head.add(part(box(0.26, 0.18, 0.2), mat(o.snout), 0, -0.08, 0.3));
-      head.add(part(box(0.1, 0.06, 0.04), mat(0x1a1410), 0, -0.02, 0.41));
+      head.add(part(box(0.3, 0.2, 0.18), mat(o.snout), 0, -0.1, 0.35));
+      head.add(part(box(0.12, 0.07, 0.04), mat(0x1a1410), 0, -0.03, 0.45));
     }
     if (o.crest) {
       // Cresta dracónica
       const cm = mat(o.crest);
-      for (let i = 0; i < 3; i++) head.add(part(box(0.06, 0.16 - i * 0.03, 0.12), cm, 0, 0.32 - i * 0.04, -0.06 - i * 0.13));
+      for (let i = 0; i < 3; i++) head.add(part(box(0.07, 0.18 - i * 0.03, 0.14), cm, 0, 0.36 - i * 0.04, -0.04 - i * 0.14));
     }
     if (o.goggles) {
       // Gnomo: gafas de ingeniero sobre la frente
       const gm = mat(o.goggles, { metalness: 0.4, roughness: 0.3 });
-      head.add(part(box(0.15, 0.12, 0.06), gm, 0.1, 0.14, 0.27), part(box(0.15, 0.12, 0.06), gm, -0.1, 0.14, 0.27));
-      head.add(part(box(0.62, 0.05, 0.05), mat(0x3a2a1c), 0, 0.14, 0.02));
+      head.add(part(box(0.17, 0.13, 0.06), gm, 0.12, 0.17, 0.31), part(box(0.17, 0.13, 0.06), gm, -0.12, 0.17, 0.31));
+      head.add(part(box(0.62, 0.05, 0.62), mat(0x3a2a1c), 0, 0.17, 0));
     }
     if (o.cape) rig.add(part(box(0.74, 1.15, 0.06), mat(o.cape), 0, 1.33, -0.27));
     if (o.treeKing) {
@@ -191,60 +347,11 @@
     const rLeg = limb(rig, fem ? 0.17 : 0.2, 0.95, 0, legW, 0.95, legs);
 
     const wt = o.weapon === false ? null : o.weaponType || (o.club ? 'club' : 'sword');
-    let weapon = null;
-    let bladeMat = null;
-    if (wt === 'hammer') {
-      // Martillo de bloques: mango y cabeza que cambia de color según el grado
-      weapon = new THREE.Group();
-      weapon.position.set(0, -0.82, 0.04);
-      weapon.rotation.x = Math.PI / 2;
-      rArm.add(weapon);
-      weapon.add(part(box(0.1, 1.15, 0.1), mat(0x5b4129), 0, 0.5, 0));
-      bladeMat = mat(0x9a8f80, { metalness: 0.25, roughness: 0.6 });
-      weapon.add(part(box(0.5, 0.32, 0.32), bladeMat, 0, 1.1, 0));
-    } else if (wt === 'sword' || wt === 'club') {
-      weapon = new THREE.Group();
-      weapon.position.set(0, -0.82, 0.04);
-      weapon.rotation.x = Math.PI / 2;
-      rArm.add(weapon);
-      if (wt === 'club') {
-        weapon.add(part(box(0.16, 1.0, 0.16), mat(0x5b4129), 0, 0.48, 0));
-        weapon.add(part(box(0.3, 0.36, 0.3), mat(0x4a3826), 0, 0.95, 0));
-      } else {
-        bladeMat = mat(o.weaponColor || 0xc9ccd2, { metalness: 0.3, roughness: 0.62 });
-        weapon.add(part(box(0.07, 1.1, 0.17), bladeMat, 0, 0.68, 0));
-        weapon.add(part(box(0.38, 0.07, 0.12), mat(0x8a6d3b, { metalness: 0.25, roughness: 0.6 }), 0, 0.1, 0));
-        weapon.add(part(box(0.07, 0.3, 0.07), dark, 0, -0.07, 0));
-      }
-    } else if (wt === 'staff') {
-      // Báculo vertical en la mano derecha, con un orbe que brilla según la rareza.
-      weapon = new THREE.Group();
-      weapon.position.set(0, -0.8, 0.08);
-      weapon.rotation.x = 0.12;
-      rArm.add(weapon);
-      weapon.add(part(geo('staff', () => new THREE.CylinderGeometry(0.045, 0.06, 2.3, 6)), mat(0x5a3e28), 0, 0.35, 0));
-      weapon.add(part(geo('staffcap', () => new THREE.ConeGeometry(0.13, 0.3, 6)), mat(0x8a6d3b, { metalness: 0.25, roughness: 0.6 }), 0, 1.45, 0));
-      bladeMat = mat(0x9fc4ff, { emissive: 0x3a6ad0, emissiveIntensity: 0.6 });
-      weapon.add(part(sphere(0.16), bladeMat, 0, 1.68, 0));
-    } else if (wt === 'bow') {
-      // Arco en la mano izquierda: medio toro como palas y una cuerda fina.
-      weapon = new THREE.Group();
-      weapon.position.set(0, -0.8, 0.06);
-      lArm.add(weapon);
-      const inner = new THREE.Group();
-      inner.rotation.y = -Math.PI / 2;
-      weapon.add(inner);
-      bladeMat = mat(0x6b4a2e);
-      const arc = part(geo('bow', () => new THREE.TorusGeometry(0.72, 0.04, 4, 14, Math.PI)), bladeMat, -0.3, 0, 0);
-      arc.rotation.z = -Math.PI / 2;
-      arc.scale.set(0.42, 1, 1);
-      const string = part(box(0.015, 1.44, 0.015), mat(0xe8e0cc), -0.3, 0, 0);
-      inner.add(arc, string);
-    }
-
     const s = o.scale || 1;
     rig.scale.setScalar(s);
-    return { kind: 'hum', root, rig, head, lArm, rArm, lLeg, rLeg, weapon, weaponType: wt, bladeMat, torsoMat: body, baseBody: o.body, height: 2.5 * s };
+    const m = { kind: 'hum', root, rig, head, lArm, rArm, lLeg, rLeg, weapon: null, weaponType: null, bladeMat: null, torsoMat: body, baseBody: o.body, fem, hasCape: !!o.cape, height: 2.5 * s };
+    if (wt) makeWeapon(m, WEAPON_SHAPE[wt] || 'sword', o.weaponColor);
+    return m;
   }
 
   function buildQuadruped(o) {
@@ -452,6 +559,10 @@
       return;
     }
     if (m.kind === 'hum' && m.rig.rotation.x !== 0 && !m.dying) m.rig.rotation.x = 0;
+    if (m.floatBook) {
+      m.floatBook.position.y = 1.55 + Math.sin(t * 2) * 0.08 + swing * 0.25;
+      m.floatBook.rotation.y = 0.3 + Math.sin(t * 1.3) * 0.15;
+    }
     if (m.kind === 'hum') {
       const s = Math.sin(t * 9) * 0.75 * walk;
       m.lLeg.rotation.x = s;
@@ -524,19 +635,97 @@
     },
   };
 
+  // Color del arma por grado (sin brillos fuertes: el resplandor se limita para no causar destellos)
   function setWeaponLook(m, item) {
+    if (item && item.weaponType && m.lArm) {
+      const shape = WEAPON_SHAPE[item.weaponType] || 'sword';
+      if (shape !== m.weaponShape) makeWeapon(m, shape);
+    }
+    for (const g of m.weaponParts || []) g.visible = !!item;
     if (!m.weapon) return;
     m.weapon.visible = !!item;
+    m.weaponGrade = item ? item.grade || null : null;
+    syncRainbow(m);
     if (!item || !m.bladeMat) return;
     const table = LOOKS[m.weaponType] || LOOKS.sword;
     const [c, e, i] = table[item.grade || item.rarity] || table.madera;
     m.bladeMat.color.setHex(c);
-    m.bladeMat.emissive.setHex(e);
-    m.bladeMat.emissiveIntensity = i;
+    if (m.bladeMat.emissive) {
+      m.bladeMat.emissive.setHex(e);
+      m.bladeMat.emissiveIntensity = Math.min(0.55, i * 0.5);
+    }
   }
 
+  // ---------- Armaduras: piezas según grado y tipo ----------
+  const GRADE_IDX = { madera: 0, cobre: 1, azul: 2, morado: 3, dorado: 4, arcoiris: 5 };
+  const TRIM = { madera: 0x6b4a2e, cobre: 0xc8844a, azul: 0x5d8fd8, morado: 0x8a55c8, dorado: 0xe0b040, arcoiris: 0xffffff };
+  const GEM = { azul: 0x7fd0ff, morado: 0xd09bff, dorado: 0xffd27a, arcoiris: 0xffffff };
+
   function setArmorLook(m, item) {
-    m.torsoMat.color.setHex(item ? item.look : m.baseBody);
+    if (m.torsoMat) m.torsoMat.color.setHex(item ? item.look : m.baseBody);
+    for (const g of m.armorParts || []) if (g.parent) g.parent.remove(g);
+    m.armorParts = [];
+    m.armorRainbow = [];
+    m.armorGrade = item ? item.grade || null : null;
+    if (!item || !m.lArm || !item.grade) return syncRainbow(m);
+    const gi = GRADE_IDX[item.grade];
+    const type = item.armorType;
+    const robe = type === 'CLOTH_ROBE' || type === 'SACRED_ROBE';
+    const heavy = type === 'HEAVY_PLATE';
+    const metal = gi >= 2 && !robe;
+    const trim = mat(TRIM[item.grade], { metalness: metal ? 0.3 : 0.05, roughness: metal ? 0.5 : 0.8 });
+    const add = (parent, mesh) => {
+      parent.add(mesh);
+      m.armorParts.push(mesh);
+      return mesh;
+    };
+    const fem = m.fem;
+    const tw = fem ? 0.66 : 0.8;
+    const td = fem ? 0.4 : 0.46;
+    // Cobre en adelante: cinturón y brazaletes
+    if (gi >= 1) {
+      add(m.rig, part(box(tw + 0.06, 0.13, td + 0.06), trim, 0, 1.0, 0));
+      for (const arm of [m.lArm, m.rArm]) add(arm, part(box(0.27, 0.14, 0.27), trim, 0, -0.6, 0));
+    }
+    // Cristal Azul en adelante: hombreras (o cuello en las túnicas) y gema en el pecho
+    if (gi >= 2) {
+      if (robe) add(m.rig, part(box(tw + 0.14, 0.12, td + 0.08), trim, 0, 1.92, 0));
+      else {
+        const sz = (heavy ? 0.36 : type === 'LIGHT_LEATHER' ? 0.26 : 0.3) + (gi - 2) * 0.05;
+        for (const [arm, sx] of [[m.lArm, -1], [m.rArm, 1]]) add(arm, part(box(sz, sz * 0.55, sz), trim, sx * 0.04, 0.1, 0));
+      }
+      const gem = mat(GEM[item.grade], { emissive: GEM[item.grade], emissiveIntensity: gi >= 4 ? 0.35 : 0.2 });
+      add(m.rig, part(box(0.14, 0.14, 0.06), gem, 0, 1.62, td / 2 + 0.02));
+      if (item.grade === 'arcoiris') m.armorRainbow.push(gem);
+    }
+    // Oro Morado en adelante: franja decorada en el pecho
+    if (gi >= 3) add(m.rig, part(box(0.12, 0.8, 0.02), trim, 0, 1.4, td / 2 + 0.01));
+    // Diamante Dorado en adelante: capa (si el personaje no trae una propia)
+    if (gi >= 4 && !m.hasCape) {
+      const capeM = mat(item.grade === 'arcoiris' ? 0xffffff : 0xb03a2a, { side: THREE.DoubleSide });
+      add(m.rig, part(box(tw - 0.04, 1.25, 0.05), capeM, 0, 1.3, -td / 2 - 0.04));
+      if (item.grade === 'arcoiris') m.armorRainbow.push(capeM);
+    }
+    // Arcoíris: casco épico (armaduras pesada y media) o corona (las demás)
+    if (gi >= 5 && m.head) {
+      if (heavy || type === 'MEDIUM_SCALE') {
+        add(m.head, part(box(0.68, 0.24, 0.68), trim, 0, 0.3, 0));
+        add(m.head, part(box(0.08, 0.3, 0.5), trim, 0, 0.52, -0.02));
+      } else {
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2;
+          add(m.head, part(box(0.1, 0.18, 0.1), trim, Math.sin(a) * 0.26, 0.4, Math.cos(a) * 0.26));
+        }
+      }
+      m.armorRainbow.push(trim);
+    } else if (item.grade === 'arcoiris') m.armorRainbow.push(trim);
+    syncRainbow(m);
+  }
+
+  // Materiales que cambian de color en arcoíris (armas y armaduras de grado Arcoíris)
+  function syncRainbow(m) {
+    m.rainbowMats = [...(m.armorRainbow || [])];
+    if (m.weaponGrade === 'arcoiris' && m.bladeMat) m.rainbowMats.push(m.bladeMat);
   }
 
   V.Models = { mat, buildHumanoid, buildQuadruped, buildBlob, buildMob, buildPet, animateModel, animateDeath, setWeaponLook, setArmorLook };

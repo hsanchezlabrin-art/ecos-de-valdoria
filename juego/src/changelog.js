@@ -8,6 +8,17 @@
 })(function () {
   return [
     {
+      version: '0.11.0',
+      date: '2026-11-18',
+      title: 'Héroes de bloques y equipo que se nota',
+      items: [
+        'Estilo de bloques: cabezas cúbicas en todos los personajes, y más grandes en las cinco razas jugables.',
+        'Cada tipo de arma tiene su forma: espadas dobles, lanza, maza, martillo a dos manos, dagas, ballesta, varita mecánica, lanzapociones, libro flotante, campana y cetro estrella.',
+        'La armadura cambia con el grado: Cobre suma cinturón y brazaletes; Cristal Azul, hombreras y una gema; Oro Morado, una franja decorada; Diamante Dorado, una capa; y Arcoíris, un casco épico o una corona.',
+        'El equipo Arcoíris cambia de color sin parar y deja chispitas suaves al moverte o atacar (sin destellos).',
+      ],
+    },
+    {
       version: '0.10.1',
       date: '2026-11-18',
       title: 'Caminos sin brillitos',
