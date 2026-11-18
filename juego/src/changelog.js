@@ -8,6 +8,12 @@
 })(function () {
   return [
     {
+      version: '0.5.6',
+      date: '2026-11-18',
+      title: 'El Guerrero de siempre',
+      items: ['El Guerrero (hombre) vuelve a su aspecto anterior, con su armadura y armas según el equipo.'],
+    },
+    {
       version: '0.5.5',
       date: '2026-11-18',
       title: 'Adiós a los destellos',

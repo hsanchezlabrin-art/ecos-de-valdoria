@@ -7,9 +7,8 @@
   const { lookFor } = V.Data;
 
   // Modelo disponible por clase y sexo
-  const FILES = {
-    guerrero_m: './assets/models/guerrero_m.glb',
-  };
+  // Vacío: el Guerrero volvió a su figura original (el modelo guerrero_m.glb queda guardado sin usar)
+  const FILES = {};
   const HEIGHT = 2.45; // altura en el mundo (igual que las figuras de código)
   const ATTACK_TIME = 0.75; // segundos que dura el golpe en pantalla
 
