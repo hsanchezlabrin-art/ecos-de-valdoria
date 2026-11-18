@@ -85,7 +85,7 @@
   // Espada sujeta al hueso de la mano derecha
   function buildSword(hand, scaleToWorld) {
     const g = new THREE.Group();
-    const blade = M.mat(0xc9ccd2, { metalness: 0.35, roughness: 0.3, flatShading: false });
+    const blade = M.mat(0xc9ccd2, { metalness: 0.3, roughness: 0.62, flatShading: false });
     const part = (geo, m, y) => {
       const o = new THREE.Mesh(geo, m);
       o.position.y = y;
@@ -94,7 +94,7 @@
       return o;
     };
     part(new THREE.BoxGeometry(0.035, 0.16, 0.035), M.mat(0x3a2a1c), 0);
-    part(new THREE.BoxGeometry(0.2, 0.035, 0.05), M.mat(0x8a6d3b, { metalness: 0.5 }), 0.09);
+    part(new THREE.BoxGeometry(0.2, 0.035, 0.05), M.mat(0x8a6d3b, { metalness: 0.25, roughness: 0.6 }), 0.09);
     part(new THREE.BoxGeometry(0.03, 0.8, 0.075), blade, 0.5);
     part(new THREE.ConeGeometry(0.038, 0.1, 4), blade, 0.95).rotation.y = Math.PI / 4;
     g.scale.setScalar(1 / scaleToWorld);

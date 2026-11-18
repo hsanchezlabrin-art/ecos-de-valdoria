@@ -8,6 +8,15 @@
 })(function () {
   return [
     {
+      version: '0.5.5',
+      date: '2026-11-18',
+      title: 'Adiós a los destellos',
+      items: [
+        'Arreglado: el sol reflejado en espadas y armas metálicas formaba bolas de luz cerca del suelo.',
+        'El brillo de bastones, hechizos y armas raras queda contenido: se ve el objeto brillar, sin halos enormes.',
+      ],
+    },
+    {
       version: '0.5.4',
       date: '2026-11-17',
       title: 'Hechizos sin encandilar',

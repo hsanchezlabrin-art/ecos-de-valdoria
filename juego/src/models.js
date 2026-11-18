@@ -108,9 +108,9 @@
         weapon.add(part(box(0.16, 1.0, 0.16), mat(0x5b4129), 0, 0.48, 0));
         weapon.add(part(box(0.3, 0.36, 0.3), mat(0x4a3826), 0, 0.95, 0));
       } else {
-        bladeMat = mat(o.weaponColor || 0xc9ccd2, { metalness: 0.6, roughness: 0.35 });
+        bladeMat = mat(o.weaponColor || 0xc9ccd2, { metalness: 0.3, roughness: 0.62 });
         weapon.add(part(box(0.07, 1.1, 0.17), bladeMat, 0, 0.68, 0));
-        weapon.add(part(box(0.38, 0.07, 0.12), mat(0x8a6d3b, { metalness: 0.5 }), 0, 0.1, 0));
+        weapon.add(part(box(0.38, 0.07, 0.12), mat(0x8a6d3b, { metalness: 0.25, roughness: 0.6 }), 0, 0.1, 0));
         weapon.add(part(box(0.07, 0.3, 0.07), dark, 0, -0.07, 0));
       }
     } else if (wt === 'staff') {
@@ -120,7 +120,7 @@
       weapon.rotation.x = 0.12;
       rArm.add(weapon);
       weapon.add(part(geo('staff', () => new THREE.CylinderGeometry(0.045, 0.06, 2.3, 6)), mat(0x5a3e28), 0, 0.35, 0));
-      weapon.add(part(geo('staffcap', () => new THREE.ConeGeometry(0.13, 0.3, 6)), mat(0x8a6d3b, { metalness: 0.5 }), 0, 1.45, 0));
+      weapon.add(part(geo('staffcap', () => new THREE.ConeGeometry(0.13, 0.3, 6)), mat(0x8a6d3b, { metalness: 0.25, roughness: 0.6 }), 0, 1.45, 0));
       bladeMat = mat(0x9fc4ff, { emissive: 0x3a6ad0, emissiveIntensity: 0.6 });
       weapon.add(part(sphere(0.16), bladeMat, 0, 1.68, 0));
     } else if (wt === 'bow') {
@@ -237,24 +237,24 @@
   const LOOKS = {
     sword: {
       comun: [0xc9ccd2, 0x000000, 0],
-      refinado: [0xdfe4ea, 0x0b2a12, 0.4],
-      raro: [0x8fb8ff, 0x1a3a90, 0.9],
-      epico: [0xc79bff, 0x5a1fa0, 1.4],
-      legendario: [0xffc46b, 0xb05a10, 1.8],
+      refinado: [0xdfe4ea, 0x0b2a12, 0.22],
+      raro: [0x8fb8ff, 0x1a3a90, 0.5],
+      epico: [0xc79bff, 0x5a1fa0, 0.77],
+      legendario: [0xffc46b, 0xb05a10, 0.99],
     },
     bow: {
       comun: [0x6b4a2e, 0x000000, 0],
-      refinado: [0x7a5a32, 0x1d3a10, 0.5],
-      raro: [0xd4dde8, 0x2a4a90, 0.8],
-      epico: [0xb88cff, 0x5a1fa0, 1.3],
-      legendario: [0xffc46b, 0xb05a10, 1.7],
+      refinado: [0x7a5a32, 0x1d3a10, 0.28],
+      raro: [0xd4dde8, 0x2a4a90, 0.44],
+      epico: [0xb88cff, 0x5a1fa0, 0.72],
+      legendario: [0xffc46b, 0xb05a10, 0.94],
     },
     staff: {
-      comun: [0x9fc4ff, 0x3a6ad0, 0.6],
-      refinado: [0x9fe08a, 0x2f8a2a, 1],
-      raro: [0x6a9cff, 0x1f4ad0, 1.5],
-      epico: [0xd09bff, 0x7a2ad0, 2],
-      legendario: [0xffd27a, 0xd07a10, 2.4],
+      comun: [0x9fc4ff, 0x3a6ad0, 0.33],
+      refinado: [0x9fe08a, 0x2f8a2a, 0.55],
+      raro: [0x6a9cff, 0x1f4ad0, 0.83],
+      epico: [0xd09bff, 0x7a2ad0, 1.1],
+      legendario: [0xffd27a, 0xd07a10, 1.32],
     },
   };
 

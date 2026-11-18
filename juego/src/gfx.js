@@ -686,9 +686,11 @@
          vec3 c = (texture2D(tDiffuse, vUv + texel * vec2(-0.5)).rgb + texture2D(tDiffuse, vUv + texel * vec2(0.5)).rgb
                  + texture2D(tDiffuse, vUv + texel * vec2(0.5, -0.5)).rgb + texture2D(tDiffuse, vUv + texel * vec2(-0.5, 0.5)).rgb) * 0.25;
          float l = max(c.r, max(c.g, c.b));
-         gl_FragColor = vec4(c * smoothstep(threshold, threshold + 0.8, l), 1.0);
+         // Tope: un objeto pequeño muy brillante no puede formar una bola de luz
+         vec3 b = c * smoothstep(threshold, threshold + 0.8, l);
+         gl_FragColor = vec4(min(b, vec3(0.5)), 1.0);
        }`,
-      { tDiffuse: { value: null }, texel: { value: new THREE.Vector2() }, threshold: { value: hdr ? 1.8 : 0.97 } }
+      { tDiffuse: { value: null }, texel: { value: new THREE.Vector2() }, threshold: { value: hdr ? 2.2 : 0.98 } }
     );
     const down = shader(
       `uniform sampler2D tDiffuse; uniform vec2 texel; varying vec2 vUv;
