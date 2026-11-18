@@ -727,7 +727,7 @@
          c *= 1.0 - dot(d, d) * 0.55;
          gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
        }`,
-      { tDiffuse: { value: null }, tBloom: { value: null }, bloom: { value: 0.5 }, tint: { value: sky.tint } }
+      { tDiffuse: { value: null }, tBloom: { value: null }, bloom: { value: 0.4 }, tint: { value: sky.tint } }
     );
     const pass = (m, target) => {
       quad.material = m;

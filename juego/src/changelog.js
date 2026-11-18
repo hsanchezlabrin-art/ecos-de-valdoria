@@ -8,6 +8,12 @@
 })(function () {
   return [
     {
+      version: '0.5.4',
+      date: '2026-11-17',
+      title: 'Hechizos sin encandilar',
+      items: ['Arreglado: los proyectiles mágicos, bolas de fuego, rayos y el efecto de subir de nivel ya no forman grandes destellos.'],
+    },
+    {
       version: '0.5.3',
       date: '2026-11-17',
       title: 'Versión a la vista',
