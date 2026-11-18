@@ -225,6 +225,9 @@
         case 'KeyC':
           UI.togglePanel('stats');
           break;
+        case 'KeyJ':
+          UI.togglePanel('quests');
+          break;
         case 'KeyM':
           UI.togglePanel('map');
           break;

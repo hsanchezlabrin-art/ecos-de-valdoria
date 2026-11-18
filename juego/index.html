@@ -492,6 +492,34 @@
   .st-grid dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
   .st-grid dt.sep, .st-grid dd.sep { border-top: 1px solid #23211d; padding-top: 6px; margin-top: 2px; }
   .st-grid .up { color: #8fd37a; }
+  /* Panel de misiones */
+  #questPanel { width: 380px; }
+  #questList { display: grid; gap: 12px; }
+  .q-sec h3 { margin: 0 0 6px; font: 700 13px var(--display); letter-spacing: .08em; color: var(--gold); text-transform: uppercase; }
+  .qc { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--edge-soft); border-radius: 3px; background: rgba(0,0,0,.25); }
+  .qc.active { border-color: var(--gold); }
+  .qc.done { border-color: #8fd37a; }
+  .qc .qt { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-weight: 700; font-size: 15px; }
+  .qc .qt small { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .qc p { margin: 0; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+  .qc .muted { color: var(--muted); }
+  .qbar { position: relative; height: 16px; background: #07080a; border: 1px solid #000; box-shadow: 0 0 0 1px var(--edge-soft); overflow: hidden; border-radius: 2px; }
+  .qbar i { position: absolute; inset: 0; transform-origin: left; background: linear-gradient(#e6c773, var(--xp)); }
+  .qc.done .qbar i { background: linear-gradient(#a8e08f, #5aa548); }
+  .qbar span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; line-height: 1; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
+  .q-tag { font-size: 11px; padding: 1px 7px; border-radius: 8px; background: #23211d; color: var(--muted); font-weight: 700; }
+  .q-tag.ok { background: #1f3a1d; color: #8fd37a; }
+  .q-tag.go { background: #3a2f12; color: #ffd27a; }
+  .q-steps { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .q-steps li { display: grid; grid-template-columns: 22px 1fr; gap: 2px 8px; align-items: center; font-size: 13px; }
+  .q-steps li .ck { grid-row: span 2; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--edge); color: var(--muted); font-size: 12px; }
+  .q-steps li.ok .ck { background: #1f3a1d; border-color: #8fd37a; color: #8fd37a; }
+  .q-steps li .nm { font-weight: 700; display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; }
+  .q-steps li .nm small { font-weight: 400; font-size: 12px; color: var(--muted); }
+  .q-steps li > .muted { font-size: 12px; color: #8fd37a; }
+  .q-steps li.ok .nm { color: var(--muted); }
+  .q-steps li .qbar { height: 12px; }
+  .q-steps li .qbar span { font-size: 10px; }
   .st-tabs { margin: 0 0 10px; }
   .st-tabs button { padding: 8px; font-size: 14px; }
   #skList { display: grid; gap: 8px; }
@@ -670,6 +698,7 @@
   <div class="menu-btns">
     <button id="btnInv" data-icon="▣">Inventario <kbd>I</kbd></button>
     <button id="btnStats" data-icon="♙">Estado <kbd>C</kbd></button>
+    <button id="btnQuests" data-icon="❗">Misiones <kbd>J</kbd></button>
     <button id="btnMap" data-icon="⌖">Mapa <kbd>M</kbd></button>
     <button id="btnHelp" data-icon="?">Controles <kbd>H</kbd></button>
     <button id="btnGfx" data-icon="✦">Gráficos <kbd>✦</kbd></button>
@@ -710,6 +739,11 @@
       <div id="skList"></div>
       <p class="hint">Las habilidades se usan con las teclas 1–6 (o con los botones redondos junto a «Atacar» en el celular). Las acciones —pociones, Gemas de Poder y montura— están en su propio grupo.</p>
     </div>
+  </section>
+
+  <section class="panel" id="questPanel" hidden>
+    <header><h2>Misiones</h2><button class="x" data-close="quests" aria-label="Cerrar">✕</button></header>
+    <div id="questList"></div>
   </section>
 
   <section class="panel" id="shopPanel" hidden>
@@ -782,7 +816,7 @@
       <dt>Tab · F</dt><dd>Siguiente monstruo · Atacar al objetivo</dd>
       <dt>1 – 6</dt><dd>Habilidades (niveles 1, 3, 5, 8, 11 y 15)</dd>
       <dt>7 · 8</dt><dd>Poción de vida · Poción de maná</dd>
-      <dt>I · C · M · H</dt><dd>Inventario · Estado · Mapa · Esta ayuda</dd>
+      <dt>I · C · J · M · H</dt><dd>Inventario · Estado · Misiones · Mapa · Esta ayuda</dd>
       <dt>Enter</dt><dd>Chat. Empieza con # para hablar solo con tu grupo, o escribe /invitar Nombre</dd>
       <dt>Esc</dt><dd>Cerrar ventanas o soltar el objetivo</dd>
       <dt><span class="np-aggro-key">!</span></dt><dd>Monstruo agresivo: te ataca si te acercas. Los demás solo pelean si los golpeas</dd>

@@ -54,6 +54,7 @@ function initUI() {
     map: $('mapPanel'),
     drop: $('dropPanel'),
     master: $('masterPanel'),
+    quests: $('questPanel'),
   };
   E.hud.hidden = false;
   E.pName.textContent = G.player.name;
@@ -74,6 +75,7 @@ function initUI() {
   $('btnInv').onclick = () => togglePanel('inv');
   $('btnHelp').onclick = () => togglePanel('help');
   $('btnStats').onclick = () => togglePanel('stats');
+  $('btnQuests').onclick = () => togglePanel('quests');
   $('btnMap').onclick = () => togglePanel('map');
   $('minimap').onclick = () => togglePanel('map', true);
   $('mmIn').onclick = () => (mmR = Math.max(30, mmR / 1.4));
@@ -601,7 +603,7 @@ function closeAll() {
     answerInvite(false);
     return true;
   }
-  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help']) {
+  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help', 'quests']) {
     if (!E[k].hidden) {
       E[k].hidden = true;
       closed = true;
@@ -805,6 +807,7 @@ function refreshPanels() {
         : 'Clic en un objeto para ver sus opciones. Clic derecho o doble clic: equipar o usar al instante.';
   }
   if (!E.stats.hidden) renderStats();
+  if (!E.quests.hidden) renderQuests();
   if (!E.shop.hidden) {
     const list = $('shopList');
     list.innerHTML = '';
@@ -1017,6 +1020,7 @@ function updateUI() {
   if (frame % 3 === 0) drawMinimap();
   if (frame % 6 === 0) renderParty();
   if (frame % 20 === 0 && !E.stats.hidden) renderStats();
+  if (frame % 20 === 0 && !E.quests.hidden) renderQuests();
   if (!E.map.hidden && frame % 2 === 0) drawBigMap();
   if (frame % 15 === 0) {
     const z = zoneAt(p.pos);
@@ -1034,6 +1038,115 @@ function updateUI() {
 }
 
 // ---------- Estado del personaje ----------
+
+// ---------- Panel de misiones: misión de clase en curso, próximo paso y camino del héroe ----------
+function questBar(cur, max, label) {
+  const b = document.createElement('div');
+  b.className = 'qbar';
+  const i = document.createElement('i');
+  i.style.transform = `scaleX(${Math.max(0, Math.min(1, max ? cur / max : 1)).toFixed(3)})`;
+  const s = document.createElement('span');
+  s.textContent = label;
+  b.append(i, s);
+  return b;
+}
+
+function renderQuests() {
+  const p = G.player;
+  const list = $('questList');
+  const guide = V.Guide && V.Guide.objective ? V.Guide.objective(p) : null;
+  const q = p.quest;
+  const key = `${p.level}|${p.stage}|${p.branch}|${q ? `${q.stage}:${q.kills}:${q.branch}` : '-'}|${p.pet ? 1 : 0}|${guide ? guide.text : ''}`;
+  if (list.dataset.key === key) return; // solo se redibuja si algo cambió
+  list.dataset.key = key;
+  list.innerHTML = '';
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const section = (title) => {
+    const s = el('section', 'q-sec');
+    s.append(el('h3', '', title));
+    list.append(s);
+    return s;
+  };
+  const tag = (text, kind) => el('span', `q-tag ${kind || ''}`, text);
+
+  // 1) Misión de clase (Maestro Aldric)
+  const sec = section('Misión de clase');
+  const card = el('div', 'qc');
+  sec.append(card);
+  const next = STAGES[(p.stage || 0) + 1];
+  if (q) {
+    const def = questFor(q.stage);
+    const st = STAGES[q.stage];
+    const done = def && q.kills >= def.need;
+    card.classList.add(done ? 'done' : 'active');
+    const head = el('div', 'qt', def ? def.title : st.name);
+    head.append(el('small', '', `${st.name} · nivel ${st.lvl}`), tag(done ? '¡Cumplida!' : 'En curso', done ? 'ok' : 'go'));
+    card.append(head);
+    if (q.branch) card.append(el('p', 'muted', `Especialización elegida: ${CLASSES[p.cls].branches[q.branch].name}`));
+    if (def) {
+      card.append(el('p', '', def.text));
+      card.append(questBar(q.kills, def.need, `${q.kills} / ${def.need}`));
+    }
+    card.append(el('p', '', done ? '➜ Vuelve con el Maestro Aldric en la aldea para completarla.' : guide ? `➜ Dónde: ${guide.text}` : ''));
+    card.append(el('p', 'muted', `Recompensa: ${st.unlocks}.`));
+  } else if (next) {
+    const def = questFor(next.stage);
+    const ready = p.level >= next.lvl;
+    if (ready) card.classList.add('active');
+    const head = el('div', 'qt', def ? def.title : next.name);
+    head.append(el('small', '', `${next.name} · nivel ${next.lvl}`), tag(ready ? 'Disponible' : `Nivel ${next.lvl}`, ready ? 'go' : ''));
+    card.append(head);
+    card.append(el('p', '', ready ? '➜ Habla con el Maestro Aldric en la aldea para comenzarla.' : `Se desbloquea al llegar al nivel ${next.lvl}.`));
+    if (!ready) card.append(questBar(p.level, next.lvl, `Nivel ${p.level} / ${next.lvl}`));
+    if (def) card.append(el('p', 'muted', `Misión: ${def.text}`));
+    card.append(el('p', 'muted', `Recompensa: ${next.unlocks}.`));
+  } else {
+    card.classList.add('done');
+    const head = el('div', 'qt', 'Maestría alcanzada');
+    head.append(tag('Completo', 'ok'));
+    card.append(head, el('p', '', 'Completaste todas las misiones de clase. ¡Eres un héroe de Valdoria!'));
+  }
+
+  // 2) Próximo paso (el mismo que marcan las flechas doradas)
+  if (guide) {
+    const s2 = section('Próximo paso');
+    const c2 = el('div', 'qc');
+    c2.append(el('p', '', `➜ ${guide.text}`));
+    c2.append(el('p', 'muted', V.Guide.enabled ? 'Sigue las flechas doradas del suelo.' : 'Activa la Guía para ver flechas doradas en el suelo.'));
+    s2.append(c2);
+  }
+
+  // 3) Camino del héroe: metas por nivel con su avance
+  const s3 = section('Camino del héroe');
+  const ul = el('ul', 'q-steps');
+  s3.append(ul);
+  const D = V.Data;
+  const steps = [
+    { name: 'Mascota', req: `Nivel ${D.PET_LVL}: recibe un huevo y hazlo eclosionar`, lvl: D.PET_LVL, done: !!p.pet, pending: 'Falta: abre el huevo desde el inventario' },
+    { name: STAGES[1].name, req: `Nivel ${STAGES[1].lvl}: misión de clase con el Maestro Aldric`, lvl: STAGES[1].lvl, done: (p.stage || 0) >= 1, pending: 'Falta: completar la misión de clase' },
+    { name: 'Montura', req: `Nivel ${D.MOUNT_LVL}: monta tu mascota (tecla 0)`, lvl: D.MOUNT_LVL, done: !!p.pet && p.level >= D.MOUNT_LVL, pending: 'Falta: tener una mascota' },
+    { name: STAGES[2].name, req: `Nivel ${STAGES[2].lvl}: elige tu rama A o B`, lvl: STAGES[2].lvl, done: (p.stage || 0) >= 2, pending: 'Falta: completar la misión de clase' },
+    { name: STAGES[3].name, req: `Nivel ${STAGES[3].lvl}: derrota al jefe más fuerte`, lvl: STAGES[3].lvl, done: (p.stage || 0) >= 3, pending: 'Falta: completar la misión de clase' },
+    { name: 'Planeador', req: `Nivel ${D.GLIDER_LVL} con la ${STAGES[3].name}: vuela sobre el agua`, lvl: D.GLIDER_LVL, done: (p.stage || 0) >= 3 && !!p.pet && p.level >= D.GLIDER_LVL, pending: `Falta: la ${STAGES[3].name} y una mascota` },
+    { name: 'Nivel máximo', req: `Llega al nivel ${MAX_LEVEL}`, lvl: MAX_LEVEL, done: p.level >= MAX_LEVEL },
+  ];
+  for (const st of steps) {
+    const li = el('li', st.done ? 'ok' : '');
+    const nm = el('span', 'nm', st.name);
+    nm.append(el('small', '', st.req));
+    li.append(el('span', 'ck', st.done ? '✔' : ''), nm);
+    // Nivel alcanzado pero falta algo (misión de clase, huevo…): se dice qué falta
+    const reached = p.level >= st.lvl;
+    if (!st.done) li.append(questBar(Math.min(p.level, st.lvl), st.lvl, reached ? (st.pending || 'Nivel listo: falta completarlo') : `Nivel ${p.level} / ${st.lvl}`));
+    else li.append(el('span', 'muted', '¡Logrado!'));
+    ul.append(li);
+  }
+}
 
 // ---------- Panel Estado: pestaña Habilidades ----------
 let stTab = 'stats';

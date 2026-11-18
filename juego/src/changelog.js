@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.20.0',
+      date: '2026-11-18',
+      title: 'Panel de Misiones',
+      items: [
+        'Nuevo panel de Misiones (tecla J o botón ❗): mira tu misión de clase, qué hay que hacer y cuánto te falta.',
+        'Próximo paso: el mismo destino que marcan las flechas doradas.',
+        'Camino del héroe: tus metas por nivel (mascota, montura, cambios de clase, planeador) con su avance y lo que falta para lograrlas.',
+      ],
+    },
+    {
       version: '0.19.0',
       date: '2026-11-18',
       title: 'Habilidades a la vista',
