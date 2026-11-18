@@ -1561,6 +1561,9 @@
       ent.model.rig.position.y += ent.petView.model.saddle - 0.95 * ent.model.rig.scale.y;
       ent.model.lLeg.rotation.set(-1.35, 0, 0.35);
       ent.model.rLeg.rotation.set(-1.35, 0, -0.35);
+    } else if (riding && ent.model.skinned) {
+      // Modelo 3D: la cadera queda sobre la silla
+      ent.model.rig.position.y += ent.petView.model.saddle - ent.model.hipY;
     } else if (ent.model.lLeg && ent.model.lLeg.rotation.z) {
       ent.model.lLeg.rotation.z = 0;
       ent.model.rLeg.rotation.z = 0;

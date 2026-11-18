@@ -8,6 +8,17 @@
 })(function () {
   return [
     {
+      version: '0.13.0',
+      date: '2026-11-18',
+      title: 'El Elfo cobra vida en 3D',
+      items: [
+        'Nuevo modelo 3D del Elfo del Bosque Cubo, en versión hombre y mujer, con estilo low-poly de colores vivos.',
+        'Movimientos naturales: respira cuando está quieto, corre, tensa el arco para disparar y cae al ser derrotado.',
+        'El arco se sostiene derecho en la mano y al disparar el elfo apunta hacia su objetivo.',
+        'Las demás razas mantienen su figura de bloques mientras preparamos sus modelos 3D.',
+      ],
+    },
+    {
       version: '0.12.0',
       date: '2026-11-18',
       title: 'Chat seguro para niños',

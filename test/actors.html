@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visor de personajes</title>
+<style>
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #20262c; color: #e8e2d0; }
+  header { padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button, select { font: inherit; padding: 6px 10px; border-radius: 4px; border: 1px solid #556; background: #2c343c; color: inherit; cursor: pointer; }
+  button.on { border-color: #e0b040; color: #ffd27a; }
+  canvas { display: block; width: 100%; height: calc(100vh - 56px); }
+</style>
+</head>
+<body>
+<header>
+  <select id="race"></select>
+  <span id="anims"></span>
+  <select id="grade"></select>
+  <span id="msg"></span>
+</header>
+<canvas id="c"></canvas>
+<script src="../juego/vendor/three.min.js"></script>
+<script src="../juego/vendor/GLTFLoader.js"></script>
+<script src="../juego/vendor/SkeletonUtils.js"></script>
+<script>
+  // Visor de los modelos 3D de cada raza (hombre y mujer lado a lado) con sus animaciones.
+  // Uso: servir la carpeta del proyecto y abrir /test/actors.html
+  const load = (src) => new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = `${src}?t=${Date.now()}`;
+    s.onload = res;
+    s.onerror = rej;
+    document.head.append(s);
+  });
+  (async () => {
+    for (const f of ['version', 'state', 'config', 'data', 'terrain', 'gfx', 'models', 'actors']) await load(`../juego/src/${f}.js`);
+    // Las rutas de los modelos son relativas a la carpeta del juego
+    const base = document.createElement('base');
+    base.href = '../juego/';
+    document.head.prepend(base);
+    await V.Actors.preload();
+    start();
+  })().catch((e) => (document.getElementById('msg').textContent = 'Error: ' + e.message));
+
+  function start() {
+    const { ARCHETYPES, ITEMS, GRADE_ORDER } = V.Data;
+    const cv = document.getElementById('c');
+    const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
+    renderer.shadowMap.enabled = true;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9fc6e8);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x6a8a4a, 0.75));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+    sun.position.set(4, 8, 6);
+    sun.castShadow = true;
+    scene.add(sun);
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(8, 24), new THREE.MeshStandardMaterial({ color: 0x7fb85a, flatShading: true }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+    const cam = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+    cam.position.set(0, 2.2, 8.5);
+    cam.lookAt(0, 1.2, 0);
+
+    const raceSel = document.getElementById('race');
+    for (const id of Object.keys(ARCHETYPES)) raceSel.add(new Option(id + (V.Actors.has(id, 'm') ? ' (3D)' : ''), id));
+    raceSel.value = V.Actors.has('elfo', 'm') ? 'elfo' : raceSel.value;
+    const gradeSel = document.getElementById('grade');
+    for (const g of GRADE_ORDER) gradeSel.add(new Option('arma ' + g, g));
+
+    let heroes = [];
+    let mode = 'idle';
+    let atk = 0;
+    let deathK = 0;
+    function build() {
+      for (const h of heroes) scene.remove(h.root);
+      heroes = ['m', 'f'].map((sex, i) => {
+        const m = V.Actors.buildHero(raceSel.value, sex);
+        m.root.position.x = i ? 1.3 : -1.3;
+        m.root.rotation.y = i ? -0.35 : 0.35;
+        scene.add(m.root);
+        return m;
+      });
+      equip();
+    }
+    function equip() {
+      const id = `w_${raceSel.value}_${gradeSel.value}`;
+      for (const m of heroes) V.Models.setWeaponLook(m, ITEMS[id]);
+    }
+    const anims = document.getElementById('anims');
+    for (const k of ['idle', 'walk', 'attack', 'die', 'turn']) {
+      const b = document.createElement('button');
+      b.textContent = { idle: 'Quieto', walk: 'Correr', attack: 'Atacar', die: 'Morir', turn: 'Girar' }[k];
+      b.dataset.k = k;
+      b.onclick = () => {
+        mode = k;
+        deathK = 0;
+        for (const m of heroes) V.Models.animateDeath(m, 0);
+        anims.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+      };
+      anims.append(b);
+    }
+    raceSel.onchange = build;
+    gradeSel.onchange = equip;
+    build();
+
+    let last = performance.now() / 1000;
+    let tAtk = 0;
+    function frame() {
+      const w = cv.clientWidth;
+      const h = cv.clientHeight;
+      if (cv.width !== w || cv.height !== h) {
+        renderer.setSize(w, h, false);
+        cam.aspect = w / h;
+        cam.updateProjectionMatrix();
+      }
+      const t = performance.now() / 1000;
+      const dt = t - last;
+      last = t;
+      if (mode === 'attack') {
+        tAtk -= dt;
+        if (tAtk <= 0) {
+          tAtk = 1.3;
+          atk = 1;
+        } else atk = Math.max(0, atk - dt * 2.4);
+      } else atk = 0;
+      for (const m of heroes) {
+        if (mode === 'turn') m.root.rotation.y += dt * 0.8;
+        if (mode === 'die') {
+          deathK = Math.min(1, deathK + dt * 2.5);
+          V.Models.animateDeath(m, deathK);
+        } else V.Models.animateModel(m, t, mode === 'walk' ? 1 : 0, atk, 0);
+      }
+      renderer.render(scene, cam);
+      requestAnimationFrame(frame);
+    }
+    frame();
+    window.viewer = { heroes, scene, renderer, cam, setMode: (k) => anims.querySelector(`[data-k=${k}]`).click() };
+  }
+</script>
+</body>
+</html>
