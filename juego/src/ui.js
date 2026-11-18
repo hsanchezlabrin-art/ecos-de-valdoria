@@ -60,6 +60,7 @@ function initUI() {
   $('pClass').textContent = className(G.player.cls, G.player.sex, G.player.stage, G.player.branch);
   buildHotbar();
   bindMaster();
+  bindSafeChat();
   $('hatchClose').onclick = () => ($('hatchPanel').hidden = true);
   if ($('btnGuide')) {
     const sync = () => ($('btnGuide').firstChild.textContent = V.Guide && V.Guide.enabled ? 'Guía: sí ' : 'Guía: no ');
@@ -105,7 +106,9 @@ function initUI() {
     if (e.key === 'Enter') {
       const text = input.value.trim();
       const cmd = text.match(/^\/(invitar|invite)\s+(.+)$/i);
-      if (cmd) V.Game.inviteByName(cmd[2].trim());
+      if (safeChat) {
+        /* modo solo frases: no se envía texto escrito */
+      } else if (cmd) V.Game.inviteByName(cmd[2].trim());
       else if (/^\/(salir|leave)$/i.test(text)) V.Game.leaveParty();
       else if (text) V.Game.sendChat(text);
       input.value = '';
@@ -331,8 +334,83 @@ function pushLog(line) {
 }
 
 // Mensajes del chat en línea: { kind: 'player' | 'sys', name, cls, text }
+// ---------- Chat seguro: frases rápidas, modo solo frases y jugadores silenciados ----------
+
+const SAFE_KEY = 'valdoria-chat-seguro';
+const MUTE_KEY = 'valdoria-silenciados';
+const loadPref = (k, d) => {
+  try {
+    const v = localStorage.getItem(k);
+    return v == null ? d : JSON.parse(v);
+  } catch {
+    return d;
+  }
+};
+const savePref = (k, v) => {
+  try {
+    localStorage.setItem(k, JSON.stringify(v));
+  } catch {
+    /* sin almacenamiento */
+  }
+};
+let safeChat = loadPref(SAFE_KEY, false);
+let mutedNames = new Set(loadPref(MUTE_KEY, []));
+
+function bindSafeChat() {
+  document.body.classList.toggle('safe-chat', safeChat);
+  const list = $('phraseList');
+  list.innerHTML = '';
+  for (const ph of V.Data.PHRASES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = ph.text;
+    b.onclick = () => {
+      V.Game.sendPhrase(ph.id, $('phraseParty').checked);
+      $('phrasePanel').hidden = true;
+    };
+    list.append(b);
+  }
+  $('btnPhrases').onclick = (e) => {
+    e.stopPropagation();
+    $('phrasePanel').hidden = !$('phrasePanel').hidden;
+  };
+  $('safeChat').checked = safeChat;
+  $('safeChat').onchange = () => {
+    safeChat = $('safeChat').checked;
+    savePref(SAFE_KEY, safeChat);
+    document.body.classList.toggle('safe-chat', safeChat);
+    log(safeChat ? 'Modo solo frases rápidas: no verás mensajes escritos por otros jugadores.' : 'Chat libre activado (con filtro de palabras y datos personales).', 'sys');
+  };
+  document.addEventListener('pointerdown', (e) => {
+    const panel = $('phrasePanel');
+    if (!panel.hidden && !panel.contains(e.target) && e.target !== $('btnPhrases')) panel.hidden = true;
+  });
+  // Silenciar y reportar al jugador seleccionado
+  $('btnMute').onclick = () => {
+    const ply = G.playerSel;
+    if (!ply) return;
+    if (mutedNames.has(ply.name)) mutedNames.delete(ply.name);
+    else mutedNames.add(ply.name);
+    savePref(MUTE_KEY, [...mutedNames]);
+    log(mutedNames.has(ply.name) ? `Silenciaste a ${ply.name}: ya no verás sus mensajes.` : `Vuelves a ver los mensajes de ${ply.name}.`, 'sys');
+  };
+  $('btnReport').onclick = () => ($('reportBox').hidden = !$('reportBox').hidden);
+  document.querySelectorAll('#reportBox button').forEach((b) =>
+    (b.onclick = () => {
+      if (G.playerSel) V.Game.report(G.playerSel.id, b.dataset.reason);
+      $('reportBox').hidden = true;
+    })
+  );
+}
+
 function chat(msg) {
   if (!E) return;
+  // Mensajes de jugadores silenciados, y mensajes escritos en el modo solo frases
+  const own = G.player && msg.id === G.player.id;
+  if ((msg.kind === 'player' || msg.kind === 'party') && !own) {
+    if (mutedNames.has(msg.name)) return;
+    if (safeChat && !msg.phrase) return;
+  }
   const line = document.createElement('p');
   if (msg.kind === 'party') {
     line.className = 'chat-party';
@@ -877,7 +955,10 @@ function updateUI() {
     tBar.hidden = false;
     bar(E.tHp, E.tHpT, ply.hp, ply.stats.maxHp);
     $('btnInvite').hidden = !!inParty || !!(p.party && p.party.leader !== p.id);
-    $('tActions').hidden = $('btnInvite').hidden;
+    $('tActions').hidden = false;
+    const muted = mutedNames.has(ply.name);
+    if ($('btnMute').textContent !== (muted ? 'Quitar silencio' : 'Silenciar')) $('btnMute').textContent = muted ? 'Quitar silencio' : 'Silenciar';
+    $('btnMute').classList.toggle('on', muted);
   } else if (npc) {
     // NPC seleccionado: nombre y oficio, sin barra de vida
     E.tFrame.hidden = false;

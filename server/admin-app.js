@@ -184,6 +184,8 @@
     const now = Date.now();
     for (const p of list) {
       const pct = Math.max(0, Math.min(100, (p.hp / p.maxHp) * 100));
+      const mute = el('button', null, p.muted ? `Quitar silencio (${Math.ceil((p.muted - now) / 60000)} min)` : 'Silenciar 30 min');
+      mute.addEventListener('click', () => act('mute', { account: p.account, minutes: p.muted ? 0 : 30 }, mute));
       const kick = el('button', { class: 'danger' }, 'Desconectar');
       kick.addEventListener('click', () => {
         if (confirm(`¿Desconectar a ${p.name} (cuenta ${p.account})?`)) act('kick', { id: p.id }, kick);
@@ -201,7 +203,7 @@
           el('td', { class: 'num' }, p.since ? fmtDur((now - p.since) / 1000) : '–'),
           el('td', { class: 'num' }, p.rtt == null ? '–' : `${p.rtt} ms`),
           el('td', { class: 'num' }, p.ip),
-          el('td', null, kick)
+          el('td', null, mute, ' ', kick)
         )
       );
     }
@@ -236,11 +238,34 @@
       $('tMobsS').textContent = `de ${s.mobs.total} en el mundo`;
       drawChart(s.history, s.now);
       renderPlayers(s.list);
+      renderReports(s.reports || []);
     } catch (e) {
       if (!token) return;
       online = false;
       setStatus('off', 'Sin respuesta');
       $('updated').textContent = e.message.slice(0, 60);
+    }
+  }
+
+  // ---------- Reportes de jugadores ----------
+
+  const REASON = { insultos: 'Insultos', datos: 'Pidió datos personales', molesta: 'Molesta', otro: 'Otra cosa' };
+  let reportsKey = '';
+  function renderReports(list) {
+    const key = list.map((r) => r.at).join(',');
+    if (key === reportsKey) return;
+    reportsKey = key;
+    $('repCount').textContent = `· ${list.length}`;
+    const body = $('repBody');
+    body.replaceChildren();
+    if (!list.length) body.append(el('tr', null, el('td', { colSpan: 5, class: 'empty' }, 'Sin reportes. ¡Bien!')));
+    for (const r of list) {
+      const msgs = el('td', { class: 'msgs' });
+      for (const h of r.history.slice(-6)) msgs.append(el('div', null, el('span', { class: 't' }, `${fmtTime(h.at)} `), h.text));
+      if (!r.history.length) msgs.append(el('span', { class: 't' }, '(no había escrito nada)'));
+      const mute = el('button', null, 'Silenciar 1 día');
+      mute.addEventListener('click', () => act('mute', { account: r.account, minutes: 1440 }, mute));
+      body.append(el('tr', null, el('td', null, fmtDate(r.at)), el('td', null, el('b', null, r.name), ` (${r.account})`), el('td', null, REASON[r.reason] || r.reason, el('br'), el('span', { class: 't' }, `por ${r.fromName}`)), msgs, el('td', null, mute)));
     }
   }
 

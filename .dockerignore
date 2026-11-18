@@ -6,6 +6,7 @@
 !server/admin.js
 !server/admin.html
 !server/admin-app.js
+!server/chatfilter.js
 !juego/src/data.js
 !juego/src/terrain.js
 !juego/src/sim.js

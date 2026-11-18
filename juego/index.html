@@ -448,7 +448,22 @@
   .mini:hover { border-color: var(--gold); }
   .tinfo { width: 26px; height: 26px; font: italic 700 14px Georgia, serif; color: var(--gold); margin-left: auto; }
   .tinfo + .tclose { margin-left: 4px; }
-  .tf-actions { display: flex; gap: 6px; }
+  .tf-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tf-actions button:not(.buy) { padding: 6px 8px; font-size: 12px; border: 1px solid var(--edge-soft); border-radius: 3px; background: #1a1d22; color: var(--parch); }
+  .tf-actions button.on { border-color: #ff6b5a; color: #ffb3aa; }
+  .tf-report { display: grid; gap: 4px; margin-top: 6px; }
+  .tf-report small { color: var(--muted); }
+  .tf-report button { padding: 6px 8px; font-size: 12px; text-align: left; border: 1px solid var(--edge-soft); border-radius: 3px; background: #1a1d22; color: var(--parch); }
+  .chat-row { display: flex; gap: 6px; }
+  .chat-row #chatInput { flex: 1; min-width: 0; }
+  #btnPhrases { padding: 0 8px; font-size: 16px; border: 1px solid var(--edge-soft); border-radius: 2px; background: rgba(0,0,0,.55); }
+  #phrasePanel { position: absolute; left: 0; bottom: calc(100% + 6px); width: 100%; padding: 8px; background: var(--panel-solid); border: 1px solid var(--edge); border-radius: 3px; display: grid; gap: 6px; z-index: 7; font-size: 12px; color: var(--muted); }
+  #phrasePanel .ph-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+  #phrasePanel .ph-list button { padding: 6px; font-size: 13px; text-align: left; border: 1px solid var(--edge-soft); border-radius: 3px; background: #1a1d22; color: var(--parch); }
+  #phrasePanel .ph-list button:hover { border-color: var(--gold); }
+  #phrasePanel label { display: flex; gap: 6px; align-items: center; }
+  body.safe-chat #chatInput { display: none !important; }
+  body.safe-chat .chat-row::before { content: 'Chat: solo frases rápidas →'; flex: 1; color: var(--muted); font-size: 12px; align-self: center; }
   .tf-actions .buy { flex: 1; padding: 6px 8px; font-size: 13px; }
   .target-frame[data-lv="player"] { border-color: #7fb6ff; }
   .target-frame[data-lv="player"] .lvl { color: #7fb6ff; border-color: #7fb6ff; }
@@ -596,7 +611,14 @@
     <div class="tf-head"><span class="lvl" id="tLvl"></span><span id="tName"></span><button class="x tinfo" id="tInfo" title="Botín posible (Shift + clic)" aria-label="Ver botín posible">i</button><button class="x tclose" id="tClose" aria-label="Soltar objetivo">✕</button></div>
     <div class="tf-title" id="tTitle" hidden></div>
     <div class="bar hp"><i id="tHpFill"></i><span id="tHpTxt"></span></div>
-    <div class="tf-actions" id="tActions" hidden><button type="button" class="buy" id="btnInvite">Invitar al grupo</button></div>
+    <div class="tf-actions" id="tActions" hidden><button type="button" class="buy" id="btnInvite">Invitar al grupo</button><button type="button" id="btnMute" title="No ver sus mensajes">Silenciar</button><button type="button" id="btnReport" title="Avisar a un adulto">Reportar</button></div>
+    <div class="tf-report" id="reportBox" hidden>
+      <small>¿Qué pasó?</small>
+      <button type="button" data-reason="insultos">Me insultó</button>
+      <button type="button" data-reason="datos">Me pidió datos personales</button>
+      <button type="button" data-reason="molesta">Me molesta</button>
+      <button type="button" data-reason="otro">Otra cosa</button>
+    </div>
   </section>
 
   <section class="frame mapbox" aria-label="Mapa">
@@ -612,7 +634,15 @@
 
   <section class="frame" id="log">
     <div id="logLines" aria-live="polite"></div>
-    <input id="chatInput" maxlength="160" placeholder="Enter para hablar · #texto para el grupo · /invitar Nombre" autocomplete="off" spellcheck="false" enterkeyhint="send">
+    <div class="chat-row">
+      <input id="chatInput" maxlength="160" placeholder="Enter para hablar · #texto para el grupo · /invitar Nombre" autocomplete="off" spellcheck="false" enterkeyhint="send">
+      <button type="button" id="btnPhrases" title="Frases rápidas" aria-label="Frases rápidas">💬</button>
+    </div>
+    <div id="phrasePanel" hidden>
+      <div class="ph-list" id="phraseList"></div>
+      <label><input type="checkbox" id="phraseParty"> Enviar solo a mi grupo</label>
+      <label><input type="checkbox" id="safeChat"> Modo solo frases rápidas (no se escribe ni se ven mensajes escritos)</label>
+    </div>
   </section>
   <nav id="hotbar" aria-label="Habilidades"></nav>
   <div class="menu-btns">

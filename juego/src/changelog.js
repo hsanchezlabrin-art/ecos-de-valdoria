@@ -8,6 +8,19 @@
 })(function () {
   return [
     {
+      version: '0.12.0',
+      date: '2026-11-18',
+      title: 'Chat seguro para niños',
+      items: [
+        'Filtro de palabras: los insultos y palabrotas se tapan con estrellas, aunque se escriban con trucos.',
+        'Datos personales protegidos: los mensajes con teléfonos, direcciones, correos, enlaces, redes sociales o contraseñas no se envían.',
+        'Frases rápidas (botón 💬): saluda, pide grupo, ayuda o da las gracias sin escribir.',
+        'Modo solo frases rápidas: oculta los mensajes escritos por otros jugadores (ideal para los más pequeños).',
+        'Silenciar y reportar: toca a otro jugador para dejar de ver sus mensajes o avisar a un adulto.',
+        'Quien acumula avisos queda 5 minutos sin chat libre (las frases rápidas siguen funcionando).',
+      ],
+    },
+    {
       version: '0.11.0',
       date: '2026-11-18',
       title: 'Héroes de bloques y equipo que se nota',

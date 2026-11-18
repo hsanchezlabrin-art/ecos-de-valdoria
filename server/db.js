@@ -201,6 +201,15 @@ function migrateChars(fn) {
   return n;
 }
 
+// Silenciar una cuenta hasta cierta hora (0 = quitar). Se guarda en el disco.
+function setMute(user, until) {
+  const key = String(user || '').toLowerCase();
+  if (!own(db.accounts, key)) return false;
+  db.accounts[key].mutedUntil = until || 0;
+  persist();
+  return true;
+}
+
 // ---------- Administración ----------
 
 // Cuentas para el panel (sin datos de contraseña ni sesiones)
@@ -230,4 +239,4 @@ function deleteAccount(user) {
   return { ok: true };
 }
 
-module.exports = { register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, listAccounts, deleteAccount, migrateChars, flush: () => persist(true), MAX_CHARS, DIR };
+module.exports = { register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, listAccounts, deleteAccount, migrateChars, setMute, flush: () => persist(true), MAX_CHARS, DIR };

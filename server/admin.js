@@ -37,7 +37,7 @@ const sha = (s) => crypto.createHash('sha256').update(String(s)).digest();
 const dayKey = (t) => new Date(t).toLocaleDateString('es-CL', { timeZone: TZ });
 
 function createAdmin(ctx) {
-  const { world, clients, DB, Terrain, VERSION, started, send, broadcastChat, savePlayer } = ctx;
+  const { world, clients, DB, Terrain, VERSION, started, send, broadcastChat, savePlayer, reports = [] } = ctx;
   const PASS = process.env.ADMIN_PASSWORD || '';
   const enabled = PASS.length >= 8;
   const tokens = new Map(); // hash del token → vence
@@ -141,6 +141,7 @@ function createAdmin(ctx) {
         since: c.joinedAt || null,
         rtt: c.rtt == null ? null : c.rtt,
         ip: c.ip || '?',
+        muted: c.acc && c.acc.mutedUntil > Date.now() ? c.acc.mutedUntil : 0,
       });
     }
     out.sort((a, b) => a.name.localeCompare(b.name));
@@ -169,6 +170,7 @@ function createAdmin(ctx) {
       loopMs: metrics.loopMs,
       loopMaxMs: metrics.loopMaxMs,
       list: playersList(),
+      reports: reports.slice(0, 50),
       history,
       restarting,
     };
@@ -289,6 +291,20 @@ function createAdmin(ctx) {
         kick(c, typeof body.msg === 'string' && body.msg.trim() ? body.msg.trim().slice(0, 160) : 'Un administrador te desconectó del servidor.');
         console.log(`[admin] desconectado ${name}`);
         return reply(res, 200, { ok: true, msg: `${name} fue desconectado.` });
+      }
+      case 'mute': {
+        // Silenciar (minutos > 0) o quitar el silencio (minutos = 0) a una cuenta
+        const user = String(body.account || '').toLowerCase();
+        const minutes = Math.max(0, Math.min(60 * 24 * 7, Math.floor(+body.minutes) || 0));
+        const until = minutes ? Date.now() + minutes * 60000 : 0;
+        if (!DB.setMute(user, until)) return reply(res, 404, { error: 'Esa cuenta no existe.' });
+        for (const c of clients) {
+          if (!c.acc || c.acc.user.toLowerCase() !== user) continue;
+          c.acc.mutedUntil = until;
+          if (c.p) send(c, { t: 'e', e: [{ type: 'log', to: c.p.id, text: minutes ? `Un administrador pausó tu chat libre ${minutes} min. Puedes usar las frases rápidas.` : 'Ya puedes volver a usar el chat libre.', cls: 'warn' }] });
+        }
+        console.log(`[admin] ${minutes ? `silenciado ${minutes} min` : 'sin silencio'}: ${user}`);
+        return reply(res, 200, { ok: true, msg: minutes ? `Cuenta «${user}» silenciada ${minutes} min.` : `Cuenta «${user}» puede volver a hablar.` });
       }
       case 'kickAll': {
         let n = 0;

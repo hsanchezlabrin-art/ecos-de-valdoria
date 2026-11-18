@@ -728,6 +728,22 @@
     return kind === 'w' ? weaponFor(cls, grade) : armorFor(cls, grade);
   };
 
+  // Frases rápidas del chat seguro: siempre se pueden enviar, sin escribir
+  const PHRASES = [
+    { id: 'hola', text: '¡Hola! 👋' },
+    { id: 'grupo', text: '¿Hacemos grupo?' },
+    { id: 'ayuda', text: '¡Ayuda, por favor!' },
+    { id: 'sigueme', text: '¡Sígueme!' },
+    { id: 'espera', text: 'Espera un momento ⏳' },
+    { id: 'jefe', text: '¡Vamos por el jefe!' },
+    { id: 'curame', text: '¿Me curas? ❤️' },
+    { id: 'gracias', text: '¡Gracias! 😊' },
+    { id: 'bien', text: '¡Buen trabajo! ⭐' },
+    { id: 'si', text: 'Sí 👍' },
+    { id: 'no', text: 'No, gracias' },
+    { id: 'adios', text: '¡Adiós, hasta pronto!' },
+  ];
+
   const GEM_MULT = 1.25;
   // Tiendas: lista de { id, price, currency } (currency: objeto con el que se paga; sin él, oro)
   const gearOf = (cls, grades) => grades.flatMap((g) => [weaponFor(cls, g), armorFor(cls, g)]);
@@ -883,7 +899,7 @@
     raceName, className, skillsFor, passiveFor, skillLock, lookFor, playerBaseStats, mobStats,
     ITEMS, WEAPON_TIERS, ARMOR_TIERS, weaponFor, armorFor, startGear, equipProblem,
     ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT,
-    ARENAS, SHOPS, shopItems, MOB_H, mobHeight,
+    ARENAS, SHOPS, shopItems, MOB_H, mobHeight, PHRASES,
     PETS, isPet, PET_LVL, MOUNT_LVL, GLIDER_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName,
     OLD_CLASS_MAP, migrateCharacter,
   };

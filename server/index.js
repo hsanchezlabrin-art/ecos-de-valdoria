@@ -16,6 +16,7 @@ const path = require('path');
 const { WebSocketServer } = require('ws');
 const DB = require('./db.js');
 const { createAdmin } = require('./admin.js');
+const { filterChat } = require('./chatfilter.js');
 
 const SRC = process.env.GAME_SRC || path.join(__dirname, '..', 'juego', 'src');
 const Data = require(path.join(SRC, 'data.js'));
@@ -294,6 +295,88 @@ function onAccount(c, msg) {
   }
 }
 
+// ---------- Chat seguro ----------
+
+const warn = (c, p, text) => send(c, { t: 'e', e: [{ type: 'log', to: p.id, text, cls: 'warn' }] });
+const reports = []; // reportes de jugadores (los ve el panel de control)
+
+function onChat(c, p, msg) {
+  const nowMs = Date.now();
+  if (nowMs - (c.chatAt || 0) < 700) return;
+  c.chatAt = nowMs;
+  const muted = c.acc && c.acc.mutedUntil > nowMs;
+  if (muted) return warn(c, p, `Estás silenciado ${Math.ceil((c.acc.mutedUntil - nowMs) / 60000)} min. Puedes usar las frases rápidas.`);
+  let text;
+  let phrase = false;
+  let toParty = false;
+  if (typeof msg.phrase === 'string') {
+    // Frase rápida: texto fijo, siempre seguro
+    const ph = Data.PHRASES.find((x) => x.id === msg.phrase);
+    if (!ph) return;
+    text = ph.text;
+    phrase = true;
+    toParty = !!msg.party && !!p.party;
+  } else {
+    let raw = cleanText(msg.text);
+    if (!raw) return;
+    if (raw.startsWith('#') && p.party) {
+      toParty = true;
+      raw = raw.slice(1).trim();
+    }
+    // Mismo mensaje repetido: no se reenvía
+    if (raw === c.lastChat && nowMs - (c.lastChatAt || 0) < 20000) return warn(c, p, 'No repitas el mismo mensaje.');
+    c.lastChat = raw;
+    c.lastChatAt = nowMs;
+    const f = filterChat(raw);
+    if (!f.ok) {
+      if (f.reason === 'personal') {
+        strike(c, p);
+        return warn(c, p, 'Por tu seguridad, no compartas datos personales: teléfono, dirección, correo, redes sociales ni contraseñas. El mensaje no se envió.');
+      }
+      return;
+    }
+    if (f.censored) strike(c, p);
+    text = f.text;
+  }
+  // Historial corto de cada jugador (para los reportes)
+  c.history = [...(c.history || []), { at: nowMs, text }].slice(-12);
+  const out = { t: 'chat', kind: toParty ? 'party' : 'player', id: p.id, name: p.name, cls: p.cls, text, phrase };
+  if (toParty) {
+    const party = world.parties.get(p.party);
+    for (const o of clients) if (o.p && party && party.members.includes(o.p.id)) send(o, out);
+    return;
+  }
+  broadcastChat(out);
+}
+
+// Avisos acumulados: 3 en 10 minutos = 5 minutos sin chat libre
+function strike(c, p) {
+  const nowMs = Date.now();
+  c.strikes = (c.strikes || []).filter((t) => nowMs - t < 600000);
+  c.strikes.push(nowMs);
+  if (c.strikes.length >= 3 && c.acc) {
+    c.strikes = [];
+    const until = nowMs + 5 * 60000;
+    c.acc.mutedUntil = until;
+    DB.setMute(c.acc.user, until);
+    warn(c, p, 'Has recibido varios avisos: tu chat libre queda en pausa 5 minutos. Puedes seguir usando las frases rápidas.');
+    console.log(`[chat] silenciado 5 min por avisos: ${p.name} (${c.acc.user})`);
+  }
+}
+
+function onReport(c, p, msg) {
+  const nowMs = Date.now();
+  if (nowMs - (c.reportAt || 0) < 30000) return warn(c, p, 'Espera un poco antes de enviar otro reporte.');
+  const target = [...clients].find((o) => o.p && o.p.id === msg.id);
+  if (!target || target === c) return;
+  c.reportAt = nowMs;
+  const reason = ['insultos', 'datos', 'molesta', 'otro'].includes(msg.reason) ? msg.reason : 'otro';
+  reports.unshift({ at: nowMs, from: c.acc ? c.acc.user : '?', fromName: p.name, account: target.acc ? target.acc.user : '?', name: target.p.name, reason, history: target.history || [] });
+  reports.length = Math.min(reports.length, 100);
+  console.warn(`[reporte] ${p.name} reportó a ${target.p.name} (${reason})`);
+  send(c, { t: 'e', e: [{ type: 'log', to: p.id, text: `Gracias. Un adulto revisará el reporte sobre ${target.p.name}. También puedes silenciarlo para no ver sus mensajes.`, cls: 'sys' }] });
+}
+
 // ---------- Comandos de juego ----------
 
 function onCommand(c, msg) {
@@ -364,26 +447,16 @@ function onCommand(c, msg) {
     case 'partyKick':
       if (typeof msg.id === 'string') C.partyKick(world, p, msg.id);
       return;
-    case 'chat': {
-      const text = cleanText(msg.text);
-      const nowMs = Date.now();
-      if (!text || nowMs - (c.chatAt || 0) < 700) return;
-      c.chatAt = nowMs;
-      // Chat de grupo: empieza con "#"
-      if (text.startsWith('#') && p.party) {
-        const party = world.parties.get(p.party);
-        const out = { t: 'chat', kind: 'party', id: p.id, name: p.name, cls: p.cls, text: text.slice(1).trim() };
-        for (const o of clients) if (o.p && party && party.members.includes(o.p.id)) send(o, out);
-        return;
-      }
-      return broadcastChat({ t: 'chat', kind: 'player', id: p.id, name: p.name, cls: p.cls, text });
-    }
+    case 'chat':
+      return onChat(c, p, msg);
+    case 'report':
+      return onReport(c, p, msg);
   }
 }
 
 // ---------- Red ----------
 
-const admin = createAdmin({ world, clients, DB, Terrain, VERSION, started, send, broadcastChat, savePlayer });
+const admin = createAdmin({ world, clients, DB, Terrain, VERSION, started, send, broadcastChat, savePlayer, reports });
 
 const server = http.createServer((req, res) => {
   if (admin.handle(req, res)) return;

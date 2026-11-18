@@ -589,6 +589,8 @@
   const buyItem = (id, q) => send({ t: 'buy', id, q });
   const respawnPlayer = () => send({ t: 'respawn' });
   const sendChat = (text) => send({ t: 'chat', text });
+  const sendPhrase = (phrase, party) => send({ t: 'chat', phrase, party: !!party });
+  const report = (id, reason) => send({ t: 'report', id, reason });
   const classQuest = (action, branch) => send({ t: 'classQuest', action, branch });
   const toggleGems = () => P && send({ t: 'gems', on: !P.gemsOn });
   const hatch = (type) => send({ t: 'hatch', type });
@@ -1624,7 +1626,7 @@
   V.Game = {
     PROTOCOL, connect, register, login, resume, logout, createChar, deleteChar, play,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
-    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat, classQuest, toggleGems, hatch, toggleMount,
+    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat, sendPhrase, report, classQuest, toggleGems, hatch, toggleMount,
     invite, inviteByName, answerInvite, leaveParty, kickFromParty,
     get online() {
       return true;

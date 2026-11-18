@@ -163,6 +163,21 @@ async function main() {
     await wait(300);
     ok(b.chats.some((m) => m.kind === 'player' && m.text.startsWith('Hola')), 'Beto recibe el chat de Ana');
 
+    // Chat seguro: insultos tapados, datos personales bloqueados, frases rápidas y reportes
+    await wait(800);
+    a.send({ t: 'chat', text: 'eres un idiota' });
+    await wait(900);
+    a.send({ t: 'chat', text: 'mi whatsapp es 987654321' });
+    await wait(900);
+    a.send({ t: 'chat', phrase: 'gracias' });
+    await wait(400);
+    ok(b.chats.some((m) => m.text === 'eres un ★★★★★★') && !b.chats.some((m) => /idiota/.test(m.text)), 'los insultos llegan tapados con estrellas');
+    ok(!b.chats.some((m) => /987654321|whatsapp/.test(m.text)) && a.events.some((e) => e.type === 'log' && /datos personales/.test(e.text)), 'los datos personales no se envían y se avisa a quien los escribió');
+    ok(b.chats.some((m) => m.phrase && m.text === '¡Gracias! 😊'), 'las frases rápidas llegan marcadas como frase');
+    b.send({ t: 'report', id: a.id, reason: 'insultos' });
+    await wait(300);
+    ok(b.events.some((e) => e.type === 'log' && /Un adulto revisará/.test(e.text)), 'se puede reportar a un jugador');
+
     // Grupo
     a.send({ t: 'invite', id: b.id });
     await wait(300);
@@ -241,6 +256,9 @@ async function main() {
     const kicked = await a.next('kicked');
     await wait(300);
     ok(kres.ok && kicked.msg && a.closed, 'el panel desconecta a un jugador');
+    ok(st.reports && st.reports.length === 1 && st.reports[0].name === 'Selene' && st.reports[0].history.length >= 2, 'el panel muestra el reporte con los últimos mensajes');
+    const mres = await (await post('mute', { account: 'ana_01', minutes: 10 }, tok)).json();
+    ok(mres.ok, 'el panel puede silenciar una cuenta');
     for (let i = 0; i < 5; i++) await post('login', { pass: 'otra-mala' });
     ok((await post('login', { pass: 'clave-de-prueba-admin' })).status === 429, 'tras 5 intentos fallidos se bloquea el acceso');
     await wait(400);

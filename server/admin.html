@@ -61,6 +61,8 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { color: var(--dim); font-weight: 500; font-size: 12px; }
 td.num { font-variant-numeric: tabular-nums; }
+td.msgs { white-space: normal; min-width: 220px; font-size: 12px; }
+td .t { color: var(--dim); }
 tr:last-child td { border-bottom: 0; }
 .empty { color: var(--dim); padding: 14px 4px; }
 .cls { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 12px; background: var(--panel2); }
@@ -159,6 +161,16 @@ tr:last-child td { border-bottom: 0; }
         <table>
           <thead><tr><th>Personaje</th><th>Cuenta</th><th>Clase</th><th>Nivel</th><th>Vida</th><th>Zona</th><th>Conectado</th><th>Ping</th><th>IP</th><th></th></tr></thead>
           <tbody id="plBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Reportes de jugadores <span class="n" id="repCount"></span></h2>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Cuándo</th><th>Reportado</th><th>Motivo</th><th>Últimos mensajes</th><th></th></tr></thead>
+          <tbody id="repBody"></tbody>
         </table>
       </div>
     </section>
