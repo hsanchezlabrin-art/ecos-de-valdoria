@@ -124,6 +124,9 @@
   .slot .glyph { font-size: 25px; line-height: 1; color: var(--parch); text-shadow: 0 0 10px rgba(217,181,106,.35); }
   .slot.pot.pocion_vida .glyph { color: #ff6b5f; }
   .slot.pot.pocion_mana .glyph { color: #73a2ff; }
+  .slot.gem .glyph { color: #8fe8ff; }
+  .slot.gem.on { border-color: #40e0ff; box-shadow: 0 0 10px rgba(64,224,255,.55), inset 0 0 10px rgba(64,224,255,.25); }
+  #buffs .debuff { color: #ffb3aa; background: #4a1a14; padding: 0 4px; border-radius: 2px; }
   .slot .key { position: absolute; top: 2px; left: 4px; font-size: 11px; color: var(--muted); font-weight: 700; }
   .slot .qty { position: absolute; bottom: 2px; right: 4px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
   .slot .cd { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; font-size: 17px; background: conic-gradient(rgba(0,0,0,.7) calc(var(--p) * 360deg), transparent 0); border-radius: 2px; pointer-events: none; }
@@ -513,6 +516,7 @@
   body.touch #hotbar .slot:nth-child(6) { left: 72px; top: 117px; }
   body.touch #hotbar .slot:nth-child(7) { left: 117px; top: 72px; }
   body.touch #hotbar .slot:nth-child(8) { left: 175px; top: 48px; }
+  body.touch #hotbar .slot:nth-child(9) { left: 236px; top: 30px; }
   body.touch .menu-btns button { height: 46px; }
   body.touch #btnHelp { display: none; }
 

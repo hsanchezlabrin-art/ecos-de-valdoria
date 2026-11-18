@@ -8,6 +8,21 @@
 })(function () {
   return [
     {
+      version: '0.8.0',
+      date: '2026-11-18',
+      title: 'Robots, clones y Gemas de Poder',
+      items: [
+        'Gemas de Poder: actívalas con la tecla 9 y cada ataque hace un 25% más de daño. Tu arma brilla con luz neón. Empiezas con 20, se compran al mercader y las sueltan los monstruos.',
+        'El Mecha-Gólem es un robot de verdad: camina, pelea y los monstruos lo atacan a él. En el nivel 40 el Gnomo se sube dentro y dispara láseres.',
+        'Las torretas del Gnomo son objetos en el mundo, y el Inventor puede tener dos a la vez.',
+        'El Tornado de Hojas Maestro crea 2 clones de viento que giran contigo y golpean.',
+        'La cúpula de la Fortaleza Cubo protege de verdad: dentro se recibe la mitad de daño.',
+        'Polimorfia: ahora puede salir oveja o pollo. El halcón del Elfo vuela hasta el enemigo marcado.',
+        'Nuevos efectos: alas de luz del Paladín, escudo de brasas, piel de corteza, viento y lluvia de bellotas.',
+        'Lobos, orcos, gólems, sapos y Tharmok pueden dejarte lento, envenenado o quemado. El Destello Purificador de la Hada-Gato lo quita.',
+      ],
+    },
+    {
       version: '0.7.0',
       date: '2026-11-18',
       title: 'Cinco razas y cambios de clase',

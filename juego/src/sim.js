@@ -14,7 +14,7 @@
   }
 })(function (Data, Terrain) {
   const { ARCHETYPES, isArchetype, MOBS, ITEMS, ZONES, NPCS, MAX_LEVEL, STAGES, GRADES, ARMOR_TYPES, xpToNext, mobStats, playerBaseStats, sellPrice, resolveDrop, shopFor, CRIT_MULT, MOVE_SPEED } = Data;
-  const { skillsFor, passiveFor, equipProblem, startGear, questFor, weaponFor, className, raceName } = Data;
+  const { skillsFor, passiveFor, equipProblem, startGear, questFor, weaponFor, className, raceName, GEM_MULT } = Data;
   const { heightAt, inVillage, zoneAt, WORLD_LIMIT, collide, waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y } = Terrain;
 
   const SPEED = MOVE_SPEED;
@@ -44,7 +44,7 @@
   // ---------- Mundo y eventos ----------
 
   function createWorld() {
-    return { time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map() };
+    return { time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map(), summons: [] };
   }
   const emit = (w, ev) => w.events.push(ev);
   function drainEvents(w) {
@@ -75,6 +75,7 @@
       inv: [
         { id: 'pocion_vida', qty: 4 },
         { id: 'pocion_mana', qty: magic ? 4 : 2 },
+        { id: 'gema_poder', qty: 20 },
       ],
       equip: startGear(id),
       pos: { ...SPAWN },
@@ -134,8 +135,9 @@
       basics: 0,
       frenzy: 0,
       frenzyT: 0,
-      turrets: [],
       aura: null,
+      debuffs: {},
+      gemsOn: !!data.gemsOn,
       hp: 0,
       mp: 0,
     };
@@ -178,7 +180,7 @@
     partyLeave(w, p, true);
     w.players.delete(id);
     for (const m of w.mobs) if (m.aggro === p) dropAggro(m);
-    for (const t of p.turrets) t.alive = false;
+    for (const su of w.summons) if (su.owner === p) su.dead = true;
   }
 
   function serialize(p) {
@@ -194,6 +196,7 @@
       stage: p.stage,
       branch: p.branch,
       quest: p.quest ? { ...p.quest } : null,
+      gemsOn: !!p.gemsOn,
       inv: p.inv.map((s) => ({ ...s })),
       equip: { ...p.equip },
       pos: alive ? { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2) } : { ...SPAWN },
@@ -243,7 +246,7 @@
   };
   const playerAtk = (p) => p.stats.atk * (1 + buffSum(p, 'atk'));
   const playerCrit = (p) => p.stats.crit + buffSum(p, 'crit');
-  const moveSpeed = (p) => p.stats.speed * (1 + buffSum(p, 'speed'));
+  const moveSpeed = (p) => p.stats.speed * (1 + buffSum(p, 'speed')) * (p.debuffs.slow ? 0.6 : 1);
   const attackInterval = (p) => p.stats.atkSpeed / (1 + buffSum(p, 'haste') + p.frenzy * (p.passive.frenzy || 0));
   const reachTo = (p, m) => p.stats.range + bodyR(m);
 
@@ -459,7 +462,7 @@
     }
     // Si estaba volviendo a su sitio y lo atacan, vuelve a pelear (sin haberse curado)
     if (m.state === 'return') m.state = 'idle';
-    if (!m.aggro || m.aggro.dead) m.aggro = p;
+    if (!m.aggro || m.aggro.dead) m.aggro = opts.aggroTo || p;
     if (m.hp <= 0) killMob(w, p, m);
   }
 
@@ -511,10 +514,11 @@
       q.gold += gold;
       log(w, q, `${m.def.name} ha caído. +${q.lastXp || 0} XP · +${gold} oro`, 'sys');
       if (q === p) float(w, m, `+${q.lastXp || 0} XP`, 'xp', 0.6);
-      for (const [raw, chance] of m.def.drops) {
+      for (const [raw, chance, range] of m.def.drops) {
         if (Math.random() >= chance) continue;
         const id = resolveDrop(raw, q.cls);
-        if (addItem(q, id, 1)) emit(w, { type: 'loot', to: q.id, id, qty: 1, verb: 'Obtienes' });
+        const qty = range ? randInt(range[0], range[1]) : 1;
+        if (addItem(q, id, qty)) emit(w, { type: 'loot', to: q.id, id, qty, verb: 'Obtienes' });
         else log(w, q, 'Tu inventario está lleno.', 'warn');
       }
       questProgress(w, q, m);
@@ -524,6 +528,7 @@
   }
 
   function mobHitsPlayer(w, m, p) {
+    if (p.kind === 'summon') return hitSummon(w, m, p);
     if (p.dead || p.leap) return;
     // Esquivar (armadura ligera, Paso Veloz)
     if (Math.random() < Math.min(0.6, p.stats.evade + buffSum(p, 'evade'))) {
@@ -559,7 +564,185 @@
     p.hp -= dmg;
     float(w, p, `-${dmg}`, 'hurt');
     if (!p.target) p.target = m;
-    if (p.hp <= 0) killPlayer(w, p, m.def.name);
+    if (p.hp <= 0) return killPlayer(w, p, m.def.name);
+    applyOnHit(w, m, p);
+  }
+
+  // Estados que causan algunos monstruos al golpear: veneno, quemadura y lentitud
+  function applyOnHit(w, m, p) {
+    const o = m.def.onHit;
+    if (!o || Math.random() >= o.chance) return;
+    if (o.poison) {
+      p.debuffs.poison = { t: o.poison.dur, perSec: m.atk * o.poison.pct, tick: 1, src: m.def.name };
+      float(w, p, 'Envenenado', 'poison', 0.3);
+    }
+    if (o.burn) {
+      p.debuffs.burn = { t: o.burn.dur, perSec: m.atk * o.burn.pct, tick: 1, src: m.def.name };
+      float(w, p, 'Quemado', 'burn', 0.3);
+    }
+    if (o.slow && !Object.values(p.buffs).some((b) => b.ccImmune)) {
+      p.debuffs.slow = { t: o.slow };
+      float(w, p, 'Lento', 'stun', 0.5);
+    }
+  }
+
+  function updateDebuffs(w, p, dt) {
+    for (const k in p.debuffs) {
+      const d = p.debuffs[k];
+      d.t -= dt;
+      if (d.perSec && (d.tick -= dt) <= 0) {
+        d.tick += 1;
+        const dmg = Math.max(1, Math.round(d.perSec));
+        p.hp -= dmg;
+        float(w, p, `-${dmg}`, k === 'burn' ? 'burn' : 'poison');
+        if (p.hp <= 0) return killPlayer(w, p, d.src || 'el veneno');
+      }
+      if (d.t <= 0) delete p.debuffs[k];
+    }
+  }
+
+  // ---------- Invocaciones: torretas, Mecha-Gólem y clones de viento ----------
+
+  function spawnSummon(w, p, type, o) {
+    const su = {
+      id: `s${w.nextId++}`,
+      kind: 'summon',
+      type,
+      owner: p,
+      pos: { x: o.at.x, y: groundY(o.at.x, o.at.z), z: o.at.z },
+      facing: p.facing,
+      height: type === 'mecha' ? 4.2 : type === 'turret' ? 1.8 : 2.5,
+      def: { scale: type === 'mecha' ? 1.6 : 1, name: o.name },
+      maxHp: Math.round(p.stats.maxHp * (type === 'mecha' ? 1.5 : 0.5)),
+      armor: p.stats.def * 1.5,
+      dead: false,
+      moving: false,
+      life: o.dur,
+      every: o.every || 1,
+      atkT: o.every || 1,
+      mult: o.mult || 0,
+      reach: o.reach || 12,
+      ride: !!o.ride,
+      side: o.side || 0,
+      taunt: !!o.taunt,
+      slide: null,
+    };
+    su.hp = su.maxHp;
+    w.summons.push(su);
+    return su;
+  }
+
+  const aggroAlive = (w, a) => (a.kind === 'summon' ? !a.dead && w.summons.includes(a) : !a.dead && w.players.has(a.id));
+
+  function hitSummon(w, m, su) {
+    if (su.dead) return;
+    const r = calcDamage(m.atk, su.armor, 1, 0.05);
+    su.hp -= r.dmg;
+    float(w, su, `-${r.dmg}`, 'hurt');
+    if (su.hp <= 0) killSummon(w, su);
+  }
+
+  function killSummon(w, su) {
+    if (su.dead) return;
+    su.dead = true;
+    if (su.type === 'mecha') ring(w, su.pos, 0xff9a4a, 3, 0.6);
+    // Los monstruos que lo atacaban vuelven contra su dueño
+    for (const m of w.mobs) if (m.aggro === su) m.aggro = w.players.has(su.owner.id) && !su.owner.dead ? su.owner : null;
+  }
+
+  function nearestMob(w, at, r) {
+    let best = null;
+    let bd = r;
+    for (const m of w.mobs) {
+      if (m.dead) continue;
+      const d = d2(m.pos, at);
+      if (d <= bd) {
+        bd = d;
+        best = m;
+      }
+    }
+    return best;
+  }
+
+  // Láser en línea recta desde un punto (Mecha-Gólem Pilotado)
+  function laser(w, p, from, target, length, mult) {
+    const dx = target.pos.x - from.x;
+    const dz = target.pos.z - from.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const dir = { x: dx / len, z: dz / len };
+    emit(w, { type: 'beam', at: { ...from }, from: { x: from.x, y: from.y + 3.2, z: from.z }, to: { x: from.x + dir.x * length, y: from.y + 1.2, z: from.z + dir.z * length }, w: 0.7, color: 0xff5a5a });
+    for (const m of w.mobs) {
+      if (m.dead) continue;
+      const ox = m.pos.x - from.x;
+      const oz = m.pos.z - from.z;
+      const along = ox * dir.x + oz * dir.z;
+      if (along < 0 || along > length || Math.abs(ox * dir.z - oz * dir.x) > 1.2 + bodyR(m)) continue;
+      damageMob(w, p, m, mult);
+    }
+  }
+
+  function updateSummons(w, dt) {
+    for (let i = w.summons.length - 1; i >= 0; i--) {
+      const su = w.summons[i];
+      const p = su.owner;
+      if (!su.dead && (!w.players.has(p.id) || p.dead || (su.life -= dt) <= 0)) killSummon(w, su);
+      if (su.dead) {
+        w.summons.splice(i, 1);
+        continue;
+      }
+      su.moving = false;
+      su.atkT -= dt;
+      if (su.type === 'turret') {
+        if (su.atkT <= 0) {
+          su.atkT = su.every;
+          const m = nearestMob(w, su.pos, su.reach);
+          if (m) spawnProjectile(w, p, 'arcane', m, su.mult, { from: { x: su.pos.x, y: su.pos.y + 1.6, z: su.pos.z } });
+        }
+      } else if (su.type === 'clone') {
+        // Clon de viento: gira al lado de su dueño
+        const a = p.facing + (su.side * Math.PI) / 2;
+        su.pos.x = p.pos.x + Math.sin(a) * 1.8;
+        su.pos.z = p.pos.z + Math.cos(a) * 1.8;
+        su.pos.y = groundY(su.pos.x, su.pos.z);
+        su.facing += dt * 14;
+        su.moving = true;
+      } else if (su.ride) {
+        // Mecha pilotado: va con el jugador y dispara láseres
+        su.pos.x = p.pos.x;
+        su.pos.y = p.pos.y;
+        su.pos.z = p.pos.z;
+        su.facing = p.facing;
+        su.moving = p.moving;
+        if (su.atkT <= 0) {
+          const t = p.target && !p.target.dead && d2(p.target.pos, p.pos) <= su.reach ? p.target : nearestMob(w, p.pos, su.reach);
+          if (t) {
+            su.atkT = su.every;
+            laser(w, p, su.pos, t, su.reach, su.mult);
+          }
+        }
+      } else {
+        // Mecha-Gólem: atrae a los monstruos cercanos, camina hacia ellos y golpea
+        su.tauntT = (su.tauntT || 0) - dt;
+        if (su.tauntT <= 0) {
+          su.tauntT = 1;
+          for (const m of w.mobs) if (!m.dead && m.state !== 'return' && d2(m.pos, su.pos) <= 9) m.aggro = su;
+        }
+        const t = nearestMob(w, su.pos, 16);
+        if (t) {
+          const reach = 2.2 + bodyR(t);
+          if (d2(su.pos, t.pos) > reach) su.moving = stepToward(su, t.pos, 6, dt, reach * 0.9);
+          else {
+            face(su, t.pos.x, t.pos.z, dt);
+            if (su.atkT <= 0) {
+              su.atkT = su.every;
+              emit(w, { type: 'swing', ent: su });
+              ring(w, t.pos, 0xff9a4a, 2, 0.4);
+              damageMob(w, p, t, su.mult, { aggroTo: su });
+            }
+          }
+        } else if (d2(su.pos, p.pos) > 3.5) su.moving = stepToward(su, p.pos, 7, dt, 3);
+      }
+    }
   }
 
   function killPlayer(w, p, cause) {
@@ -571,6 +754,7 @@
     p.shield = 0;
     p.bubble = 0;
     p.buffs = {};
+    p.debuffs = {};
     p.target = null;
     p.leap = null;
     p.diedAt = { x: p.pos.x, z: p.pos.z };
@@ -706,6 +890,29 @@
       emit(w, { type: 'inventory', to: p.id });
       emit(w, { type: 'quest', to: p.id });
     }
+  }
+
+  // ---------- Gemas de Poder ----------
+
+  // Gasta una gema si están activas: devuelve el multiplicador de daño (1 o 1,25)
+  function useGem(w, p) {
+    if (!p.gemsOn) return 1;
+    const i = p.inv.findIndex((x) => x.id === 'gema_poder');
+    if (i < 0) {
+      p.gemsOn = false;
+      log(w, p, 'Te quedaste sin Gemas de Poder. Cómpralas al Mercader Orlen o consíguelas cazando.', 'warn');
+      emit(w, { type: 'inventory', to: p.id });
+      return 1;
+    }
+    removeAt(p, i, 1);
+    emit(w, { type: 'inventory', to: p.id });
+    return GEM_MULT;
+  }
+
+  function setGems(w, p, on) {
+    if (on && countItem(p, 'gema_poder') <= 0) return log(w, p, 'No tienes Gemas de Poder.', 'warn');
+    p.gemsOn = !!on;
+    log(w, p, on ? 'Gemas de Poder activadas: +25% de daño (gasta una por ataque).' : 'Gemas de Poder desactivadas.', 'sys');
   }
 
   // ---------- Comandos del jugador ----------
@@ -867,7 +1074,9 @@
         float(w, p, 'Resonancia', 'mana', 0.4);
       }
     }
-    const s = boost === 1 ? base : { ...base, mult: (base.mult || 0) * boost, tick: base.tick && base.tick * boost };
+    // Gemas de Poder: solo en habilidades que hacen daño
+    const k = boost * (base.mult || base.tick || base.shot ? useGem(w, p) : 1);
+    const s = k === 1 ? base : { ...base, mult: (base.mult || 0) * k, tick: base.tick && base.tick * k, shot: base.shot && base.shot * k, lightning: base.lightning && base.lightning * k };
     p.mp -= cost;
     p.cds[s.id] = s.cd * (1 - Math.min(0.5, buffSum(p, 'cdr')));
     if (pas.cdRefund) for (const k in p.cds) if (k !== s.id && k !== 'pot') p.cds[k] = Math.max(0, p.cds[k] - pas.cdRefund);
@@ -879,6 +1088,7 @@
       p.shieldT = Math.max(p.shieldT, s.dur || 10);
     }
     if (s.selfBuff) addBuff(w, p, `${s.id}_self`, s.name, s.selfBuff);
+    if (s.aura) emit(w, { type: 'aura', ent: p, kind: s.aura, dur: s.auraDur || (s.type === 'pulse' ? s.count * s.every : s.dur) || 4 });
     CAST[s.type](w, p, s, t);
     if (NEEDS_TARGET.includes(s.type) && p.target && s.type !== 'poly') p.autoAttack = true;
   }
@@ -1073,10 +1283,28 @@
           q.shieldT = Math.max(q.shieldT, s.shieldDur || 6);
         }
         if (s.thorns) addBuff(w, q, `${s.id}_thorns`, s.name, { thorns: s.thorns, dur: s.shieldDur || 6 });
-        if (s.cleanse) float(w, q, 'Purificado', 'heal', 0.4);
+        if (s.cleanse) {
+          if (Object.keys(q.debuffs).length) float(w, q, 'Purificado', 'heal', 0.4);
+          q.debuffs = {};
+        }
         ring(w, q.pos, s.shield && !s.amount ? 0xc9b48a : 0x7fe08a, 2.4, 0.7);
       }
-      if (s.shield && s.group) emit(w, { type: 'dome', at: { ...p.pos }, r: s.radius || 9, dur: s.shieldDur || 6 });
+      if (s.dome) {
+        // Cúpula: los aliados dentro reciben menos daño (y se curan en la versión Maestra)
+        const at = { ...p.pos };
+        const r = (s.radius || 9) * 0.75;
+        const dur = s.shieldDur || 6;
+        emit(w, { type: 'dome', at, r: s.radius || 9, dur });
+        for (let k = 0; k <= Math.round(dur / 0.5); k++) {
+          later(w, k * 0.5, () => {
+            if (!w.players.has(p.id)) return;
+            for (const q of alliesNear(w, p, r, at)) {
+              q.buffs.dome = { name: 'Fortaleza Cubo', t: 0.6, dr: s.dome.dr };
+              if (s.dome.heal && k % 2 === 0) healPlayer(w, p, q, q.stats.maxHp * s.dome.heal * p.stats.heal);
+            }
+          });
+        }
+      } else if (s.shield && s.group) emit(w, { type: 'dome', at: { ...p.pos }, r: s.radius || 9, dur: s.shieldDur || 6 });
     },
     bubble(w, p, s) {
       const list = alliesNear(w, p, s.reach || 16).sort((a, b) => a.hp / a.stats.maxHp - b.hp / b.stats.maxHp);
@@ -1090,6 +1318,7 @@
     mark(w, p, s, t) {
       t.markT = s.dur;
       t.markPct = s.pct;
+      if (s.hawk) emit(w, { type: 'hawk', ent: p, target: t.id, dur: s.dur });
       float(w, t, 'Marcado', 'crit', 0.5);
       ring(w, t.pos, 0xffd36b, 1.6, 0.6);
     },
@@ -1100,40 +1329,41 @@
     },
     turret(w, p, s) {
       const dir = aimDir(p);
-      const at = { x: p.pos.x + dir.x * 1.6, z: p.pos.z + dir.z * 1.6 };
+      const at = s.ride ? { x: p.pos.x, z: p.pos.z } : { x: p.pos.x + dir.x * 1.8, z: p.pos.z + dir.z * 1.8 };
       collide(at, 0.5);
-      at.y = groundY(at.x, at.z);
+      const type = s.summon === 'mecha' ? 'mecha' : 'turret';
+      // Inventor de Autómatas: hasta 2 a la vez; si no, la nueva reemplaza a la anterior
       const max = p.passive.turretMax || 1;
-      p.turrets = p.turrets.filter((x) => x.alive);
-      while (p.turrets.length >= max) p.turrets.shift().alive = false;
-      const tur = { id: `t${w.nextId++}`, alive: true, pos: at, owner: p, big: !!s.big };
-      p.turrets.push(tur);
-      emit(w, { type: 'turret', id: tur.id, at, dur: s.dur, big: !!s.big });
+      const mine = w.summons.filter((x) => x.owner === p && !x.dead && (x.type === 'turret' || x.type === 'mecha'));
+      while (mine.length >= max) killSummon(w, mine.shift());
       const mult = s.mult * (1 + (p.passive.turretPct || 0));
-      const shots = Math.floor(s.dur / s.every);
-      for (let k = 1; k <= shots; k++) {
-        later(w, k * s.every, () => {
-          if (!tur.alive || !w.players.has(p.id)) return;
-          const m = w.mobs.filter((x) => !x.dead && d2(x.pos, at) <= s.reach).sort((a, b) => d2(a.pos, at) - d2(b.pos, at))[0];
-          if (m) spawnProjectile(w, p, s.big ? 'fire' : 'arcane', m, mult, { from: { x: at.x, y: at.y + (s.big ? 3 : 1.6), z: at.z }, big: s.big });
-          if (k === shots) tur.alive = false;
-        });
-      }
+      const su = spawnSummon(w, p, type, { at, dur: s.dur, every: s.every, mult, reach: s.reach, ride: s.ride, name: s.name });
+      ring(w, su.pos, type === 'mecha' ? 0xff9a4a : 0x9fd8ff, type === 'mecha' ? 3.2 : 1.6, 0.6);
+      if (type === 'mecha' && !s.ride) for (const m of w.mobs) if (!m.dead && d2(m.pos, su.pos) <= 9) m.aggro = su;
     },
     poly(w, p, s, t) {
       t.polyT = s.dur;
       t.stunT = Math.max(t.stunT, s.dur);
       if (t.aggro === p) dropAggro(t);
-      float(w, t, '¡Beee!', 'stun', 0.4);
-      emit(w, { type: 'poly', ent: t, dur: s.dur });
+      const form = Math.random() < 0.5 ? 'sheep' : 'chicken';
+      float(w, t, form === 'sheep' ? '¡Beee!' : '¡Cocó!', 'stun', 0.4);
+      emit(w, { type: 'poly', ent: t, dur: s.dur, form });
     },
     pulse(w, p, s) {
+      // Tornado Maestro: clones de viento que giran al lado e imitan los golpes
+      const clones = [];
+      for (let c = 0; c < (s.clones || 0); c++) clones.push(spawnSummon(w, p, 'clone', { at: p.pos, dur: s.count * s.every + 0.2, side: c % 2 ? -1 : 1, name: 'Clon de viento' }));
       for (let k = 0; k < s.count; k++) {
         later(w, k * s.every, () => {
           if (p.dead || !w.players.has(p.id)) return;
           ring(w, p.pos, s.id === 'tornado' ? 0xb6e08a : 0xffc46b, s.radius, 0.45);
           const struck = [];
           hitCircle(w, p, p.pos, s.radius, s.mult, s, (m) => struck.push(m));
+          for (const cl of clones) {
+            if (cl.dead) continue;
+            ring(w, cl.pos, 0xb6e08a, s.radius * 0.8, 0.4);
+            hitCircle(w, p, cl.pos, s.radius * 0.8, s.mult * 0.5, {});
+          }
           // Maestro: rayos sobre los enemigos golpeados
           if (s.lightning && struck.length) {
             for (const m of struck) {
@@ -1320,6 +1550,7 @@
     if (!slot) return;
     const it = ITEMS[slot.id];
     if (it.type === 'potion') return usePotion(w, p, slot.id);
+    if (it.type === 'gem') return setGems(w, p, !p.gemsOn);
     if (it.type !== 'weapon' && it.type !== 'armor') return log(w, p, `${it.name}: ${it.desc}`, 'sys');
     const problem = equipProblem(p, it);
     if (problem) return log(w, p, `No puedes equipar ${it.name}: ${problem}`, 'warn');
@@ -1470,6 +1701,7 @@
     updateAuras(w);
     for (const p of w.players.values()) updatePlayer(w, p, dt);
     for (const m of w.mobs) updateMob(w, m, dt);
+    updateSummons(w, dt);
     updateProjectiles(w, dt);
     updateTimers(w, dt);
   }
@@ -1504,6 +1736,8 @@
     if (p.frenzy && (p.frenzyT -= dt) <= 0) p.frenzy = 0;
     p.combatT = Math.max(0, p.combatT - dt);
     p.atkTimer = Math.max(0, p.atkTimer - dt);
+    updateDebuffs(w, p, dt);
+    if (p.dead) return;
 
     const rate = p.combatT > 0 ? 0.004 : inVillage(p.pos) ? 0.08 : 0.025;
     p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.maxHp * rate * dt);
@@ -1631,8 +1865,9 @@
   }
 
   function basicHit(w, p, t) {
-    if (p.cdef.projectile) spawnProjectile(w, p, p.cdef.projectile, t, 1);
-    else damageMob(w, p, t, 1);
+    const g = useGem(w, p);
+    if (p.cdef.projectile) spawnProjectile(w, p, p.cdef.projectile, t, g, { gem: g > 1 });
+    else damageMob(w, p, t, g);
     const pas = p.passive;
     // Furia Creciente: cada golpe acelera el siguiente
     if (pas.frenzy) {
@@ -1701,7 +1936,7 @@
     const fromHome = d2(m.pos, m.spawn);
     if (m.state !== 'return') {
       const a = m.aggro;
-      if (a && (a.dead || !w.players.has(a.id) || fromHome > LEASH_R || inVillage(a.pos))) {
+      if (a && (!aggroAlive(w, a) || fromHome > LEASH_R || inVillage(a.pos))) {
         dropAggro(m);
       } else if (!a && m.def.aggressive && near && nearD < AGGRO_R && !inVillage(near.pos) && m.lvl >= near.level - 8) {
         m.aggro = near;
@@ -1748,7 +1983,9 @@
   }
 
   // Bonificaciones activas para mostrar en pantalla
-  const buffList = (p) => Object.values(p.buffs).map((b) => ({ name: b.name, t: Math.round(b.t * 10) / 10 }));
+  const buffList = (p) => Object.entries(p.buffs).filter(([k]) => k !== 'dome').map(([, b]) => ({ name: b.name, t: Math.round(b.t * 10) / 10 })).concat(p.buffs.dome ? [{ name: 'Dentro de la cúpula', t: 0 }] : []);
+  const DEBUFF_NAMES = { poison: 'Envenenado', burn: 'Quemado', slow: 'Lento' };
+  const debuffList = (p) => Object.entries(p.debuffs).map(([k, d]) => ({ name: DEBUFF_NAMES[k] || k, t: Math.round(d.t * 10) / 10 }));
   const liveStats = (p) => ({
     ...p.stats,
     atk: Math.round(playerAtk(p) * 10) / 10,
@@ -1775,11 +2012,12 @@
     countItem,
     partyView,
     buffList,
+    debuffList,
     liveStats,
     skillReady,
     cmd: {
       setTarget, attack, targetNearest, moveTo, setMoveDir, talkTo, useSkill, usePotion, useItem, sellItem, buyItem, unequip, respawn,
-      partyInvite, partyAnswer, partyLeave, partyKick, classQuest,
+      partyInvite, partyAnswer, partyLeave, partyKick, classQuest, setGems,
     },
   };
 });

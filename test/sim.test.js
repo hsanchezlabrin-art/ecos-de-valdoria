@@ -363,4 +363,103 @@ for (const cls of Data.CLASS_IDS) {
   ok(!Data.migrateCharacter('oso', { v: 4, level: 3 }).migrated, 'los personajes nuevos no se migran');
 }
 
+// 12) Fase 2: invocaciones, estados alterados, Gemas de Poder y cúpula
+{
+  const w = Sim.createWorld();
+  Sim.spawnMobs(w);
+  const orcs = w.mobs.filter((m) => m.key === 'orco').slice(0, 3);
+  const at = { x: -92, z: -62 };
+  for (const m of orcs) {
+    m.pos.x = at.x + 3;
+    m.pos.z = at.z;
+    m.maxHp = m.hp = 1e6;
+  }
+  // Mecha-Gólem: entidad que atrae a los monstruos y recibe sus golpes
+  const g = Sim.addPlayer(w, { ...Sim.newCharacter('Tuerca', 'gnomo'), level: 30, stage: 2, branch: 'b', pos: at });
+  g.mp = g.stats.maxMp;
+  C.setTarget(w, g, orcs[0]);
+  C.useSkill(w, g, 5);
+  ok(w.summons.some((u) => u.type === 'mecha' && u.owner === g), 'el Mecha-Gólem aparece como una entidad');
+  run(w, 2);
+  const mecha = w.summons.find((u) => u.type === 'mecha');
+  ok(orcs.every((m) => m.aggro === mecha) && mecha.hp < mecha.maxHp, 'los monstruos atacan al Mecha-Gólem en vez de al gnomo');
+  ok(orcs.some((m) => m.hp < 1e6), 'el Mecha-Gólem golpea a los monstruos');
+  // Inventor: dos torretas a la vez; la tercera reemplaza a la más antigua
+  for (let i = 0; i < 3; i++) {
+    g.cds = {};
+    g.mp = g.stats.maxMp;
+    C.useSkill(w, g, 1);
+  }
+  ok(w.summons.filter((u) => u.owner === g && !u.dead).length === 2, 'el Inventor de Autómatas mantiene 2 invocaciones a la vez');
+  // Mecha pilotado (nivel 40): va con el jugador y dispara láseres
+  const g2 = Sim.addPlayer(w, { ...Sim.newCharacter('Piloto', 'gnomo', 'f'), level: 45, stage: 3, branch: 'b', pos: { x: at.x - 4, z: at.z } });
+  g2.mp = g2.stats.maxMp;
+  C.setTarget(w, g2, orcs[1]);
+  C.useSkill(w, g2, 5);
+  Sim.drainEvents(w);
+  run(w, 1.5);
+  const ride = w.summons.find((u) => u.owner === g2);
+  ok(ride && ride.ride && g2.shield > 0 && Math.hypot(ride.pos.x - g2.pos.x, ride.pos.z - g2.pos.z) < 0.01, 'en el Mecha pilotado el gnomo va dentro y tiene escudo');
+  ok(Sim.drainEvents(w).some((e) => e.type === 'beam' && e.color === 0xff5a5a), 'el Mecha pilotado dispara láseres');
+
+  // Tornado Maestro: 2 clones de viento
+  const e = Sim.addPlayer(w, { ...Sim.newCharacter('Viento', 'elfo'), level: 45, stage: 3, branch: 'b', pos: { x: at.x + 1, z: at.z + 1 } });
+  e.mp = e.stats.maxMp;
+  C.setTarget(w, e, orcs[2]);
+  C.useSkill(w, e, 5);
+  ok(w.summons.filter((u) => u.type === 'clone' && u.owner === e).length === 2, 'el Tornado Maestro crea 2 clones de viento');
+
+  // Estados alterados: el sapo envenena y el Destello Purificador lo quita
+  const h = Sim.addPlayer(w, { ...Sim.newCharacter('Mimi', 'hada', 'f'), level: 15, stage: 1, pos: { x: 108, z: 96 } });
+  const sapo = w.mobs.find((m) => m.key === 'sapo');
+  h.debuffs = {};
+  // El sapo golpea una y otra vez hasta que envenena (40% por golpe)
+  for (let i = 0; i < 40 && !h.debuffs.poison; i++) {
+    h.hp = h.stats.maxHp;
+    sapo.aggro = h;
+    sapo.atkTimer = 0;
+    sapo.pos.x = h.pos.x + 1;
+    sapo.pos.z = h.pos.z;
+    Sim.step(w, DT);
+  }
+  Sim.drainEvents(w);
+  ok(!!h.debuffs.poison, 'el Sapo de Ciénaga puede envenenar');
+  const hp0 = h.hp;
+  sapo.hp = 0;
+  sapo.dead = true;
+  run(w, 1.2);
+  ok(h.hp < hp0, 'el veneno quita vida con el tiempo');
+  h.mp = h.stats.maxMp;
+  C.useSkill(w, h, 3); // Destello Purificador
+  ok(!Object.keys(h.debuffs).length, 'el Destello Purificador quita el veneno');
+
+  // Gemas de Poder: +25% de daño y gastan una por ataque
+  const lz = Sim.addPlayer(w, { ...Sim.newCharacter('Gema', 'lagarto'), level: 10, pos: { x: 50, z: 14 } });
+  const gems0 = Sim.countItem(lz, 'gema_poder');
+  C.setGems(w, lz, true);
+  const boar = w.mobs.find((m) => m.key === 'jabali' && !m.dead);
+  boar.pos.x = 51.5;
+  boar.pos.z = 14;
+  boar.maxHp = boar.hp = 1e6;
+  C.setTarget(w, lz, boar);
+  C.attack(w, lz);
+  run(w, 3);
+  ok(lz.gemsOn && Sim.countItem(lz, 'gema_poder') < gems0, `cada ataque gasta una Gema de Poder (${gems0} → ${Sim.countItem(lz, 'gema_poder')})`);
+  const withGems = 1e6 - boar.hp;
+  const n1 = gems0 - Sim.countItem(lz, 'gema_poder');
+  lz.inv = lz.inv.filter((s2) => s2.id !== 'gema_poder');
+  boar.hp = 1e6;
+  run(w, 3);
+  ok(!lz.gemsOn, 'sin gemas se desactivan solas');
+  const without = 1e6 - boar.hp;
+  ok(withGems / n1 > (without / Math.max(1, n1)) * 1.05, 'con gemas el daño por golpe es mayor');
+
+  // Fortaleza Cubo: dentro de la cúpula se recibe la mitad de daño
+  const bear = Sim.addPlayer(w, { ...Sim.newCharacter('Muro', 'oso'), level: 30, stage: 2, branch: 'a', pos: { x: 0, z: 30 } });
+  bear.mp = bear.stats.maxMp;
+  C.useSkill(w, bear, 5);
+  run(w, 0.6);
+  ok(Sim.liveStats(bear).dr >= 0.5, 'dentro de la cúpula de la Fortaleza Cubo se recibe la mitad de daño');
+}
+
 console.log(`\nSimulación OK: ${checks} comprobaciones superadas.`);

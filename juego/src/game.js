@@ -28,6 +28,7 @@
     players: new Map(),
     mobs: new Map(),
     projectiles: new Map(),
+    summons: new Map(),
     queue: [],
     waiters: [],
     count: 0,
@@ -329,6 +330,8 @@
       }
       q.leap = !!row[14];
       q.swimming = !!row[17];
+      q.gem = !!row[20];
+      q.riding = false;
       if (q.equip.weapon !== row[12] || q.equip.armor !== row[13]) {
         q.equip.weapon = row[12];
         q.equip.armor = row[13];
@@ -389,6 +392,34 @@
     }
     for (const id of net.projectiles.keys()) if (!seenJ.has(id)) net.projectiles.delete(id);
 
+    // Invocaciones: torretas, Mecha-Gólem y clones de viento
+    const seenU = new Set();
+    for (const row of s.u || []) {
+      const id = row[0];
+      seenU.add(id);
+      let u = net.summons.get(id);
+      const owner = net.players.get(row[8]) || null;
+      if (!u) {
+        u = { id, kind: 'summon', type: row[1], owner, pos: { x: row[2], y: row[3], z: row[4] }, facing: row[5], height: row[1] === 'mecha' ? 4.2 : 2 };
+        u.model = buildSummonModel(u);
+        u.view = { atkAnim: 0, walk: 0, phase: Math.random() * 10 };
+        G.scene.add(u.model.root);
+        net.summons.set(id, u);
+      }
+      setNet(u, row[2], row[3], row[4], row[5]);
+      u.hp = row[6];
+      u.maxHp = row[7];
+      u.moving = !!row[9];
+      u.ride = !!row[10];
+      if (u.ride && owner) owner.riding = true;
+    }
+    for (const [id, u] of net.summons) {
+      if (seenU.has(id)) continue;
+      spawnRing(u.pos, u.type === 'clone' ? 0xb6e08a : 0x9fd8ff, 1.6, 0.4);
+      G.scene.remove(u.model.root);
+      net.summons.delete(id);
+    }
+
     if (P && s.me) applyMe(s.me);
   }
 
@@ -403,6 +434,9 @@
       stats: d.stats,
       cds: d.cds,
       buffs: d.buffs || [],
+      debuffs: d.debuffs || [],
+      gemsOn: !!d.gemsOn,
+      gems: d.gems || 0,
       quest: d.quest || null,
       bubble: d.bubble,
       freeNext: d.freeNext,
@@ -453,6 +487,7 @@
     };
     for (const q of net.players.values()) lerpEnt(q);
     for (const m of net.mobs.values()) lerpEnt(m);
+    for (const u of net.summons.values()) lerpEnt(u);
     for (const j of net.projectiles.values()) {
       const t = j.target;
       const tx = t.pos.x;
@@ -474,7 +509,7 @@
   // Los eventos del servidor traen identificadores: se convierten en entidades locales
   function resolveEvent(ev) {
     if (typeof ev.ent === 'string') {
-      const ent = net.players.get(ev.ent) || net.mobs.get(ev.ent);
+      const ent = net.players.get(ev.ent) || net.mobs.get(ev.ent) || net.summons.get(ev.ent);
       if (!ent) return null;
       if (ev.type === 'equip' && ent.equip) {
         ent.equip.weapon = ev.weapon;
@@ -544,6 +579,7 @@
   const respawnPlayer = () => send({ t: 'respawn' });
   const sendChat = (text) => send({ t: 'chat', text });
   const classQuest = (action, branch) => send({ t: 'classQuest', action, branch });
+  const toggleGems = () => P && send({ t: 'gems', on: !P.gemsOn });
   const invite = (id) => send({ t: 'invite', id });
   const inviteByName = (name) => send({ t: 'inviteByName', name });
   const answerInvite = (accept) => send({ t: 'inviteAnswer', accept });
@@ -564,6 +600,10 @@
         break;
       case 'faller':
         if (ev.fx === 'meteor' || ev.fx === 'glue' || ev.fx === 'sword') spawnFaller(ev.fx, ev.at, ev.dur);
+        else if (ev.fx === 'acorn') {
+          const n = ev.r > 5 ? 22 : 12;
+          for (let k = 0; k < n; k++) spawnFaller('acorn', { x: ev.at.x + (Math.random() * 2 - 1) * ev.r * 0.8, y: ev.at.y, z: ev.at.z + (Math.random() * 2 - 1) * ev.r * 0.8 }, ev.dur * (0.7 + Math.random() * 0.3));
+        }
         else {
           const n = ev.r > 5 ? 26 : 14;
           for (let k = 0; k < n; k++) spawnFaller(ev.fx === 'frost' ? 'ice' : 'arrow', { x: ev.at.x + (Math.random() * 2 - 1) * ev.r * 0.8, y: ev.at.y, z: ev.at.z + (Math.random() * 2 - 1) * ev.r * 0.8 }, ev.dur * (0.7 + Math.random() * 0.3));
@@ -573,7 +613,7 @@
         spawnLightning(ev.pts);
         break;
       case 'swing':
-        if (ev.ent.view) ev.ent.view.atkAnim = 1;
+        if (ev.ent && ev.ent.view) ev.ent.view.atkAnim = 1;
         break;
       case 'equip':
         applyEquip(ev.ent);
@@ -612,9 +652,14 @@
       case 'zone':
         spawnZone(ev.at, ev.r, ev.color, ev.dur);
         break;
-      case 'turret':
-        spawnTurret(ev.at, ev.dur, ev.big);
+      case 'aura':
+        if (ev.ent && ev.ent.model) spawnAura(ev.ent, ev.kind, ev.dur);
         break;
+      case 'hawk': {
+        const t = net.mobs.get(ev.target);
+        if (ev.ent && t) spawnHawk(ev.ent, t, ev.dur);
+        break;
+      }
       case 'beam':
         spawnBeam(ev.from, ev.to, ev.w, ev.color);
         break;
@@ -625,7 +670,10 @@
         spawnDome(ev.at, ev.r, ev.dur);
         break;
       case 'poly':
-        if (ev.ent && ev.ent.model) ev.ent.polyUntil = G.time + ev.dur;
+        if (ev.ent && ev.ent.model) {
+          ev.ent.polyUntil = G.time + ev.dur;
+          ev.ent.polyForm = ev.form || 'sheep';
+        }
         break;
       case 'partyInvite':
         if (mine(ev)) UI.showInvite(ev.name);
@@ -781,6 +829,11 @@
       mesh.add(new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 8), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xff7a2a, 2.3), transparent: true, opacity: 0.35, depthWrite: false })));
     } else if (kind === 'ice') {
       mesh = PROJ_MESH.ice();
+    } else if (kind === 'acorn') {
+      // Bellota: cuerpo marrón y gorrito oscuro
+      mesh = new THREE.Group();
+      mesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshStandardMaterial({ color: 0xa0703a, roughness: 0.6 })));
+      mesh.add(new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.1, 8), new THREE.MeshStandardMaterial({ color: 0x5a3a1c })).translateY(0.12));
     } else if (kind === 'glue') {
       // Frasco de pegamento
       mesh = new THREE.Group();
@@ -819,7 +872,7 @@
     disc.position.set(at.x, heightAt(at.x, at.z) + 0.08, at.z);
     addProp(disc, dur, 0.6);
   }
-  function spawnTurret(at, dur, big) {
+  function turretMesh(big) {
     const g = new THREE.Group();
     const metal = new THREE.MeshStandardMaterial({ color: big ? 0x8a8f9a : 0xb5703f, metalness: 0.3, roughness: 0.6 });
     const glow = new THREE.MeshBasicMaterial({ color: V.Gfx.hot(big ? 0xff9a4a : 0x9fd8ff, 2.2) });
@@ -837,8 +890,7 @@
       g.userData.spin = g.children[1];
     }
     g.traverse((o) => (o.castShadow = true));
-    g.position.set(at.x, heightAt(at.x, at.z), at.z);
-    addProp(g, dur, 0.3, 1);
+    return g;
   }
   function spawnBeam(from, to, w, color) {
     const len = Math.hypot(to.x - from.x, to.z - from.z);
@@ -861,21 +913,215 @@
     dome.position.set(at.x, heightAt(at.x, at.z), at.z);
     addProp(dome, dur, 0.6);
   }
-  // Polimorfia: el monstruo se ve como una oveja de bloques
-  let sheepProto = null;
-  function sheepFor() {
-    if (!sheepProto) {
-      sheepProto = new THREE.Group();
-      const wool = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.95, flatShading: true });
-      const face = new THREE.MeshStandardMaterial({ color: 0x3a3430, flatShading: true });
-      sheepProto.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 1.2), wool).translateY(0.8));
-      sheepProto.add(new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.4), face).translateY(1.1).translateZ(0.75));
-      for (const [x, z] of [[-0.3, 0.4], [0.3, 0.4], [-0.3, -0.4], [0.3, -0.4]]) sheepProto.add(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), face).translateX(x).translateY(0.25).translateZ(z));
+  // Polimorfia: el monstruo se ve como una oveja o un pollo de bloques
+  const polyProtos = {};
+  function sheepFor(form = 'sheep') {
+    if (!polyProtos[form]) {
+      const g = new THREE.Group();
+      const m = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true });
+      if (form === 'chicken') {
+        const white = m(0xfaf6ee);
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.75), white).translateY(0.75));
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.45, 0.35), white).translateY(1.25).translateZ(0.3));
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.2), m(0xf2b13a)).translateY(1.2).translateZ(0.55));
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.2), m(0xd83a2a)).translateY(1.55).translateZ(0.3));
+        for (const x of [-0.15, 0.15]) g.add(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 0.08), m(0xf2b13a)).translateX(x).translateY(0.22));
+      } else {
+        const wool = m(0xf4f0e6);
+        const face = m(0x3a3430);
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 1.2), wool).translateY(0.8));
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.4), face).translateY(1.1).translateZ(0.75));
+        for (const [x, z] of [[-0.3, 0.4], [0.3, 0.4], [-0.3, -0.4], [0.3, -0.4]]) g.add(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), face).translateX(x).translateY(0.25).translateZ(z));
+      }
+      polyProtos[form] = g;
     }
-    const s = sheepProto.clone();
+    const s = polyProtos[form].clone();
     G.scene.add(s);
     return s;
   }
+
+  // ---------- Invocaciones ----------
+
+  function mechaMesh() {
+    const g = new THREE.Group();
+    const metal = new THREE.MeshStandardMaterial({ color: 0x8a8f9a, metalness: 0.3, roughness: 0.6 });
+    const trim = new THREE.MeshStandardMaterial({ color: 0xb5703f, metalness: 0.3, roughness: 0.6 });
+    const glow = new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xff9a4a, 2.2) });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.8, 1.1), metal);
+    body.position.y = 2.2;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 0.8), trim);
+    head.position.y = 3.5;
+    const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.1), glow);
+    eyes.position.set(0, 3.6, 0.42);
+    const legs = [-0.45, 0.45].map((x) => {
+      const l = new THREE.Group();
+      l.position.set(x, 1.3, 0);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.3, 0.6), metal);
+      mesh.position.y = -0.65;
+      l.add(mesh);
+      return l;
+    });
+    const arms = [-1.05, 1.05].map((x) => {
+      const a = new THREE.Group();
+      a.position.set(x, 2.8, 0);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.4, 0.45), trim);
+      mesh.position.y = -0.7;
+      a.add(mesh);
+      return a;
+    });
+    // Cabina con cristal (se ve al piloto de la versión Maestra)
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.1), new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.6 }));
+    cab.position.set(0, 2.5, 0.56);
+    g.add(body, head, eyes, cab, ...legs, ...arms);
+    g.traverse((o) => (o.castShadow = true));
+    return { root: g, legs, arms };
+  }
+
+  function buildSummonModel(u) {
+    if (u.type === 'mecha') return mechaMesh();
+    if (u.type === 'turret') {
+      const g = turretMesh(false);
+      return { root: g, spin: g.userData.spin };
+    }
+    // Clon de viento: la figura de su dueño, verde y translúcida
+    const o = u.owner;
+    const m = buildHumanoid(lookFor(o ? o.cls : 'elfo', o ? o.sex : 'm'));
+    m.root.traverse((x) => {
+      if (!x.material) return;
+      x.material = x.material.clone();
+      x.material.transparent = true;
+      x.material.opacity = 0.45;
+      x.material.color.lerp(new THREE.Color(0x9fe08a), 0.6);
+      x.material.depthWrite = false;
+      x.castShadow = false;
+    });
+    m.clone = true;
+    return m;
+  }
+
+  function drawSummon(u, dt) {
+    const v = u.view;
+    const root = u.model.root;
+    // El mecha pilotado va donde va su piloto
+    const base = u.ride && u.owner ? u.owner.pos : u.pos;
+    root.position.set(base.x, base.y, base.z);
+    root.rotation.y = u.ride && u.owner ? u.owner.facing : u.facing;
+    v.atkAnim = Math.max(0, v.atkAnim - dt * 2.2);
+    const moving = u.ride && u.owner ? u.owner.moving : u.moving;
+    v.walk += ((moving ? 1 : 0) - v.walk) * Math.min(1, dt * 8);
+    if (u.type === 'mecha') {
+      const s = Math.sin(G.time * 6) * 0.5 * v.walk;
+      u.model.legs[0].rotation.x = s;
+      u.model.legs[1].rotation.x = -s;
+      const swing = v.atkAnim > 0 ? Math.sin(Math.PI * (1 - v.atkAnim)) : 0;
+      u.model.arms[0].rotation.x = -s * 0.6;
+      u.model.arms[1].rotation.x = swing ? -swing * 2.2 : s * 0.6;
+    } else if (u.type === 'turret') {
+      if (u.model.spin) u.model.spin.rotation.y += dt * 3;
+    } else if (u.model.clone) {
+      animateModel(u.model, G.time + v.phase, 0.6, 0.5 + Math.sin(G.time * 10) * 0.5);
+    }
+  }
+
+  // ---------- Auras visibles (alas de luz, escudo de brasas, corteza, viento, tornado) ----------
+
+  const auras = [];
+  function spawnAura(ent, kind, dur) {
+    const g = new THREE.Group();
+    const add = (geo, color, opacity, x = 0, y = 0, z = 0) => {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
+      m.position.set(x, y, z);
+      m.userData.base = opacity;
+      g.add(m);
+      return m;
+    };
+    const parts = [];
+    if (kind === 'wings') {
+      for (const sx of [1, -1]) {
+        const wg = add(new THREE.BoxGeometry(1.5, 1.1, 0.04), V.Gfx.hot(0xffe9a0, 1.6), 0.55, 0.85 * sx, 1.9, -0.35);
+        wg.rotation.set(0.15, -0.35 * sx, 0.3 * sx);
+        parts.push(wg);
+      }
+    } else if (kind === 'fire' || kind === 'wind' || kind === 'tornado') {
+      const color = kind === 'fire' ? V.Gfx.hot(0xff7a2a, 1.8) : 0xb6e08a;
+      const n = kind === 'tornado' ? 18 : 8;
+      for (let i = 0; i < n; i++) {
+        const geo = kind === 'fire' ? new THREE.OctahedronGeometry(0.13, 0) : new THREE.BoxGeometry(0.16, 0.04, 0.24);
+        const m = add(geo, color, 0.85);
+        Object.assign(m.userData, { a: (i / n) * Math.PI * 2, y: kind === 'tornado' ? (i / n) * 2.6 : 0.4 + (i % 3) * 0.5, r: kind === 'tornado' ? 0.7 + (i / n) * 1.2 : 0.9 });
+        parts.push(m);
+      }
+    } else if (kind === 'bark') {
+      const shell = add(new THREE.CylinderGeometry(0.75, 0.8, 2.3, 8, 1, true), 0x8a5a34, 0.35, 0, 1.2, 0);
+      parts.push(shell);
+    }
+    if (!parts.length) return;
+    ent.model.root.add(g);
+    auras.push({ ent, g, kind, parts, t: 0, life: dur });
+  }
+
+  function updateAuras(dt) {
+    for (let i = auras.length - 1; i >= 0; i--) {
+      const a = auras[i];
+      a.t += dt;
+      const fade = Math.min(1, (a.life - a.t) / 0.5);
+      for (const m of a.parts) {
+        const u = m.userData;
+        if (u && u.a !== undefined) {
+          u.a += dt * (a.kind === 'tornado' ? 9 : 4);
+          m.position.set(Math.cos(u.a) * u.r, u.y + (a.kind === 'wind' ? 0 : Math.sin(u.a * 2) * 0.1), Math.sin(u.a) * u.r);
+          m.rotation.y = -u.a;
+        }
+        if (a.kind === 'wings') m.rotation.z = (m.position.x > 0 ? 1 : -1) * (0.3 + Math.sin(G.time * 5) * 0.12);
+        m.material.opacity = m.userData.base * Math.max(0, fade);
+      }
+      if (a.t >= a.life || !a.ent.model) {
+        if (a.ent.model) a.ent.model.root.remove(a.g);
+        a.g.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) o.material.dispose();
+        });
+        auras.splice(i, 1);
+      }
+    }
+    for (let i = hawks.length - 1; i >= 0; i--) {
+      const h = hawks[i];
+      h.t += dt;
+      const t = h.target;
+      const k = Math.min(1, h.t / 0.7);
+      const circle = h.t * 3;
+      const tx = t.pos.x + Math.cos(circle) * 1.6;
+      const tz = t.pos.z + Math.sin(circle) * 1.6;
+      const ty = t.pos.y + t.height + 1.4;
+      h.g.position.set(h.from.x + (tx - h.from.x) * k, h.from.y + (ty - h.from.y) * k + Math.sin(Math.PI * k) * 2, h.from.z + (tz - h.from.z) * k);
+      h.g.rotation.y = -circle;
+      for (const w of h.wings) w.rotation.z = (w.position.x > 0 ? -1 : 1) * Math.sin(G.time * 18) * 0.6;
+      if (h.t >= h.life || t.dead || t.hidden) {
+        G.scene.remove(h.g);
+        hawks.splice(i, 1);
+      }
+    }
+  }
+
+  // Compañero Halcón: vuela hasta el enemigo marcado y lo rodea
+  const hawks = [];
+  function spawnHawk(ent, target, dur) {
+    const g = new THREE.Group();
+    const brown = new THREE.MeshStandardMaterial({ color: 0x8a5a34, flatShading: true });
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.22, 0.6), brown));
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshStandardMaterial({ color: 0xf4f0e6 })).translateZ(0.38).translateY(0.05));
+    const wings = [-1, 1].map((sx) => {
+      const wgt = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 0.32), brown);
+      wgt.position.x = 0.45 * sx;
+      g.add(wgt);
+      return wgt;
+    });
+    const from = { x: ent.pos.x, y: ent.pos.y + 2.4, z: ent.pos.z };
+    g.position.set(from.x, from.y, from.z);
+    G.scene.add(g);
+    hawks.push({ g, wings, from, target, t: 0, life: dur });
+  }
+
 
   function updateEffects(dt) {
     for (let i = props.length - 1; i >= 0; i--) {
@@ -996,9 +1242,20 @@
   function drawEntity(ent, dt) {
     const v = ent.view;
     const root = ent.model.root;
-    if (ent.hidden) {
+    if (ent.hidden || ent.riding) {
       root.visible = false;
       return;
+    }
+    // Gemas de Poder activas: el arma brilla con luz neón (sin destellos grandes)
+    if (ent.kind === 'player' && ent.model.bladeMat) {
+      if (ent.gem) {
+        v.gemOn = true;
+        ent.model.bladeMat.emissive.setHex(0x40e0ff);
+        ent.model.bladeMat.emissiveIntensity = 0.55 + Math.sin(G.time * 6 + v.phase) * 0.2;
+      } else if (v.gemOn) {
+        v.gemOn = false;
+        setWeaponLook(ent.model, ITEMS[ent.equip.weapon]);
+      }
     }
     root.position.set(ent.pos.x, ent.pos.y, ent.pos.z);
     root.rotation.y = ent.facing;
@@ -1011,7 +1268,7 @@
     // Polimorfia: se dibuja una oveja mientras dure (o hasta que lo golpeen)
     const sheep = ent.polyUntil > G.time && ent.stunned;
     if (sheep) {
-      if (!v.sheep) v.sheep = sheepFor(ent);
+      if (!v.sheep) v.sheep = sheepFor(ent.polyForm);
       v.sheep.position.set(ent.pos.x, ent.pos.y, ent.pos.z);
       v.sheep.rotation.y = ent.facing;
       root.visible = false;
@@ -1078,6 +1335,8 @@
     }
     for (const q of net.players.values()) if (q.model) drawEntity(q, dt);
     for (const m of net.mobs.values()) if (m.model) drawEntity(m, dt);
+    for (const u of net.summons.values()) drawSummon(u, dt);
+    updateAuras(dt);
     if (G.playerSel && !net.players.has(G.playerSel.id)) G.playerSel = null;
     sync();
     syncProjectiles();
@@ -1087,7 +1346,7 @@
   V.Game = {
     PROTOCOL, connect, register, login, resume, logout, createChar, deleteChar, play,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
-    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat, classQuest,
+    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat, classQuest, toggleGems,
     invite, inviteByName, answerInvite, leaveParty, kickFromParty,
     get online() {
       return true;

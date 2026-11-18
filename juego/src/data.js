@@ -121,7 +121,7 @@
         { id: 'rugido', name: 'Rugido Protector', glyph: '◉', type: 'aoe', mult: 0.6, radius: 6, taunt: true, allyShield: 0.15, shieldDur: 6, mp: 12, cd: 10, desc: 'Ruges fuerte: los monstruos cercanos te atacan a ti y tus aliados cercanos reciben un escudo.' },
         { id: 'salto_sismico', name: 'Salto Sísmico', glyph: '✸', type: 'aoe', mult: 1.6, radius: 4.5, stun: 1.5, mp: 16, cd: 9, desc: 'Saltas y caes con fuerza: 160% de daño alrededor y aturdes a los enemigos 1,5 s.' },
         { id: 'muro_miel', name: 'Muro de Miel', glyph: '◍', type: 'zone', radius: 4, dur: 6, slow: true, tick: 0.3, fx: 0xf2b13a, mp: 14, cd: 14, desc: 'Un charco de miel pegajosa: ralentiza y daña poco a poco a los enemigos que lo pisan durante 6 s.' },
-        { id: 'piel_corteza', name: 'Piel de Corteza', glyph: '▦', type: 'buff', dr: 0.3, dur: 6, mp: 15, cd: 20, desc: 'Tu piel se vuelve corteza: recibes un 30% menos de daño durante 6 s.' },
+        { id: 'piel_corteza', name: 'Piel de Corteza', glyph: '▦', type: 'buff', aura: 'bark', dr: 0.3, dur: 6, mp: 15, cd: 20, desc: 'Tu piel se vuelve corteza: recibes un 30% menos de daño durante 6 s.' },
         { id: 'tronco', name: 'Lanzamiento de Tronco', glyph: '▬', type: 'line', mult: 2, length: 14, width: 2, stun: 1.2, mp: 20, cd: 11, desc: 'Arrojas un tronco cuadrado en línea recta: 200% de daño y derriba a los enemigos 1,2 s.' },
       ],
       branches: {
@@ -129,8 +129,8 @@
           name: 'Guardián de Roca',
           master: 'Titán de Piedra Viva',
           passive: { name: 'Corazón de Roca', hpPct: 0.25, block: 0.2, desc: '+25% de vida máxima y 20% de probabilidad de bloquear la mitad de un golpe con el escudo.' },
-          ultimate: { id: 'fortaleza', name: 'Fortaleza Cubo', glyph: '⛫', type: 'heal', group: true, radius: 10, amount: 0, shield: 0.5, shieldDur: 6, mp: 45, cd: 60, desc: 'Una cúpula de piedra cubre al grupo: cada aliado recibe un escudo enorme durante 6 s.' },
-          masterUlt: { name: 'Fortaleza Cubo Maestra', amount: 0.35, thorns: 0.6, desc: 'La cúpula también cura un 35% de vida al grupo y devuelve parte del daño a quien golpea.' },
+          ultimate: { id: 'fortaleza', name: 'Fortaleza Cubo', glyph: '⛫', type: 'heal', group: true, radius: 10, amount: 0, shield: 0.5, shieldDur: 6, dome: { dr: 0.5 }, mp: 45, cd: 60, desc: 'Una cúpula de piedra cubre al grupo durante 6 s: cada aliado recibe un escudo enorme y, dentro de la cúpula, la mitad de daño (también de proyectiles).' },
+          masterUlt: { name: 'Fortaleza Cubo Maestra', amount: 0.35, thorns: 0.6, dome: { dr: 0.5, heal: 0.04 }, desc: 'La cúpula también cura al grupo (35% al instante y un 4% por segundo dentro) y devuelve daño a quien golpea.' },
         },
         b: {
           name: 'Oso Berserker',
@@ -161,11 +161,11 @@
       lookF: { hair: 0xe8c878 },
       awaken: 'Explorador del Bosque',
       skills: [
-        { id: 'bellotas', name: 'Lluvia de Bellotas', glyph: '⇣', type: 'area', fx: 'rain', mult: 1.4, radius: 4.5, delay: 0.5, mp: 12, cd: 8, range: 16, desc: 'Una lluvia de bellotas cae sobre el objetivo y todo lo que lo rodea: 140% de daño.' },
+        { id: 'bellotas', name: 'Lluvia de Bellotas', glyph: '⇣', type: 'area', fx: 'acorn', mult: 1.4, radius: 4.5, delay: 0.5, mp: 12, cd: 8, range: 16, desc: 'Una lluvia de bellotas cae sobre el objetivo y todo lo que lo rodea: 140% de daño.' },
         { id: 'salto_copa', name: 'Salto de Copa', glyph: '↶', type: 'leap', dist: 7, shot: 1.2, knock: 3, mp: 12, cd: 10, desc: 'Saltas 7 m hacia atrás y disparas una flecha que empuja al objetivo.' },
-        { id: 'halcon', name: 'Compañero Halcón', glyph: '🦅', type: 'mark', pct: 0.25, dur: 10, mp: 10, cd: 16, range: 22, desc: 'Tu halcón marca al objetivo: recibe un 25% más de daño de todo tu grupo durante 10 s.' },
+        { id: 'halcon', name: 'Compañero Halcón', glyph: '🦅', type: 'mark', hawk: true, pct: 0.25, dur: 10, mp: 10, cd: 16, range: 22, desc: 'Tu halcón marca al objetivo: recibe un 25% más de daño de todo tu grupo durante 10 s.' },
         { id: 'enredadera', name: 'Flecha Enredadera', glyph: '❦', type: 'dmg', proj: 'arrow', mult: 1.3, root: 3, mp: 16, cd: 12, range: 16, desc: 'Raíces cúbicas atrapan al objetivo: 130% de daño y no puede moverse durante 3 s.' },
-        { id: 'paso_veloz', name: 'Paso Veloz', glyph: '»', type: 'buff', speed: 0.35, evade: 0.25, dur: 8, mp: 14, cd: 20, desc: 'Corres como el viento: +35% de velocidad y +25% de esquivar durante 8 s.' },
+        { id: 'paso_veloz', name: 'Paso Veloz', glyph: '»', type: 'buff', aura: 'wind', speed: 0.35, evade: 0.25, dur: 8, mp: 14, cd: 20, desc: 'Corres como el viento: +35% de velocidad y +25% de esquivar durante 8 s.' },
       ],
       branches: {
         a: {
@@ -179,8 +179,8 @@
           name: 'Jinete del Viento',
           master: 'Sombra del Vendaval',
           passive: { name: 'Danza del Viento', moveAttack: true, speedPct: 0.1, desc: 'Puedes atacar mientras te mueves sin perder velocidad, y te mueves un 10% más rápido.' },
-          ultimate: { id: 'tornado', name: 'Tornado de Hojas', glyph: '🌪', type: 'pulse', mult: 0.9, radius: 4, count: 10, every: 0.4, selfBuff: { speed: 0.2, dur: 4 }, mp: 40, cd: 35, desc: 'Te conviertes en un torbellino que golpea rápido a tu alrededor mientras te mueves.' },
-          masterUlt: { name: 'Tornado de Hojas Maestro', mult: 1.5, count: 15, desc: 'Dos clones de viento giran contigo: más golpes y más fuertes durante 6 s.' },
+          ultimate: { id: 'tornado', name: 'Tornado de Hojas', glyph: '🌪', type: 'pulse', aura: 'tornado', mult: 0.9, radius: 4, count: 10, every: 0.4, selfBuff: { speed: 0.2, dur: 4 }, mp: 40, cd: 35, desc: 'Te conviertes en un torbellino que golpea rápido a tu alrededor mientras te mueves.' },
+          masterUlt: { name: 'Tornado de Hojas Maestro', mult: 1.2, count: 15, clones: 2, selfBuff: { speed: 0.2, dur: 6 }, desc: 'Creas 2 clones de viento que giran a tu lado e imitan tus golpes durante 6 s.' },
         },
       },
     },
@@ -205,8 +205,8 @@
       awaken: 'Artificiero de Cristal',
       skills: [
         { id: 'rayo_cristal', name: 'Rayo de Cristal', glyph: 'ϟ', type: 'chain', mult: 1.6, jumps: 2, jumpR: 8, mp: 10, cd: 4, range: 14, desc: 'Un rayo de cristal golpea al objetivo y rebota hasta 3 enemigos: 160% de daño a cada uno.' },
-        { id: 'torreta', name: 'Torreta de Chispas', glyph: '⛯', type: 'turret', mult: 0.9, dur: 8, every: 1, reach: 12, mp: 16, cd: 14, desc: 'Construyes un tótem que dispara chispas al enemigo más cercano durante 8 s.' },
-        { id: 'polimorfia', name: 'Polimorfia Divertida', glyph: '🐑', type: 'poly', dur: 5, mp: 18, cd: 18, range: 14, desc: 'Conviertes al objetivo en una oveja cuadrada inofensiva durante 5 s. (No sirve con jefes.)' },
+        { id: 'torreta', name: 'Torreta de Chispas', glyph: '⛯', type: 'turret', summon: 'turret', mult: 0.9, dur: 8, every: 1, reach: 12, mp: 16, cd: 14, desc: 'Construyes un tótem que dispara chispas al enemigo más cercano durante 8 s.' },
+        { id: 'polimorfia', name: 'Polimorfia Divertida', glyph: '🐑', type: 'poly', dur: 5, mp: 18, cd: 18, range: 14, desc: 'Conviertes al objetivo en una oveja o un pollo cuadrado inofensivo durante 5 s. Se rompe si lo golpean. (No sirve con jefes.)' },
         { id: 'pegamento', name: 'Bomba de Pegamento', glyph: '⚗', type: 'area', fx: 'glue', mult: 1.5, radius: 4, delay: 0.45, slow: 4, mp: 18, cd: 10, range: 14, desc: 'Un frasco explota sobre el objetivo: 150% de daño en área y ralentiza 4 s.' },
         { id: 'propulsores', name: 'Propulsores de Mochila', glyph: '⇢', type: 'blink', dist: 8, mp: 12, cd: 12, desc: 'Tu mochila te lanza 8 m hacia adelante dejando una nube de humo.' },
       ],
@@ -222,8 +222,8 @@
           name: 'Inventor de Autómatas',
           master: 'Gran Mecánico Estelar',
           passive: { name: 'Taller Portátil', turretMax: 2, turretPct: 0.2, desc: 'Puedes tener 2 torretas o robots a la vez, y hacen un 20% más de daño.' },
-          ultimate: { id: 'mecha', name: 'Invocar Mecha-Gólem', glyph: '🤖', type: 'turret', big: true, mult: 2.2, dur: 15, every: 1, reach: 10, mp: 55, cd: 60, desc: 'Un robot gigante pelea a tu lado durante 15 s, disparando bolas de fuego (220% de daño cada una).' },
-          masterUlt: { name: 'Mecha-Gólem Pilotado', selfShield: 0.6, selfBuff: { atk: 0.3, dur: 15 }, desc: 'Te subes al Mecha-Gólem: ganas un gran escudo y cañones láser (+30% de ataque).' },
+          ultimate: { id: 'mecha', name: 'Invocar Mecha-Gólem', glyph: '🤖', type: 'turret', summon: 'mecha', mult: 2.2, dur: 15, every: 1.2, reach: 14, mp: 55, cd: 60, desc: 'Un robot gigante camina, pelea y atrae a los monstruos (los golpes van a él) durante 15 s: 220% de daño por golpe.' },
+          masterUlt: { name: 'Mecha-Gólem Pilotado', ride: true, mult: 1.6, every: 0.8, reach: 18, selfShield: 0.6, dur: 15, desc: 'Te subes al Mecha-Gólem 15 s: ganas un gran escudo y sus cañones láser atraviesan a los enemigos en línea (160%).' },
         },
       },
     },
@@ -250,7 +250,7 @@
         { id: 'corazones', name: 'Canción de Corazones', glyph: '♥', type: 'heal', group: true, radius: 9, amount: 0.25, mp: 16, cd: 8, desc: 'Cantas y curas al instante un 25% de vida a ti y a los aliados cercanos.' },
         { id: 'burbuja', name: 'Burbuja Estelar', glyph: '◯', type: 'bubble', dur: 10, reach: 16, mp: 14, cd: 14, desc: 'Una burbuja protege al aliado más herido (o a ti): bloquea por completo el siguiente golpe.' },
         { id: 'bendicion', name: 'Bendición de Velocidad', glyph: '»', type: 'buff', group: true, radius: 12, speed: 0.2, haste: 0.2, dur: 15, mp: 20, cd: 30, desc: 'Tú y tu grupo se mueven y atacan un 20% más rápido durante 15 s.' },
-        { id: 'destello', name: 'Destello Purificador', glyph: '✧', type: 'heal', group: true, radius: 9, amount: 0.12, cleanse: true, mp: 14, cd: 12, desc: 'Quita veneno, quemaduras y ralentizaciones a tu grupo y lo cura un poco.' },
+        { id: 'destello', name: 'Destello Purificador', glyph: '✧', type: 'heal', group: true, radius: 9, amount: 0.12, cleanse: true, mp: 14, cd: 12, desc: 'Quita veneno, quemaduras y lentitud a tu grupo (los causan lobos, orcos, gólems, sapos y Tharmok) y lo cura un poco.' },
         { id: 'ola_notas', name: 'Ola de Notas', glyph: '♫', type: 'dmg', proj: 'arcane', mult: 1.8, healAlly: 0.15, mp: 14, cd: 6, range: 14, desc: 'Una nota musical daña al enemigo (180%) y rebota hacia el aliado más herido para curarlo.' },
       ],
       branches: {
@@ -293,7 +293,7 @@
         { id: 'torbellino', name: 'Torbellino de Escamas', glyph: '❂', type: 'aoe', mult: 1.5, radius: 4.5, mp: 14, cd: 7, desc: 'Giras con tu espada: 150% de daño a todos los enemigos a tu alrededor.' },
         { id: 'aliento', name: 'Aliento de Chispa', glyph: '🔥', type: 'cone', mult: 1, radius: 7, angle: 70, burn: { mult: 1.6, dur: 4 }, mp: 14, cd: 9, desc: 'Escupes chispas al frente: 100% de daño y los quemas (160% más en 4 s).' },
         { id: 'carga', name: 'Carga Heroica', glyph: '⇥', type: 'charge', mult: 1.6, stun: 1, mp: 14, cd: 11, range: 12, desc: 'Corres hacia el objetivo desde hasta 12 m: 160% de daño y lo aturdes 1 s.' },
-        { id: 'escudo_brasas', name: 'Escudo de Brasas', glyph: '♨', type: 'buff', thorns: 0.5, dur: 10, mp: 16, cd: 20, desc: 'Te rodeas de fuego: quien te golpee cuerpo a cuerpo se quema (50% de tu ataque) durante 10 s.' },
+        { id: 'escudo_brasas', name: 'Escudo de Brasas', glyph: '♨', type: 'buff', aura: 'fire', thorns: 0.5, dur: 10, mp: 16, cd: 20, desc: 'Te rodeas de fuego: quien te golpee cuerpo a cuerpo se quema (50% de tu ataque) durante 10 s.' },
         { id: 'corte_cruzado', name: 'Corte Cruzado', glyph: '✕', type: 'dmg', mult: 1.2, hits: 2, critIfBurning: true, mp: 16, cd: 8, range: 2.8, desc: 'Dos tajos rápidos de 120%. Si el enemigo se está quemando, ambos son críticos.' },
       ],
       branches: {
@@ -302,7 +302,7 @@
           master: 'Campeón Dracónico',
           passive: { name: 'Escama Dorada', healEvery: 3, healPct: 0.04, desc: 'Cada 3er ataque básico te cura un 4% de vida a ti y al aliado más cercano.' },
           ultimate: { id: 'juicio', name: 'Juicio del Dragón', glyph: '🗡', type: 'area', fx: 'sword', mult: 3.5, radius: 5, delay: 0.7, healAllies: 0.25, mp: 50, cd: 45, range: 14, desc: 'Una espada gigante de luz cae sobre el objetivo: 350% de daño en área y cura a tus aliados.' },
-          masterUlt: { name: 'Juicio del Dragón Maestro', selfBuff: { dr: 0.3, ccImmune: true, dur: 12 }, desc: 'Despliegas alas de luz 12 s: recibes un 30% menos de daño y nada puede aturdirte.' },
+          masterUlt: { name: 'Juicio del Dragón Maestro', aura: 'wings', auraDur: 12, selfBuff: { dr: 0.3, ccImmune: true, dur: 12 }, desc: 'Despliegas alas de luz 12 s: recibes un 30% menos de daño y nada puede aturdirte.' },
         },
         b: {
           name: 'Danzante de Fuego',
@@ -376,6 +376,7 @@
   const ITEMS = {
     pocion_vida: { name: 'Poción de Vida', type: 'potion', stat: 'hp', amount: 0.35, price: 20, stack: true, glyph: '♥', rarity: 'comun', desc: 'Restaura el 35% de la vida.' },
     pocion_mana: { name: 'Poción de Maná', type: 'potion', stat: 'mp', amount: 0.4, price: 25, stack: true, glyph: '◆', rarity: 'comun', desc: 'Restaura el 40% del maná.' },
+    gema_poder: { name: 'Gema de Poder', type: 'gem', price: 3, stack: true, glyph: '✦', rarity: 'refinado', desc: 'Actívalas con la tecla 9: cada ataque o habilidad gasta una gema y hace un 25% más de daño. Tu arma brilla mientras estén activas.' },
 
     piel: { name: 'Piel de Jabalí', type: 'junk', price: 4, stack: true, glyph: '▤', rarity: 'comun', desc: 'Se vende en el mercado.' },
     colmillo: { name: 'Colmillo de Lobo', type: 'junk', price: 8, stack: true, glyph: '◣', rarity: 'comun', desc: 'Se vende en el mercado.' },
@@ -540,44 +541,51 @@
     { id: 'pantano', name: 'Pantano de Tharmok', lvl: '13–15 · Jefe', x: 108, z: 96, r: 26, ground: -1.1, trees: 0.3, treeType: 'swamp', tint: [0.24, 0.31, 0.2], desc: 'Ciénaga al noreste donde aguarda Tharmok, el jefe final.' },
   ];
 
-  // Botín: '@w:grado' = arma de ese grado para la raza de quien lo recibe; '@a:grado' = armadura.
+  // Botín: [id, probabilidad, [cantidad mín, máx]]. '@w:grado' = arma de ese grado para la raza
+  // de quien lo recibe; '@a:grado' = armadura. onHit: estado que pueden causar al golpear
+  // (poison/burn: % de su ataque por segundo; slow: segundos de lentitud).
   const MOBS = {
     jabali: {
       name: 'Jabalí Salvaje', kind: 'quad', lvl: [1, 2], zone: 'prados', count: 16,
       color: 0x6b4a32, scale: 0.85, tusks: true, mane: true, aggressive: false, speed: 4.6,
-      drops: [['piel', 0.55], ['pocion_vida', 0.12], ['@w:madera', 0.03], ['@a:madera', 0.05]],
+      drops: [['piel', 0.55], ['pocion_vida', 0.12], ['gema_poder', 0.25, [2, 5]], ['@w:madera', 0.03], ['@a:madera', 0.05]],
     },
     lobo: {
       name: 'Lobo Gris', kind: 'quad', lvl: [3, 4], zone: 'bosque', count: 15,
       color: 0x7b7f87, scale: 0.9, aggressive: true, speed: 5.6,
-      drops: [['colmillo', 0.5], ['pocion_vida', 0.15], ['pocion_mana', 0.1], ['@a:madera', 0.05], ['@w:cobre', 0.02]],
+      onHit: { slow: 2, chance: 0.25 },
+      drops: [['gema_poder', 0.3, [3, 6]], ['colmillo', 0.5], ['pocion_vida', 0.15], ['pocion_mana', 0.1], ['@a:madera', 0.05], ['@w:cobre', 0.02]],
     },
     goblin: {
       name: 'Goblin Saqueador', kind: 'hum', lvl: [5, 7], zone: 'goblin', count: 15,
       skin: 0x76a03d, body: 0x5a3d22, legs: 0x3b2a1a, scale: 0.72, ears: true, aggressive: true, speed: 5.2,
       weaponColor: 0x8d8a80,
-      drops: [['oreja_goblin', 0.45], ['pocion_vida', 0.18], ['pocion_mana', 0.12], ['@w:cobre', 0.05], ['@a:cobre', 0.04]],
+      drops: [['gema_poder', 0.3, [4, 8]], ['oreja_goblin', 0.45], ['pocion_vida', 0.18], ['pocion_mana', 0.12], ['@w:cobre', 0.05], ['@a:cobre', 0.04]],
     },
     orco: {
       name: 'Orco Guerrero', kind: 'hum', lvl: [8, 11], zone: 'fuerte', count: 16,
       skin: 0x557043, body: 0x6e2a22, legs: 0x2f2a26, scale: 1.18, tusks: true, aggressive: true, speed: 5,
       club: true,
-      drops: [['amuleto_hueso', 0.4], ['pocion_vida', 0.2], ['pocion_mana', 0.15], ['@w:cobre', 0.05], ['@a:cobre', 0.05], ['@w:azul', 0.02], ['@a:azul', 0.02]],
+      onHit: { slow: 2.5, chance: 0.2 },
+      drops: [['gema_poder', 0.35, [5, 10]], ['amuleto_hueso', 0.4], ['pocion_vida', 0.2], ['pocion_mana', 0.15], ['@w:cobre', 0.05], ['@a:cobre', 0.05], ['@w:azul', 0.02], ['@a:azul', 0.02]],
     },
     golem: {
       name: 'Gólem de Ceniza', kind: 'hum', lvl: [12, 14], zone: 'ceniza', count: 14,
       skin: 0x5a5652, body: 0x46423e, legs: 0x3a3734, scale: 1.4, glow: 0xff6a2a, weapon: false, aggressive: true, speed: 4.4,
-      drops: [['nucleo_ceniza', 0.4], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w:azul', 0.04], ['@a:azul', 0.04]],
+      onHit: { burn: { pct: 0.35, dur: 4 }, chance: 0.3 },
+      drops: [['gema_poder', 0.4, [6, 12]], ['nucleo_ceniza', 0.4], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w:azul', 0.04], ['@a:azul', 0.04]],
     },
     sapo: {
       name: 'Sapo de Ciénaga', kind: 'quad', lvl: [13, 14], zone: 'pantano', count: 7,
       color: 0x4c6a36, scale: 1.05, aggressive: false, speed: 4,
-      drops: [['mucosa', 0.5], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w:azul', 0.04], ['@a:azul', 0.04]],
+      onHit: { poison: { pct: 0.3, dur: 5 }, chance: 0.4 },
+      drops: [['gema_poder', 0.4, [6, 12]], ['mucosa', 0.5], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w:azul', 0.04], ['@a:azul', 0.04]],
     },
     tharmok: {
       name: 'Tharmok, Señor del Pantano', kind: 'hum', lvl: [15, 15], zone: 'pantano', count: 1, boss: true, respawn: 180,
       skin: 0x3d5a3a, body: 0x2c3a24, legs: 0x1f2a1a, scale: 2.3, tusks: true, glow: 0xb6ff5a, club: true, aggressive: true, speed: 4.8,
-      drops: [['@w:azul', 0.6], ['@a:azul', 0.6], ['@w:morado', 0.1], ['@a:morado', 0.1], ['pocion_vida', 1], ['pocion_mana', 1]],
+      onHit: { poison: { pct: 0.3, dur: 6 }, slow: 2, chance: 0.35 },
+      drops: [['gema_poder', 1, [25, 40]], ['@w:azul', 0.6], ['@a:azul', 0.6], ['@w:morado', 0.1], ['@a:morado', 0.1], ['pocion_vida', 1], ['pocion_mana', 1]],
     },
   };
   // Nivel de monstruo más alto (sin jefes) y jefe más fuerte: lo usan las misiones de cambio de clase
@@ -600,7 +608,8 @@
     return kind === 'w' ? weaponFor(cls, grade) : armorFor(cls, grade);
   };
 
-  const shopFor = (cls) => ['pocion_vida', 'pocion_mana', ...['madera', 'cobre', 'azul'].flatMap((g) => [weaponFor(cls, g), armorFor(cls, g)])];
+  const GEM_MULT = 1.25;
+  const shopFor = (cls) => ['pocion_vida', 'pocion_mana', 'gema_poder', ...['madera', 'cobre', 'azul'].flatMap((g) => [weaponFor(cls, g), armorFor(cls, g)])];
   const sellPrice = (item) => (item.type === 'junk' ? item.price : Math.floor(item.price * 0.4));
 
   // Personajes de la aldea. x, z: posición; se les habla con clic.
@@ -677,7 +686,7 @@
     ARCHETYPES, ARCHETYPE_IDS, CLASSES, CLASS_IDS, isArchetype, STAGES, PROGRESSION,
     raceName, className, skillsFor, passiveFor, skillLock, lookFor, playerBaseStats, mobStats,
     ITEMS, WEAPON_TIERS, ARMOR_TIERS, weaponFor, armorFor, startGear, equipProblem,
-    ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS,
+    ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT,
     OLD_CLASS_MAP, migrateCharacter,
   };
 });

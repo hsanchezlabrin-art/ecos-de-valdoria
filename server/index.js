@@ -95,6 +95,7 @@ function charData(ch) {
     stage: int(d.stage, 0, 3, 0),
     branch: d.branch === 'a' || d.branch === 'b' ? d.branch : null,
     quest: d.quest || null,
+    gemsOn: !!d.gemsOn,
     pos,
     hp: Number.isFinite(+d.hp) ? +d.hp : null,
     mp: Number.isFinite(+d.mp) ? +d.mp : null,
@@ -108,7 +109,7 @@ function savePlayer(c) {
 // ---------- Estado que se envía a cada jugador ----------
 
 function playerRow(q) {
-  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0];
+  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0, q.gemsOn && Sim.countItem(q, 'gema_poder') > 0 ? 1 : 0];
 }
 
 function mobRow(m) {
@@ -126,6 +127,9 @@ function meData(c) {
     stats: Sim.liveStats(p),
     cds: p.cds,
     buffs: Sim.buffList(p),
+    debuffs: Sim.debuffList(p),
+    gemsOn: p.gemsOn ? 1 : 0,
+    gems: Sim.countItem(p, 'gema_poder'),
     stage: p.stage,
     branch: p.branch,
     quest: p.quest,
@@ -157,7 +161,10 @@ function snapshot(c) {
   for (const m of world.mobs) if (near(m.pos, p.pos)) mobs.push(mobRow(m));
   const proj = [];
   for (const j of world.projectiles) if (near(j.pos, p.pos)) proj.push([j.id, j.kind, r2(j.pos.x), r2(j.pos.y), r2(j.pos.z), j.target.id, j.big ? 1 : 0]);
-  send(c, { t: 's', T: r2(world.time), p: players, m: mobs, j: proj, me: meData(c), n: world.players.size });
+  // Invocaciones: [id, tipo, x, y, z, giro, vida, vida máx., dueño, moviéndose, pilotado]
+  const sums = [];
+  for (const u of world.summons) if (!u.dead && near(u.pos, p.pos)) sums.push([u.id, u.type, r2(u.pos.x), r2(u.pos.y), r2(u.pos.z), r2(u.facing), Math.max(0, Math.round(u.hp)), u.maxHp, u.owner.id, u.moving ? 1 : 0, u.ride ? 1 : 0]);
+  send(c, { t: 's', T: r2(world.time), p: players, m: mobs, j: proj, u: sums, me: meData(c), n: world.players.size });
 }
 
 // ---------- Eventos de la simulación → jugadores ----------
@@ -326,6 +333,8 @@ function onCommand(c, msg) {
       return;
     case 'respawn':
       return C.respawn(world, p);
+    case 'gems':
+      return C.setGems(world, p, !!msg.on);
     case 'classQuest':
       return C.classQuest(world, p, str(msg.action, 10), msg.branch === 'a' || msg.branch === 'b' ? msg.branch : null);
     case 'invite':

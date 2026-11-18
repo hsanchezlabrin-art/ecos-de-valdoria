@@ -349,7 +349,7 @@
             el('td', {}, m.boss ? el('span', { style: 'color:#c895ff;font-weight:700' }, m.name) : m.name),
             el('td', { class: 'num' }, m.lvl[0] === m.lvl[1] ? `${m.lvl[0]}` : `${m.lvl[0]}–${m.lvl[1]}`),
             el('td', {}, m.aggressive ? 'Te ataca al verte' : 'Solo si lo atacas'),
-            el('td', {}, m.drops.map(([id, ch]) => `${id[0] === '@' ? `${id[1] === 'w' ? 'Arma' : 'Armadura'} de tu raza, grado ${D.GRADES[id.split(':')[1]].name}` : D.ITEMS[id].name} ${+(ch * 100).toFixed(1)}%`).join(', '))
+            el('td', {}, m.drops.map(([id, ch, q]) => `${id[0] === '@' ? `${id[1] === 'w' ? 'Arma' : 'Armadura'} de tu raza, grado ${D.GRADES[id.split(':')[1]].name}` : D.ITEMS[id].name}${q ? ` ×${q[0]}–${q[1]}` : ''} ${+(ch * 100).toFixed(1)}%`).join(', ') + (m.onHit ? ` · Puede causar: ${[m.onHit.poison && 'veneno', m.onHit.burn && 'quemadura', m.onHit.slow && 'lentitud'].filter(Boolean).join(', ')}` : ''))
           )
         );
       }
@@ -396,8 +396,8 @@
     const p = $('#guideMisc');
     if (p) {
       const rows = Object.values(D.ITEMS)
-        .filter((it) => it.type === 'potion' || it.type === 'junk')
-        .map((it) => el('tr', {}, el('td', {}, el('span', { class: 'g', style: `color:${D.RARITY[it.rarity].color}` }, it.glyph), el('strong', {}, it.name)), el('td', {}, it.type === 'potion' ? 'Poción' : 'Botín'), el('td', {}, it.desc), el('td', { class: 'num' }, it.type === 'potion' ? `${it.price} oro` : `Vende: ${D.sellPrice(it)} oro`)));
+        .filter((it) => it.type === 'potion' || it.type === 'junk' || it.type === 'gem')
+        .map((it) => el('tr', {}, el('td', {}, el('span', { class: 'g', style: `color:${D.RARITY[it.rarity].color}` }, it.glyph), el('strong', {}, it.name)), el('td', {}, it.type === 'potion' ? 'Poción' : it.type === 'gem' ? 'Consumible' : 'Botín'), el('td', {}, it.desc), el('td', { class: 'num' }, it.type !== 'junk' ? `${it.price} oro` : `Vende: ${D.sellPrice(it)} oro`)));
       p.append(table([['Objeto'], ['Tipo'], ['Uso'], ['Precio', 'num']], rows));
     }
   }

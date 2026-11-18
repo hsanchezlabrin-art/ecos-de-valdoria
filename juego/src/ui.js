@@ -117,13 +117,14 @@ function buildHotbar() {
     ...G.player.skills.map((s, i) => ({ kind: 'skill', i, key: String(i + 1), glyph: s.glyph, title: skillTitle(s) })),
     { kind: 'pot', id: 'pocion_vida', key: '7', glyph: ITEMS.pocion_vida.glyph, title: `${ITEMS.pocion_vida.name}\n${ITEMS.pocion_vida.desc}` },
     { kind: 'pot', id: 'pocion_mana', key: '8', glyph: ITEMS.pocion_mana.glyph, title: `${ITEMS.pocion_mana.name}\n${ITEMS.pocion_mana.desc}` },
+    { kind: 'gem', id: 'gema_poder', key: '9', glyph: ITEMS.gema_poder.glyph, title: `${ITEMS.gema_poder.name} (activar o desactivar)\n${ITEMS.gema_poder.desc}` },
   ];
   E.slots = defs.map((d) => {
     const b = document.createElement('button');
-    b.className = `slot ${d.kind === 'pot' ? `pot ${d.id}` : 'skill'}`;
+    b.className = `slot ${d.kind === 'pot' ? `pot ${d.id}` : d.kind === 'gem' ? 'gem' : 'skill'}`;
     b.title = d.title;
     b.innerHTML = `<span class="glyph">${d.glyph}</span><span class="key">${d.key}</span><span class="cd"></span><span class="qty"></span><span class="lock"></span>`;
-    b.addEventListener('click', () => (d.kind === 'skill' ? useSkill(d.i) : usePotion(d.id)));
+    b.addEventListener('click', () => (d.kind === 'skill' ? useSkill(d.i) : d.kind === 'gem' ? V.Game.toggleGems() : usePotion(d.id)));
     bar.append(b);
     return { d, b, cd: b.querySelector('.cd'), qty: b.querySelector('.qty'), lock: b.querySelector('.lock'), state: '' };
   });
@@ -160,6 +161,10 @@ function updateHotbar() {
       locked = !!lock;
       low = !p.freeNext && p.mp < sk.mp;
       s.lock.textContent = lock === 'Cambio de clase' ? 'Clase' : lock;
+    } else if (s.d.kind === 'gem') {
+      qty = p.gems || 0;
+      low = qty === 0;
+      s.b.classList.toggle('on', !!p.gemsOn && qty > 0);
     } else {
       cd = p.cds.pot || 0;
       qty = countItem(s.d.id);
@@ -608,6 +613,8 @@ function openItemMenu(anchor, source) {
       if (problem) actions.before(add('p', 'im-warn', problem));
     } else if (it.type === 'potion') {
       btn('Usar', () => V.Game.useItem(source.index), { primary: true });
+    } else if (it.type === 'gem') {
+      btn(p.gemsOn ? 'Desactivar gemas' : 'Activar gemas', () => V.Game.toggleGems(), { primary: true });
     }
     if (shopOpen()) btn(`Vender · ${sellPrice(it)} oro`, () => openTrade('sell', source.index));
   }
@@ -804,11 +811,23 @@ function updateUI() {
   const parts = [];
   for (const b of p.buffs || []) parts.push(`${b.name} · ${Math.ceil(b.t)} s`);
   if (p.bubble) parts.push('Burbuja Estelar');
+  if (p.gemsOn && p.gems > 0) parts.push(`Gemas de Poder (${p.gems})`);
   if (p.freeNext) parts.push('Resonancia: próximo hechizo gratis');
   if (p.shield > 0) parts.push(`Escudo ${Math.ceil(p.shield)} · ${Math.ceil(p.shieldT)} s`);
+  const bad = (p.debuffs || []).map((d) => `${d.name} · ${Math.ceil(d.t)} s`).join('  ·  ');
   const buff = parts.join('  ·  ');
-  if (E.buffs.textContent !== buff) E.buffs.textContent = buff;
-  E.buffs.hidden = !buff;
+  const key = `${buff}|${bad}`;
+  if (E.buffs.dataset.key !== key) {
+    E.buffs.dataset.key = key;
+    E.buffs.textContent = buff;
+    if (bad) {
+      const span = document.createElement('span');
+      span.className = 'debuff';
+      span.textContent = `${buff ? '  ·  ' : ''}${bad}`;
+      E.buffs.append(span);
+    }
+  }
+  E.buffs.hidden = !buff && !bad;
 
   const t = G.target;
   const npc = G.npcSel;

@@ -252,6 +252,9 @@
         case 'Digit8':
           Game.usePotion('pocion_mana');
           break;
+        case 'Digit9':
+          Game.toggleGems();
+          break;
       }
     });
     addEventListener('keyup', (e) => (G.keys[e.code] = false));
