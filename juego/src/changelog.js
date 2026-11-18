@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.18.1',
+      date: '2026-11-18',
+      title: 'Textos que caben en su lugar',
+      items: [
+        'En iPhone y iPad en horizontal los textos ya no se agrandan solos ni se salen de sus cuadros.',
+        'Las barras de vida, maná y experiencia muestran sus números siempre dentro de la barra.',
+        'Los oficios y los nombres largos de monstruos se acomodan en dos líneas dentro de su marco.',
+      ],
+    },
+    {
       version: '0.18.0',
       date: '2026-11-18',
       title: 'Más fluido en cualquier equipo',
