@@ -8,6 +8,15 @@
 })(function () {
   return [
     {
+      version: '0.5.1',
+      date: '2026-11-17',
+      title: 'El primer héroe realista',
+      items: [
+        'El Guerrero (hombre) estrena modelo 3D realista con armadura de placas, capa y animaciones de verdad para estar quieto, caminar y atacar.',
+        'Las demás clases llegarán con su modelo nuevo en las próximas versiones.',
+      ],
+    },
+    {
       version: '0.5.0',
       date: '2026-11-17',
       title: 'Un mundo más vivo',

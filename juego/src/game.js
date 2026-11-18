@@ -287,7 +287,7 @@
       dead: false,
       party: null,
     };
-    attachView(P, buildHumanoid(lookFor(cls, P.sex)));
+    attachView(P, V.Actors.buildHero(cls, P.sex));
     applyEquip(P);
     net.players.set(P.id, P);
     G.player = P;
@@ -306,7 +306,7 @@
         const cdef = CLASSES[row[10]];
         q = { id, kind: 'player', name: row[11], cls: row[10], sex: row[15], cdef, pos: { x: 0, y: 0, z: 0 }, facing: 0, height: 2.5, equip: { weapon: null, armor: null }, stats: { maxHp: row[8] } };
         net.players.set(id, q);
-        attachView(q, buildHumanoid(lookFor(q.cls, q.sex)));
+        attachView(q, V.Actors.buildHero(q.cls, q.sex));
         q.model.root.traverse((o) => (o.userData.player = q));
         UI.addPlayerPlate(q);
       }

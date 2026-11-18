@@ -87,6 +87,8 @@
     sun.shadow.normalBias = 0.02;
     scene.add(sun, sun.target);
 
+    progress('Dando forma a los héroes…', 0.16);
+    await V.Actors.preload((k) => progress('Dando forma a los héroes…', 0.16 + k * 0.12));
     progress('Moldeando las tierras de Valdoria…', 0.3);
     await frame();
     G.world = buildWorld(scene);
@@ -309,7 +311,7 @@
     if (key !== pv.key) {
       pv.key = key;
       if (pv.model) pv.scene.remove(pv.model.root);
-      pv.model = V.Models.buildHumanoid(lookFor(info.cls, info.sex));
+      pv.model = V.Actors.buildHero(info.cls, info.sex);
       V.Models.setWeaponLook(pv.model, ITEMS[info.equip.weapon]);
       V.Models.setArmorLook(pv.model, ITEMS[info.equip.armor]);
       pv.scene.add(pv.model.root);
