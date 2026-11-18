@@ -6,7 +6,7 @@
 // se reconecta solo y vuelve a entrar con el mismo personaje.
 (function () {
   const G = V.G;
-  const { buildHumanoid, buildQuadruped, animateModel, animateDeath, setWeaponLook, setArmorLook } = V.Models;
+  const { buildHumanoid, buildQuadruped, buildPet, animateModel, animateDeath, setWeaponLook, setArmorLook } = V.Models;
   const { heightAt } = V.Terrain;
   const { ITEMS, CLASSES, MOBS, lookFor, skillsFor } = V.Data;
   const UI = new Proxy({}, { get: (_, k) => V.UI[k] }); // ui.js se carga después
@@ -232,6 +232,10 @@
   }
 
   function detachView(ent) {
+    if (ent.petView) {
+      G.scene.remove(ent.petView.model.root);
+      ent.petView = null;
+    }
     if (ent.model) G.scene.remove(ent.model.root);
     ent.model = null;
   }
@@ -331,6 +335,9 @@
       q.leap = !!row[14];
       q.swimming = !!row[17];
       q.gem = !!row[20];
+      q.petType = row[21] || null;
+      q.mounted = row[22] || 0;
+      if (q !== P) q.stage = row[18] || 0;
       q.riding = false;
       if (q.equip.weapon !== row[12] || q.equip.armor !== row[13]) {
         q.equip.weapon = row[12];
@@ -457,6 +464,9 @@
       UI.classChanged();
     }
     if (!G.npcSel && !G.playerSel) P.target = d.target ? net.mobs.get(d.target) || null : null;
+    P.pet = d.pet || null;
+    P.mountKind = d.mountKind || 0;
+    syncLoot(d.loot || []);
     if (d.inv) {
       P.inv = d.inv;
       P.equip = d.equip;
@@ -580,6 +590,8 @@
   const sendChat = (text) => send({ t: 'chat', text });
   const classQuest = (action, branch) => send({ t: 'classQuest', action, branch });
   const toggleGems = () => P && send({ t: 'gems', on: !P.gemsOn });
+  const hatch = (type) => send({ t: 'hatch', type });
+  const toggleMount = () => send({ t: 'mount' });
   const invite = (id) => send({ t: 'invite', id });
   const inviteByName = (name) => send({ t: 'inviteByName', name });
   const answerInvite = (accept) => send({ t: 'inviteAnswer', accept });
@@ -642,6 +654,21 @@
         break;
       case 'openShop':
         if (mine(ev)) UI.openShop();
+        break;
+      case 'petFetch':
+        if (ev.ent && ev.ent.petView && ev.ent.petView.form === 'pet') ev.ent.petView.fetch = { at: ev.at, t: 0 };
+        break;
+      case 'mount':
+        if (ev.ent) spawnRing(ev.ent.pos, ev.on ? 0xd9b25f : 0xb9b2a4, 2.2, 0.5);
+        break;
+      case 'petHatch':
+        if (ev.ent) {
+          spawnRing(ev.ent.pos, 0xffd36b, 3, 0.9);
+          spawnRing(ev.ent.pos, 0xffffff, 1.6, 0.6);
+        }
+        break;
+      case 'hatchChoose':
+        if (mine(ev)) UI.openHatch();
         break;
       case 'openMaster':
         if (mine(ev)) UI.openMaster();
@@ -938,6 +965,156 @@
     const s = polyProtos[form].clone();
     G.scene.add(s);
     return s;
+  }
+
+  // ---------- Mascotas y monturas ----------
+
+  // Mascota que sigue a su dueño (o montura bajo el jinete). Se dibuja en cada cliente.
+  function updatePet(ent, dt) {
+    if (!ent.petType || ent.dead) {
+      if (ent.petView && !ent.petType) {
+        G.scene.remove(ent.petView.model.root);
+        ent.petView = null;
+      }
+      if (!ent.petView) return;
+    }
+    const form = ent.mounted === 2 ? 'glider' : ent.mounted === 1 ? 'mount' : 'pet';
+    let pv = ent.petView;
+    if (!pv || pv.form !== form || pv.type !== ent.petType) {
+      if (pv) G.scene.remove(pv.model.root);
+      const model = buildPet(ent.petType, form);
+      model.root.traverse((o) => (o.raycast = () => {}));
+      G.scene.add(model.root);
+      pv = ent.petView = { model, form, type: ent.petType, pos: { x: ent.pos.x - 1, y: ent.pos.y, z: ent.pos.z - 1 }, facing: ent.facing, walk: 0, fetch: null };
+    }
+    const m = pv.model;
+    const t = G.time;
+    if (form !== 'pet') {
+      // Montura: va bajo el jinete
+      m.root.position.set(ent.pos.x, ent.pos.y, ent.pos.z);
+      m.root.rotation.y = ent.facing;
+      pv.walk += ((ent.moving ? 1 : 0) - pv.walk) * Math.min(1, dt * 8);
+      animateModel(m, t, pv.walk, 0);
+      if (m.wings) for (const [i, w] of m.wings.entries()) w.rotation.z = (i ? -1 : 1) * (form === 'glider' ? 0.15 + Math.sin(t * 3) * 0.12 : Math.sin(t * 8) * 0.2);
+      return;
+    }
+    // Mascota: busca botín o sigue a su dueño por detrás
+    let goal;
+    if (pv.fetch) {
+      pv.fetch.t += dt;
+      goal = pv.fetch.t < 0.35 + Math.hypot(pv.fetch.at.x - ent.pos.x, pv.fetch.at.z - ent.pos.z) / 14 ? pv.fetch.at : null;
+      if (!goal) pv.fetch = null;
+    }
+    if (!goal) {
+      const side = ent.facing + Math.PI * 0.75;
+      goal = { x: ent.pos.x + Math.sin(side) * 1.6, z: ent.pos.z + Math.cos(side) * 1.6 };
+    }
+    const dx = goal.x - pv.pos.x;
+    const dz = goal.z - pv.pos.z;
+    const d = Math.hypot(dx, dz);
+    const speed = pv.fetch ? 16 : Math.min(14, 2 + d * 3);
+    const moving = d > 0.25;
+    if (d > 30) {
+      pv.pos.x = goal.x;
+      pv.pos.z = goal.z;
+    } else if (moving) {
+      const k = Math.min(1, (speed * dt) / d);
+      pv.pos.x += dx * k;
+      pv.pos.z += dz * k;
+      pv.facing = Math.atan2(dx, dz);
+    } else {
+      pv.facing += Math.atan2(Math.sin(ent.facing - pv.facing), Math.cos(ent.facing - pv.facing)) * Math.min(1, dt * 3);
+    }
+    const fly = pv.type !== 'perro';
+    pv.pos.y = Math.max(heightAt(pv.pos.x, pv.pos.z), -1.7) + (fly ? 1.4 + Math.sin(t * 3) * 0.15 : 0);
+    m.root.position.set(pv.pos.x, pv.pos.y, pv.pos.z);
+    m.root.rotation.y = pv.facing;
+    pv.walk += ((moving && !fly ? 1 : 0) - pv.walk) * Math.min(1, dt * 8);
+    animateModel(m, t * 1.4, pv.walk, 0);
+    if (m.wings) for (const [i, w] of m.wings.entries()) w.rotation.z = (i ? -1 : 1) * Math.sin(t * (fly ? 14 : 6)) * 0.5;
+  }
+
+  // Aura de Héroe (Ascensión Maestra): anillo dorado con chispas a los pies
+  function heroAura(ent, dt) {
+    const want = (ent === P ? P.stage : ent.stage) >= 3 && !ent.dead;
+    if (want && !ent.heroAura) {
+      const g = new THREE.Group();
+      const ringM = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.05, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }));
+      ringM.position.y = 0.06;
+      g.add(ringM);
+      const sparks = [];
+      for (let i = 0; i < 6; i++) {
+        const sp = new THREE.Mesh(new THREE.OctahedronGeometry(0.07, 0), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xffe9a0, 1.6), transparent: true, opacity: 0.9, depthWrite: false }));
+        sp.userData.a = (i / 6) * Math.PI * 2;
+        g.add(sp);
+        sparks.push(sp);
+      }
+      g.userData.sparks = sparks;
+      g.traverse((o) => (o.raycast = () => {}));
+      ent.model.root.add(g);
+      ent.heroAura = g;
+    } else if (!want && ent.heroAura) {
+      ent.model.root.remove(ent.heroAura);
+      ent.heroAura = null;
+    }
+    if (!ent.heroAura) return;
+    ent.heroAura.rotation.y += dt * 0.8;
+    for (const sp of ent.heroAura.userData.sparks) {
+      sp.userData.a += dt * 1.5;
+      const y = (sp.userData.a * 0.35) % 2.2;
+      sp.position.set(Math.cos(sp.userData.a) * 0.95, 0.1 + y, Math.sin(sp.userData.a) * 0.95);
+      sp.material.opacity = 0.9 * (1 - y / 2.2);
+    }
+  }
+
+  // ---------- Botín en el suelo (solo lo ves tú) ----------
+
+  const lootMeshes = new Map();
+  function lootMesh(itemId) {
+    const it = ITEMS[itemId];
+    const g = new THREE.Group();
+    const color = new THREE.Color(V.Data.RARITY[(it && it.rarity) || 'comun'].color);
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a34, roughness: 0.8, flatShading: true });
+    const lid = new THREE.MeshStandardMaterial({ color, roughness: 0.5, emissive: color, emissiveIntensity: 0.25, flatShading: true });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.36), wood);
+    base.position.y = 0.15;
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.12, 0.4), lid);
+    top.position.y = 0.36;
+    const spark = new THREE.Mesh(new THREE.OctahedronGeometry(0.08, 0), new THREE.MeshBasicMaterial({ color: V.Gfx.hot(0xffe9a0, 1.5) }));
+    spark.position.y = 0.75;
+    g.add(base, top, spark);
+    g.userData.spark = spark;
+    g.traverse((o) => {
+      o.raycast = () => {};
+      o.castShadow = true;
+    });
+    return g;
+  }
+  function syncLoot(list) {
+    const seen = new Set();
+    for (const [id, x, y, z, item] of list) {
+      seen.add(id);
+      if (lootMeshes.has(id)) continue;
+      const g = lootMesh(item);
+      g.position.set(x, y, z);
+      g.rotation.y = Math.random() * Math.PI * 2;
+      g.userData.base = y;
+      G.scene.add(g);
+      lootMeshes.set(id, g);
+    }
+    for (const [id, g] of lootMeshes) {
+      if (seen.has(id)) continue;
+      spawnRing({ x: g.position.x, y: g.userData.base, z: g.position.z }, 0xffd36b, 0.9, 0.35);
+      G.scene.remove(g);
+      lootMeshes.delete(id);
+    }
+  }
+  function animateLoot(dt) {
+    for (const g of lootMeshes.values()) {
+      g.position.y = g.userData.base + Math.abs(Math.sin(G.time * 2 + g.rotation.y)) * 0.08;
+      g.userData.spark.rotation.y += dt * 3;
+      g.userData.spark.position.y = 0.75 + Math.sin(G.time * 3) * 0.08;
+    }
   }
 
   // ---------- Invocaciones ----------
@@ -1290,7 +1467,21 @@
     // Monstruo aturdido: se tambalea quieto
     if (ent.stunned) ent.model.root.rotation.z = Math.sin(G.time * 12) * 0.08;
     else if (ent.model.root.rotation.z) ent.model.root.rotation.z = 0;
-    animateModel(ent.model, G.time + (ent.kind === 'mob' ? v.phase : 0), v.walkBlend, v.atkAnim, v.swim);
+    const riding = ent.kind === 'player' && ent.mounted && ent.petView && ent.petView.model.saddle;
+    animateModel(ent.model, G.time + (ent.kind === 'mob' ? v.phase : 0), riding ? 0 : v.walkBlend, v.atkAnim, riding ? 0 : v.swim);
+    if (riding && ent.model.lLeg) {
+      // Caderas sobre la silla (la figura está escalada según la raza)
+      ent.model.rig.position.y += ent.petView.model.saddle - 0.95 * ent.model.rig.scale.y;
+      ent.model.lLeg.rotation.set(-1.35, 0, 0.35);
+      ent.model.rLeg.rotation.set(-1.35, 0, -0.35);
+    } else if (ent.model.lLeg && ent.model.lLeg.rotation.z) {
+      ent.model.lLeg.rotation.z = 0;
+      ent.model.rLeg.rotation.z = 0;
+    }
+    if (ent.kind === 'player') {
+      updatePet(ent, dt);
+      heroAura(ent, dt);
+    }
   }
 
   // ---------- Bucle ----------
@@ -1337,6 +1528,8 @@
     for (const m of net.mobs.values()) if (m.model) drawEntity(m, dt);
     for (const u of net.summons.values()) drawSummon(u, dt);
     updateAuras(dt);
+    animateLoot(dt);
+    if (V.Guide) V.Guide.update(dt);
     if (G.playerSel && !net.players.has(G.playerSel.id)) G.playerSel = null;
     sync();
     syncProjectiles();
@@ -1346,7 +1539,7 @@
   V.Game = {
     PROTOCOL, connect, register, login, resume, logout, createChar, deleteChar, play,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
-    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat, classQuest, toggleGems,
+    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat, classQuest, toggleGems, hatch, toggleMount,
     invite, inviteByName, answerInvite, leaveParty, kickFromParty,
     get online() {
       return true;

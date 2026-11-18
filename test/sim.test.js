@@ -462,4 +462,72 @@ for (const cls of Data.CLASS_IDS) {
   ok(Sim.liveStats(bear).dr >= 0.5, 'dentro de la cúpula de la Fortaleza Cubo se recibe la mitad de daño');
 }
 
+// 13) Fase 3: huevo de mascota, botín en el suelo, montura y montura planeadora
+{
+  const w = Sim.createWorld();
+  Sim.spawnMobs(w);
+  // Huevo al llegar al nivel 5
+  const p = Sim.addPlayer(w, { ...Sim.newCharacter('Pipo', 'elfo'), level: 4, pos: { x: 50, z: 14 } });
+  ok(!p.inv.some((s) => s.id === 'huevo_mascota'), 'en el nivel 4 aún no hay huevo');
+  p.xp = Data.xpToNext(4) - 1;
+  const boar = w.mobs.find((m) => m.key === 'jabali');
+  boar.pos.x = 52;
+  boar.pos.z = 14;
+  boar.hp = 1;
+  C.setTarget(w, p, boar);
+  C.attack(w, p);
+  run(w, 3);
+  ok(p.level >= 5 && p.inv.some((s) => s.id === 'huevo_mascota'), 'al llegar al nivel 5 se recibe el Huevo de Mascota');
+  // Botín en el suelo: sin mascota hay que acercarse (o llega solo a los 30 s)
+  w.loot.length = 0;
+  p.inv = p.inv.filter((s) => s.id !== 'piel');
+  const near = { x: p.pos.x + 6, z: p.pos.z };
+  w.loot.push({ id: 'bx1', owner: p.id, item: 'piel', qty: 2, pos: { ...near, y: 0 }, t: 30, fetching: false });
+  run(w, 0.5);
+  ok(w.loot.length === 1, 'sin mascota, el botín espera en el suelo');
+  C.moveTo(w, p, near);
+  run(w, 2);
+  ok(!w.loot.length && Sim.countItem(p, 'piel') === 2, 'al pasar por encima se recoge');
+  // Nace la mascota y trae el botín cercano
+  const egg = p.inv.findIndex((s) => s.id === 'huevo_mascota');
+  C.useItem(w, p, egg);
+  ok(Sim.drainEvents(w).some((e) => e.type === 'hatchChoose' && e.to === p.id), 'usar el huevo abre la elección de mascota');
+  C.hatchPet(w, p, 'dragon');
+  ok(p.pet && p.pet.type === 'dragon' && !p.inv.some((s) => s.id === 'huevo_mascota'), 'nace el Dragoncito y el huevo se gasta');
+  w.loot.push({ id: 'bx2', owner: p.id, item: 'colmillo', qty: 1, pos: { x: p.pos.x + 10, y: 0, z: p.pos.z }, t: 30, fetching: false });
+  run(w, 2);
+  ok(!w.loot.length && Sim.countItem(p, 'colmillo') === 1, 'la mascota va a buscar el botín y lo trae');
+  // Botín olvidado: llega solo a la mochila
+  w.loot.push({ id: 'bx3', owner: p.id, item: 'piel', qty: 1, pos: { x: p.pos.x + 40, y: 0, z: p.pos.z }, t: 0.2, fetching: false });
+  run(w, 0.5);
+  ok(!w.loot.length && Sim.countItem(p, 'piel') === 3, 'el botín que nadie recoge llega solo a la mochila');
+  // Montura terrestre (nivel 20): más rápida; atacar te baja
+  C.toggleMount(w, p);
+  ok(!p.mounted, 'antes del nivel 20 no se puede montar');
+  p.level = 20;
+  p.combatT = 0;
+  C.toggleMount(w, p);
+  ok(p.mounted === 1 && Sim.liveStats(p).speed > p.stats.speed * 1.5, 'en el nivel 20 se monta: +60% de velocidad');
+  const target = w.mobs.find((m) => !m.dead && m.key === 'jabali');
+  C.setTarget(w, p, target);
+  C.attack(w, p);
+  ok(!p.mounted, 'atacar te baja de la montura');
+  // Planeadora (nivel 40 + Ascensión): cruza el agua sin nadar
+  let deep = null;
+  for (let x = -170; x < 170 && !deep; x += 3) for (let z = -170; z < 170 && !deep; z += 3) if (Terrain.waterDepth(x, z) > Terrain.DEEP_DEPTH + 0.6 && Math.hypot(x, z) < 175) deep = { x, z };
+  const g = Sim.addPlayer(w, { ...Sim.newCharacter('Alas', 'hada', 'f'), level: 42, stage: 3, branch: 'a', pet: { type: 'buho' }, pos: deep });
+  C.toggleMount(w, g);
+  run(w, 1);
+  ok(g.mounted === 2 && !g.swimming && !g.deep && g.pos.y > Terrain.WATER_Y, 'la montura planeadora vuela sobre el agua sin nadar');
+  const save = Sim.serialize(g);
+  ok(save.pet && save.pet.type === 'buho', 'la mascota se guarda con el personaje');
+  // Al salir, el botín del suelo pasa a la mochila
+  w.loot.push({ id: 'bx4', owner: g.id, item: 'piel', qty: 4, pos: { x: 0, y: 0, z: 0 }, t: 30, fetching: false });
+  Sim.collectAllLoot(w, g);
+  ok(Sim.countItem(g, 'piel') === 4 && !w.loot.length, 'al salir del juego el botín pendiente no se pierde');
+  // Personajes antiguos de nivel 5 o más reciben su huevo al entrar
+  const old = Sim.addPlayer(w, { ...Sim.newCharacter('Viejo', 'oso'), level: 12 });
+  ok(old.inv.some((s) => s.id === 'huevo_mascota'), 'los personajes que ya pasaron el nivel 5 reciben su huevo');
+}
+
 console.log(`\nSimulación OK: ${checks} comprobaciones superadas.`);

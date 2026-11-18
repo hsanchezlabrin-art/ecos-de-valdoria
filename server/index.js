@@ -96,6 +96,7 @@ function charData(ch) {
     branch: d.branch === 'a' || d.branch === 'b' ? d.branch : null,
     quest: d.quest || null,
     gemsOn: !!d.gemsOn,
+    pet: d.pet && Data.isPet(d.pet.type) ? { type: d.pet.type } : null,
     pos,
     hp: Number.isFinite(+d.hp) ? +d.hp : null,
     mp: Number.isFinite(+d.mp) ? +d.mp : null,
@@ -109,7 +110,7 @@ function savePlayer(c) {
 // ---------- Estado que se envía a cada jugador ----------
 
 function playerRow(q) {
-  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0, q.gemsOn && Sim.countItem(q, 'gema_poder') > 0 ? 1 : 0];
+  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0, q.gemsOn && Sim.countItem(q, 'gema_poder') > 0 ? 1 : 0, q.pet ? q.pet.type : 0, q.mounted || 0];
 }
 
 function mobRow(m) {
@@ -130,6 +131,11 @@ function meData(c) {
     debuffs: Sim.debuffList(p),
     gemsOn: p.gemsOn ? 1 : 0,
     gems: Sim.countItem(p, 'gema_poder'),
+    pet: p.pet ? p.pet.type : null,
+    mounted: p.mounted || 0,
+    mountKind: Data.mountKind(p),
+    // Botín en el suelo (solo lo ve su dueño): [id, x, y, z, objeto, cantidad]
+    loot: world.loot.filter((b) => b.owner === p.id && near(b.pos, p.pos)).map((b) => [b.id, r2(b.pos.x), r2(b.pos.y), r2(b.pos.z), b.item, b.qty]),
     stage: p.stage,
     branch: p.branch,
     quest: p.quest,
@@ -335,6 +341,10 @@ function onCommand(c, msg) {
       return C.respawn(world, p);
     case 'gems':
       return C.setGems(world, p, !!msg.on);
+    case 'hatch':
+      return C.hatchPet(world, p, str(msg.type, 12));
+    case 'mount':
+      return C.toggleMount(world, p);
     case 'classQuest':
       return C.classQuest(world, p, str(msg.action, 10), msg.branch === 'a' || msg.branch === 'b' ? msg.branch : null);
     case 'invite':
@@ -392,6 +402,7 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
 function leave(c) {
   clients.delete(c);
   if (!c.p) return;
+  Sim.collectAllLoot(world, c.p); // el botín que quedó en el suelo pasa a la mochila
   savePlayer(c);
   const name = c.p.name;
   Sim.removePlayer(world, c.p.id);

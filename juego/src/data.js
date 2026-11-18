@@ -82,6 +82,24 @@
     scepter: { name: 'Cetro estrella', model: 'staff', glyph: '✦' },
   };
 
+  // ---------- Mascotas y monturas ----------
+  // La mascota nace del huevo (nivel 5), crece a montura terrestre (nivel 20) y a montura
+  // planeadora con la Ascensión Maestra (nivel 40). La planeadora cruza el agua sin nadar.
+  const PET_LVL = 5;
+  const MOUNT_LVL = 20;
+  const GLIDER_LVL = 40;
+  const MOUNT_SPEED = { 1: 0.6, 2: 1.0 }; // +60% terrestre, +100% planeadora
+  const PET_FETCH_R = 14; // distancia a la que la mascota va a buscar el botín
+  const PETS = {
+    perro: { name: 'Cubo-Perro', glyph: '🐶', color: 0xd9a066, mount: 'Lobo de Bloques', glider: 'Lobo Alado', desc: 'Leal y juguetón. Mueve la cola cuando encuentra botín.' },
+    dragon: { name: 'Dragoncito', glyph: '🐲', color: 0x5ab06a, mount: 'Dragón Corredor', glider: 'Dragón Celeste', desc: 'Pequeño y valiente. Suelta chispitas cuando está feliz.' },
+    buho: { name: 'Búho Cúbico', glyph: '🦉', color: 0xa08060, mount: 'Grifo Terrestre', glider: 'Grifo Planeador', desc: 'Lo ve todo desde arriba y nunca pierde un objeto.' },
+  };
+  const isPet = (t) => typeof t === 'string' && Object.prototype.hasOwnProperty.call(PETS, t);
+  // 0: sin montura · 1: terrestre · 2: planeadora
+  const mountKind = (p) => (!p.pet ? 0 : p.level >= GLIDER_LVL && (p.stage || 0) >= 3 ? 2 : p.level >= MOUNT_LVL ? 1 : 0);
+  const petName = (type, kind = 0) => (isPet(type) ? (kind === 2 ? PETS[type].glider : kind === 1 ? PETS[type].mount : PETS[type].name) : '');
+
   // ---------- Razas (arquetipos) ----------
   // base: [valor en nivel 1, aumento por nivel]
   // combat: forma de combate heredada (melee = antiguo Guerrero, ranged = Arquero, magic = Mago)
@@ -332,14 +350,14 @@
   // Hitos del árbol de progresión (soon: aún no está en el juego)
   const PROGRESSION = [
     { lvl: 1, text: 'Eliges raza: 3 habilidades y equipo de Madera' },
-    { lvl: 5, text: 'Huevo de Mascota (recoge el botín sola)', soon: true },
+    { lvl: 5, text: 'Huevo de Mascota: tu mascota te sigue y recoge el botín' },
     { lvl: 5, text: 'Equipo de Cobre' },
     { lvl: 10, text: '1er cambio de clase: Despertar', stage: 1 },
-    { lvl: 20, text: 'La mascota evoluciona en Montura Terrestre', soon: true },
+    { lvl: 20, text: 'La mascota evoluciona en Montura Terrestre (+60% de velocidad)' },
     { lvl: 20, text: 'Equipo de Oro Morado' },
     { lvl: 25, text: '2do cambio de clase: Especialización (rama A o B)', stage: 2 },
     { lvl: 40, text: '3er cambio de clase: Ascensión Maestra', stage: 3 },
-    { lvl: 40, text: 'Montura Planeadora y Aura de Héroe', soon: true },
+    { lvl: 40, text: 'Con la Ascensión: Montura Planeadora (cruza el agua) y Aura de Héroe' },
   ];
 
   // Nombre visible según raza, sexo y etapa (ej.: "Oso Guardián", "Titán de Piedra Viva")
@@ -376,6 +394,7 @@
   const ITEMS = {
     pocion_vida: { name: 'Poción de Vida', type: 'potion', stat: 'hp', amount: 0.35, price: 20, stack: true, glyph: '♥', rarity: 'comun', desc: 'Restaura el 35% de la vida.' },
     pocion_mana: { name: 'Poción de Maná', type: 'potion', stat: 'mp', amount: 0.4, price: 25, stack: true, glyph: '◆', rarity: 'comun', desc: 'Restaura el 40% del maná.' },
+    huevo_mascota: { name: 'Huevo de Mascota', type: 'egg', price: 0, glyph: '🥚', rarity: 'refinado', desc: 'Úsalo para que nazca tu mascota: elige entre Cubo-Perro, Dragoncito o Búho Cúbico. Te sigue y recoge el botín por ti.' },
     gema_poder: { name: 'Gema de Poder', type: 'gem', price: 3, stack: true, glyph: '✦', rarity: 'refinado', desc: 'Actívalas con la tecla 9: cada ataque o habilidad gasta una gema y hace un 25% más de daño. Tu arma brilla mientras estén activas.' },
 
     piel: { name: 'Piel de Jabalí', type: 'junk', price: 4, stack: true, glyph: '▤', rarity: 'comun', desc: 'Se vende en el mercado.' },
@@ -687,6 +706,7 @@
     raceName, className, skillsFor, passiveFor, skillLock, lookFor, playerBaseStats, mobStats,
     ITEMS, WEAPON_TIERS, ARMOR_TIERS, weaponFor, armorFor, startGear, equipProblem,
     ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT,
+    PETS, isPet, PET_LVL, MOUNT_LVL, GLIDER_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName,
     OLD_CLASS_MAP, migrateCharacter,
   };
 });

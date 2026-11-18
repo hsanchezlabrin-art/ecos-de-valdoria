@@ -8,6 +8,19 @@
 })(function () {
   return [
     {
+      version: '0.9.0',
+      date: '2026-11-18',
+      title: 'Mascotas, monturas y guía',
+      items: [
+        'En el nivel 5 recibes un Huevo de Mascota: elige Cubo-Perro, Dragoncito o Búho Cúbico. Te sigue y va a buscar el botín por ti.',
+        'El botín ahora cae al suelo en cofrecitos que solo ves tú: recógelo pasando por encima o deja que tu mascota lo traiga. Si nadie lo recoge, llega solo a tu mochila: nunca se pierde.',
+        'En el nivel 20 tu mascota crece y se convierte en tu montura (tecla 0): +60% de velocidad.',
+        'Con la Ascensión Maestra (nivel 40) tu montura gana alas: planea sobre el agua y va el doble de rápido. Además brilla tu Aura de Héroe.',
+        'Guía dorada: unas chispas marcan el camino hacia tu próxima misión, el Maestro de Clase o la zona de tu nivel. Se puede apagar con el botón Guía.',
+        'Los personajes que ya pasaron el nivel 5 reciben su huevo al entrar.',
+      ],
+    },
+    {
       version: '0.8.0',
       date: '2026-11-18',
       title: 'Robots, clones y Gemas de Poder',

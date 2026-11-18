@@ -256,6 +256,46 @@
     return { kind: 'quad', root, rig, head, legs, height: 1.5 * s };
   }
 
+  // Mascotas y monturas de bloques. form: 'pet' (pequeña), 'mount' (terrestre) o 'glider' (con alas grandes)
+  const PET_LOOK = {
+    perro: { color: 0xd9a066, mount: 0x8a8f9a, glider: 0xb9c4d2, wing: 0xe8f0ff },
+    dragon: { color: 0x5ab06a, mount: 0x3f8a4a, glider: 0x4a9ad0, wing: 0xb6e08a, horns: true },
+    buho: { color: 0xa08060, mount: 0xc9a46a, glider: 0xd9b25f, wing: 0x8a6a46, beak: true },
+  };
+  function buildPet(type, form = 'pet') {
+    const L = PET_LOOK[type] || PET_LOOK.perro;
+    const scale = form === 'pet' ? (type === 'buho' ? 0.38 : 0.45) : form === 'mount' ? 1.4 : 1.5;
+    const m = buildQuadruped({ color: form === 'pet' ? L.color : form === 'mount' ? L.mount : L.glider, scale, mane: form !== 'pet' && type === 'perro' });
+    const dark = mat(new THREE.Color(form === 'pet' ? L.color : L.mount).multiplyScalar(0.55));
+    if (L.horns) {
+      m.head.add(part(box(0.08, 0.26, 0.08), mat(0xece3c8), 0.15, 0.36, 0.05));
+      m.head.add(part(box(0.08, 0.26, 0.08), mat(0xece3c8), -0.15, 0.36, 0.05));
+      // Púas en el lomo
+      for (let i = 0; i < 3; i++) m.rig.add(part(box(0.1, 0.18, 0.12), dark, 0, 1.28, 0.35 - i * 0.35));
+    }
+    if (L.beak) m.head.add(part(box(0.14, 0.12, 0.18), mat(0xf2b13a), 0, -0.05, 0.6));
+    // Alas: pequeñas en el dragón y el búho; grandes en la planeadora
+    if (form === 'glider' || type !== 'perro') {
+      const big = form === 'glider';
+      const wm = mat(L.wing, big ? { transparent: true, opacity: 0.85 } : {});
+      const wings = [];
+      for (const sx of [1, -1]) {
+        const g = new THREE.Group();
+        g.position.set(0.36 * sx, 1.12, 0.1);
+        g.add(part(box(big ? 1.5 : 0.55, 0.05, big ? 0.8 : 0.4), wm, (big ? 0.75 : 0.28) * sx, 0, 0));
+        m.rig.add(g);
+        wings.push(g);
+      }
+      m.wings = wings;
+    }
+    // Silla de montar
+    if (form !== 'pet') m.rig.add(part(box(0.66, 0.12, 0.6), mat(0x7a2630), 0, 1.25, 0));
+    m.saddle = form === 'pet' ? 0 : 1.25 * scale + 0.05;
+    m.form = form;
+    m.petType = type;
+    return m;
+  }
+
   function animateModel(m, t, walk, atk, swim = 0) {
     const swing = atk > 0 ? Math.sin(Math.PI * (1 - atk)) : 0;
     if (m.kind === 'hum' && swim > 0.01) {
@@ -357,5 +397,5 @@
     m.torsoMat.color.setHex(item ? item.look : m.baseBody);
   }
 
-  V.Models = { mat, buildHumanoid, buildQuadruped, animateModel, animateDeath, setWeaponLook, setArmorLook };
+  V.Models = { mat, buildHumanoid, buildQuadruped, buildPet, animateModel, animateDeath, setWeaponLook, setArmorLook };
 })();

@@ -60,6 +60,15 @@ function initUI() {
   $('pClass').textContent = className(G.player.cls, G.player.sex, G.player.stage, G.player.branch);
   buildHotbar();
   bindMaster();
+  $('hatchClose').onclick = () => ($('hatchPanel').hidden = true);
+  if ($('btnGuide')) {
+    const sync = () => ($('btnGuide').firstChild.textContent = V.Guide && V.Guide.enabled ? 'Guía: sí ' : 'Guía: no ');
+    $('btnGuide').onclick = () => {
+      V.Guide.toggle();
+      sync();
+    };
+    sync();
+  }
   $('btnInv').onclick = () => togglePanel('inv');
   $('btnHelp').onclick = () => togglePanel('help');
   $('btnStats').onclick = () => togglePanel('stats');
@@ -118,13 +127,14 @@ function buildHotbar() {
     { kind: 'pot', id: 'pocion_vida', key: '7', glyph: ITEMS.pocion_vida.glyph, title: `${ITEMS.pocion_vida.name}\n${ITEMS.pocion_vida.desc}` },
     { kind: 'pot', id: 'pocion_mana', key: '8', glyph: ITEMS.pocion_mana.glyph, title: `${ITEMS.pocion_mana.name}\n${ITEMS.pocion_mana.desc}` },
     { kind: 'gem', id: 'gema_poder', key: '9', glyph: ITEMS.gema_poder.glyph, title: `${ITEMS.gema_poder.name} (activar o desactivar)\n${ITEMS.gema_poder.desc}` },
+    { kind: 'mount', key: '0', glyph: '🐾', title: 'Montar o bajar de tu mascota (desde el nivel 20)\nTerrestre: +60% de velocidad. Planeadora (nivel 40 con la Ascensión): +100% y cruza el agua.' },
   ];
   E.slots = defs.map((d) => {
     const b = document.createElement('button');
-    b.className = `slot ${d.kind === 'pot' ? `pot ${d.id}` : d.kind === 'gem' ? 'gem' : 'skill'}`;
+    b.className = `slot ${d.kind === 'pot' ? `pot ${d.id}` : d.kind === 'gem' || d.kind === 'mount' ? d.kind : 'skill'}`;
     b.title = d.title;
     b.innerHTML = `<span class="glyph">${d.glyph}</span><span class="key">${d.key}</span><span class="cd"></span><span class="qty"></span><span class="lock"></span>`;
-    b.addEventListener('click', () => (d.kind === 'skill' ? useSkill(d.i) : d.kind === 'gem' ? V.Game.toggleGems() : usePotion(d.id)));
+    b.addEventListener('click', () => (d.kind === 'skill' ? useSkill(d.i) : d.kind === 'gem' ? V.Game.toggleGems() : d.kind === 'mount' ? V.Game.toggleMount() : usePotion(d.id)));
     bar.append(b);
     return { d, b, cd: b.querySelector('.cd'), qty: b.querySelector('.qty'), lock: b.querySelector('.lock'), state: '' };
   });
@@ -161,6 +171,11 @@ function updateHotbar() {
       locked = !!lock;
       low = !p.freeNext && p.mp < sk.mp;
       s.lock.textContent = lock === 'Cambio de clase' ? 'Clase' : lock;
+    } else if (s.d.kind === 'mount') {
+      const lock = !p.pet ? (countItem('huevo_mascota') ? 'Huevo' : 'Nv 5') : p.mountKind ? '' : 'Nv 20';
+      locked = !!lock;
+      s.lock.textContent = lock;
+      s.b.classList.toggle('on', !!p.mounted);
     } else if (s.d.kind === 'gem') {
       qty = p.gems || 0;
       low = qty === 0;
@@ -613,6 +628,8 @@ function openItemMenu(anchor, source) {
       if (problem) actions.before(add('p', 'im-warn', problem));
     } else if (it.type === 'potion') {
       btn('Usar', () => V.Game.useItem(source.index), { primary: true });
+    } else if (it.type === 'egg') {
+      btn('Abrir huevo', () => openHatch(), { primary: true });
     } else if (it.type === 'gem') {
       btn(p.gemsOn ? 'Desactivar gemas' : 'Activar gemas', () => V.Game.toggleGems(), { primary: true });
     }
@@ -1062,6 +1079,33 @@ function refreshMaster() {
   area.append(row);
 }
 
+// ---------- Huevo de Mascota: elegir mascota ----------
+
+function openHatch() {
+  const box = $('hatchList');
+  box.innerHTML = '';
+  for (const [type, pet] of Object.entries(V.Data.PETS)) {
+    const card = document.createElement('div');
+    card.className = 'ms-card';
+    const b = document.createElement('b');
+    b.textContent = `${pet.glyph} ${pet.name}`;
+    const small = document.createElement('small');
+    small.textContent = `Nivel 20: ${pet.mount} · Nivel 40: ${pet.glider}`;
+    const desc = document.createElement('p');
+    desc.textContent = pet.desc;
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.textContent = `Elegir ${pet.name}`;
+    pick.onclick = () => {
+      V.Game.hatch(type);
+      $('hatchPanel').hidden = true;
+    };
+    card.append(b, small, desc, pick);
+    box.append(card);
+  }
+  $('hatchPanel').hidden = false;
+}
+
 // ---------- Grupo ----------
 
 let partyKey = '';
@@ -1286,6 +1330,6 @@ V.UI = {
   initUI, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
   floatText, log, logLoot, banner, showDeath, showInvite, openDrops,
   togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI, openTrade,
-  classChanged, openMaster, refreshMaster,
+  classChanged, openMaster, refreshMaster, openHatch,
 };
 })();

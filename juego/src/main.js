@@ -255,6 +255,9 @@
         case 'Digit9':
           Game.toggleGems();
           break;
+        case 'Digit0':
+          Game.toggleMount();
+          break;
       }
     });
     addEventListener('keyup', (e) => (G.keys[e.code] = false));

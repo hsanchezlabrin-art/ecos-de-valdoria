@@ -15,7 +15,10 @@
 })(function (Data, Terrain) {
   const { ARCHETYPES, isArchetype, MOBS, ITEMS, ZONES, NPCS, MAX_LEVEL, STAGES, GRADES, ARMOR_TYPES, xpToNext, mobStats, playerBaseStats, sellPrice, resolveDrop, shopFor, CRIT_MULT, MOVE_SPEED } = Data;
   const { skillsFor, passiveFor, equipProblem, startGear, questFor, weaponFor, className, raceName, GEM_MULT } = Data;
-  const { heightAt, inVillage, zoneAt, WORLD_LIMIT, collide, waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y } = Terrain;
+  const { heightAt, inVillage, zoneAt, WORLD_LIMIT, collide, waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y, WATER_Y } = Terrain;
+  const { PETS, isPet, PET_LVL, MOUNT_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName } = Data;
+  const LOOT_LIFE = 30; // segundos: luego el botín llega solo a la mochila (nunca se pierde)
+  const PICK_R = 1.8;
 
   const SPEED = MOVE_SPEED;
   const SWIM_SPEED = 0.6; // nadar es más lento
@@ -44,7 +47,7 @@
   // ---------- Mundo y eventos ----------
 
   function createWorld() {
-    return { time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map(), summons: [] };
+    return { time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map(), summons: [], loot: [] };
   }
   const emit = (w, ev) => w.events.push(ev);
   function drainEvents(w) {
@@ -138,6 +141,8 @@
       aura: null,
       debuffs: {},
       gemsOn: !!data.gemsOn,
+      pet: data.pet && isPet(data.pet.type) ? { type: data.pet.type } : null,
+      mounted: 0,
       hp: 0,
       mp: 0,
     };
@@ -150,6 +155,8 @@
         p.equip[key] = null;
       }
     }
+    // Personajes que ya pasaron el nivel 5 sin mascota: reciben su huevo
+    if (p.level >= PET_LVL && !p.pet && !p.inv.some((x) => x.id === 'huevo_mascota') && p.inv.length < INV_SLOTS) p.inv.push({ id: 'huevo_mascota', qty: 1 });
     collide(p.pos, PLAYER_R);
     p.pos.y = groundY(p.pos.x, p.pos.z);
     w.players.set(id, p);
@@ -197,6 +204,7 @@
       branch: p.branch,
       quest: p.quest ? { ...p.quest } : null,
       gemsOn: !!p.gemsOn,
+      pet: p.pet ? { ...p.pet } : null,
       inv: p.inv.map((s) => ({ ...s })),
       equip: { ...p.equip },
       pos: alive ? { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2) } : { ...SPAWN },
@@ -246,7 +254,7 @@
   };
   const playerAtk = (p) => p.stats.atk * (1 + buffSum(p, 'atk'));
   const playerCrit = (p) => p.stats.crit + buffSum(p, 'crit');
-  const moveSpeed = (p) => p.stats.speed * (1 + buffSum(p, 'speed')) * (p.debuffs.slow ? 0.6 : 1);
+  const moveSpeed = (p) => p.stats.speed * (1 + buffSum(p, 'speed') + (MOUNT_SPEED[p.mounted] || 0)) * (p.debuffs.slow ? 0.6 : 1);
   const attackInterval = (p) => p.stats.atkSpeed / (1 + buffSum(p, 'haste') + p.frenzy * (p.passive.frenzy || 0));
   const reachTo = (p, m) => p.stats.range + bodyR(m);
 
@@ -518,13 +526,101 @@
         if (Math.random() >= chance) continue;
         const id = resolveDrop(raw, q.cls);
         const qty = range ? randInt(range[0], range[1]) : 1;
-        if (addItem(q, id, qty)) emit(w, { type: 'loot', to: q.id, id, qty, verb: 'Obtienes' });
-        else log(w, q, 'Tu inventario está lleno.', 'warn');
+        dropBag(w, q, m.pos, id, qty);
       }
       questProgress(w, q, m);
       emit(w, { type: 'inventory', to: q.id });
     }
     if (m.def.boss) emit(w, { type: 'banner', to: null, title: `${m.def.name} ha sido derrotado`, sub: 'Vuelve a aparecer en 3 minutos' });
+  }
+
+  // ---------- Botín en el suelo y mascotas ----------
+
+  function dropBag(w, q, at, item, qty) {
+    const a = Math.random() * Math.PI * 2;
+    const r = 0.6 + Math.random() * 1.2;
+    const pos = { x: at.x + Math.cos(a) * r, y: 0, z: at.z + Math.sin(a) * r };
+    collide(pos, 0.3);
+    pos.y = Math.max(heightAt(pos.x, pos.z), WATER_Y);
+    w.loot.push({ id: `b${w.nextId++}`, owner: q.id, item, qty, pos, t: LOOT_LIFE, fetching: false });
+  }
+
+  // Recoger una bolsa: devuelve false si no cabe en el inventario
+  function collectBag(w, p, bag, verb) {
+    if (!addItem(p, bag.item, bag.qty)) {
+      if (!bag.warned) log(w, p, 'Tu inventario está lleno: el botín te espera en el suelo.', 'warn');
+      bag.warned = true;
+      bag.fetching = false;
+      return false;
+    }
+    const i = w.loot.indexOf(bag);
+    if (i >= 0) w.loot.splice(i, 1);
+    emit(w, { type: 'loot', to: p.id, id: bag.item, qty: bag.qty, verb });
+    emit(w, { type: 'inventory', to: p.id });
+    return true;
+  }
+
+  function updateLoot(w, dt) {
+    for (let i = w.loot.length - 1; i >= 0; i--) {
+      const bag = w.loot[i];
+      const p = w.players.get(bag.owner);
+      if (!p) {
+        w.loot.splice(i, 1);
+        continue;
+      }
+      bag.t -= dt;
+      if (bag.fetching) continue;
+      const d = d2(p.pos, bag.pos);
+      if (!p.dead && d <= PICK_R) collectBag(w, p, bag, 'Recoges');
+      else if (!p.dead && p.pet && d <= PET_FETCH_R) {
+        // La mascota corre a buscarlo y lo trae
+        bag.fetching = true;
+        emit(w, { type: 'petFetch', ent: p, at: { ...bag.pos }, bag: bag.id });
+        later(w, 0.35 + d / 14, () => {
+          if (w.loot.includes(bag) && w.players.has(p.id)) collectBag(w, p, bag, `${petName(p.pet.type)} te trae`);
+        });
+      } else if (bag.t <= 0) collectBag(w, p, bag, 'Llega a tu mochila');
+    }
+  }
+
+  // Al salir del juego, el botín pendiente pasa a la mochila
+  function collectAllLoot(w, p) {
+    for (const bag of w.loot.filter((b) => b.owner === p.id)) addItem(p, bag.item, bag.qty);
+    w.loot = w.loot.filter((b) => b.owner !== p.id);
+  }
+
+  function hatchPet(w, p, type) {
+    if (p.pet) return log(w, p, 'Ya tienes una mascota.', 'warn');
+    if (!isPet(type)) return;
+    const i = p.inv.findIndex((x) => x.id === 'huevo_mascota');
+    if (i < 0) return log(w, p, 'Necesitas un Huevo de Mascota.', 'warn');
+    removeAt(p, i, 1);
+    p.pet = { type };
+    emit(w, { type: 'banner', to: p.id, title: `¡Nació tu ${PETS[type].name}!`, sub: 'Te seguirá y recogerá el botín por ti' });
+    emit(w, { type: 'petHatch', ent: p });
+    log(w, p, `${PETS[type].name}: ${PETS[type].desc}`, 'lvl');
+    emit(w, { type: 'inventory', to: p.id });
+  }
+
+  // Montar o bajar (tecla 0). Atacar o usar una habilidad te baja.
+  function toggleMount(w, p) {
+    if (p.dead) return;
+    if (p.mounted) return dismount(w, p);
+    const kind = mountKind(p);
+    if (!p.pet) return log(w, p, 'Primero necesitas una mascota (Huevo de Mascota, nivel 5).', 'warn');
+    if (!kind) return log(w, p, `Tu mascota podrá llevarte desde el nivel ${MOUNT_LVL}.`, 'warn');
+    if (p.combatT > 0) return log(w, p, 'No puedes montar en pleno combate.', 'warn');
+    if (p.swimming && kind < 2) return log(w, p, 'No puedes montar en el agua.', 'warn');
+    p.mounted = kind;
+    p.autoAttack = false;
+    p.queued = null;
+    emit(w, { type: 'mount', ent: p, on: kind });
+    log(w, p, `Montas a ${petName(p.pet.type, kind)}: +${Math.round(MOUNT_SPEED[kind] * 100)}% de velocidad${kind === 2 ? ' y planeas sobre el agua' : ''}.`, 'sys');
+  }
+  function dismount(w, p) {
+    if (!p.mounted) return;
+    p.mounted = 0;
+    emit(w, { type: 'mount', ent: p, on: 0 });
   }
 
   function mobHitsPlayer(w, m, p) {
@@ -748,6 +844,7 @@
   function killPlayer(w, p, cause) {
     p.hp = 0;
     p.dead = true;
+    p.mounted = 0;
     p.autoAttack = false;
     p.queued = null;
     p.moveTarget = null;
@@ -811,6 +908,11 @@
       emit(w, { type: 'banner', to: p.id, title: `Nivel ${p.level}`, sub });
       log(w, p, `Has alcanzado el nivel ${p.level}.`, 'lvl');
       if (st) log(w, p, `Nuevo cambio de clase disponible: ${st.name}. Ve con el Maestro Aldric en la aldea.`, 'lvl');
+      if (p.level === PET_LVL && !p.pet && !p.inv.some((x) => x.id === 'huevo_mascota') && addItem(p, 'huevo_mascota', 1)) {
+        emit(w, { type: 'banner', to: p.id, title: '¡Recibiste un Huevo de Mascota!', sub: 'Úsalo desde tu inventario para que nazca' });
+        emit(w, { type: 'loot', to: p.id, id: 'huevo_mascota', qty: 1, verb: 'Recibes' });
+      }
+      if (p.level === MOUNT_LVL && p.pet) log(w, p, `¡Tu ${PETS[p.pet.type].name} creció y ahora es un ${PETS[p.pet.type].mount}! Pulsa 0 para montarlo.`, 'lvl');
     }
     if (up) {
       emit(w, { type: 'levelUp', ent: p, level: p.level }); // columna de luz visible para todos
@@ -884,6 +986,8 @@
       const gift = weaponFor(p.cls, ['madera', 'azul', 'dorado', 'arcoiris'][p.stage]);
       if (gift && addItem(p, gift, 1)) emit(w, { type: 'loot', to: p.id, id: gift, qty: 1, verb: 'El gremio te regala' });
       emit(w, { type: 'banner', to: p.id, title: `¡Ahora eres ${title}!`, sub: STAGES[p.stage].unlocks });
+      if (p.stage === 3 && p.pet && mountKind(p) === 2) log(w, p, `¡Tu ${PETS[p.pet.type].glider} puede planear! Con él cruzas el agua sin nadar. Además brilla tu Aura de Héroe.`, 'lvl');
+      if (p.mounted) p.mounted = mountKind(p);
       emit(w, { type: 'classChange', ent: p, stage: p.stage, branch: p.branch });
       emit(w, { type: 'levelUp', ent: p, level: p.level });
       log(w, p, `Has completado el ${STAGES[p.stage].name}: ahora eres ${title}.`, 'lvl');
@@ -927,6 +1031,7 @@
 
   function attack(w, p) {
     if (p.dead || !p.target || p.target.dead) return;
+    dismount(w, p);
     p.autoAttack = true;
     p.moveTarget = null;
     p.interact = null;
@@ -1030,6 +1135,7 @@
       return log(w, p, `${s.name} se desbloquea con el ${STAGES[s.stage].name}. Habla con el Maestro Aldric.`, 'warn');
     }
     if ((p.cds[s.id] || 0) > 0) return;
+    dismount(w, p);
     const cost = p.freeNext ? 0 : s.mp;
     if (p.mp < cost) return log(w, p, 'No tienes suficiente maná.', 'warn');
     if (NEEDS_TARGET.includes(s.type)) {
@@ -1551,6 +1657,7 @@
     const it = ITEMS[slot.id];
     if (it.type === 'potion') return usePotion(w, p, slot.id);
     if (it.type === 'gem') return setGems(w, p, !p.gemsOn);
+    if (it.type === 'egg') return p.pet ? log(w, p, 'Ya tienes una mascota.', 'warn') : emit(w, { type: 'hatchChoose', to: p.id });
     if (it.type !== 'weapon' && it.type !== 'armor') return log(w, p, `${it.name}: ${it.desc}`, 'sys');
     const problem = equipProblem(p, it);
     if (problem) return log(w, p, `No puedes equipar ${it.name}: ${problem}`, 'warn');
@@ -1572,6 +1679,7 @@
     if (!slot) return;
     if (!nearMerchant(p)) return log(w, p, 'Acércate al Mercader Orlen para vender.', 'warn');
     const it = ITEMS[slot.id];
+    if (it.type === 'egg') return log(w, p, 'El Huevo de Mascota no se puede vender.', 'warn');
     const n = tradeQty(qty, slot.qty);
     const total = sellPrice(it) * n;
     p.gold += total;
@@ -1702,6 +1810,7 @@
     for (const p of w.players.values()) updatePlayer(w, p, dt);
     for (const m of w.mobs) updateMob(w, m, dt);
     updateSummons(w, dt);
+    updateLoot(w, dt);
     updateProjectiles(w, dt);
     updateTimers(w, dt);
   }
@@ -1746,8 +1855,10 @@
     // Agua: nadar es más lento; en aguas profundas se gasta el aire
     const depth = waterDepth(p.pos.x, p.pos.z);
     const wasDeep = p.deep;
-    p.swimming = depth > SWIM_DEPTH;
-    p.deep = depth > DEEP_DEPTH;
+    const gliding = p.mounted === 2;
+    p.swimming = !gliding && depth > SWIM_DEPTH;
+    p.deep = !gliding && depth > DEEP_DEPTH;
+    if (p.mounted === 1 && depth > SWIM_DEPTH) dismount(w, p); // la montura terrestre no entra al agua profunda
     if (p.deep) {
       p.breath = Math.max(0, p.breath - dt);
       if (!wasDeep) log(w, p, 'Aguas profundas: te queda poco aire. Vuelve a la orilla.', 'warn');
@@ -1767,7 +1878,8 @@
     const speed = moveSpeed(p) * (p.swimming ? SWIM_SPEED : 1);
 
     const t = p.target && !p.target.dead ? p.target : null;
-    if (!p.leap) p.pos.y = groundY(p.pos.x, p.pos.z); // sobre el suelo o flotando en el agua
+    const bodyY = (x, z) => (gliding ? Math.max(heightAt(x, z), WATER_Y + 0.25) : groundY(x, z));
+    if (!p.leap) p.pos.y = bodyY(p.pos.x, p.pos.z); // sobre el suelo, flotando en el agua o planeando
 
     if (p.dancing) {
       // Danza del Dragón: los cortes mueven al personaje
@@ -1850,6 +1962,7 @@
       if (p.pendingHit <= 0 && tt && !tt.dead && d2(p.pos, tt.pos) <= reachTo(p, tt) + 0.6) basicHit(w, p, tt);
     }
 
+    if (gliding && !p.leap) p.pos.y = bodyY(p.pos.x, p.pos.z);
     const r = Math.hypot(p.pos.x, p.pos.z);
     if (r > WORLD_LIMIT) {
       p.pos.x *= WORLD_LIMIT / r;
@@ -2013,11 +2126,12 @@
     partyView,
     buffList,
     debuffList,
+    collectAllLoot,
     liveStats,
     skillReady,
     cmd: {
       setTarget, attack, targetNearest, moveTo, setMoveDir, talkTo, useSkill, usePotion, useItem, sellItem, buyItem, unequip, respawn,
-      partyInvite, partyAnswer, partyLeave, partyKick, classQuest, setGems,
+      partyInvite, partyAnswer, partyLeave, partyKick, classQuest, setGems, hatchPet, toggleMount,
     },
   };
 });
