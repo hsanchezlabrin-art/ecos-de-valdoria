@@ -8,6 +8,15 @@
 })(function () {
   return [
     {
+      version: '0.15.1',
+      date: '2026-11-18',
+      title: 'El juego abre más rápido',
+      items: [
+        'Al iniciar ya no se descargan todos los personajes 3D: solo los movimientos y el modelo del héroe que eliges.',
+        'Los demás modelos llegan cuando aparece alguien de esa raza; mientras tanto se ve su figura de bloques por un momento.',
+      ],
+    },
+    {
       version: '0.15.0',
       date: '2026-11-18',
       title: 'Oso, Gnomo y Lagarto en 3D',

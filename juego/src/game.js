@@ -246,6 +246,22 @@
     setArmorLook(p.model, ITEMS[p.equip.armor]);
   }
 
+  // Cuando termina de descargarse el modelo 3D de un jugador, reemplaza su figura de bloques
+  function upgradeHero(ent) {
+    const old = ent.model;
+    const m = V.Actors.buildHero(ent.cls, ent.sex);
+    if (m.pending3d) return;
+    G.scene.remove(old.root);
+    ent.heroAura = null; // estaba dentro de la figura anterior: se vuelve a crear
+    m.root.position.copy(old.root.position);
+    m.root.rotation.y = old.root.rotation.y;
+    G.scene.add(m.root);
+    ent.model = m;
+    if (ent !== P) m.root.traverse((o) => (o.userData.player = ent));
+    applyEquip(ent);
+    if (ent.view) ent.view.gemOn = false;
+  }
+
   // ---------- Estado recibido ----------
 
   const setNet = (ent, x, y, z, f) => {
@@ -1484,6 +1500,7 @@
   // ---------- Dibujar entidades ----------
 
   function drawEntity(ent, dt) {
+    if (ent.kind === 'player' && ent.model.pending3d && V.Actors.has(ent.cls, ent.sex)) upgradeHero(ent);
     const v = ent.view;
     const root = ent.model.root;
     if (ent.hidden || ent.riding) {

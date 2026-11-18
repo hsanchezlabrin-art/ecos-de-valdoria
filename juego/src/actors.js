@@ -173,40 +173,58 @@
     return { gltf, scale: HEIGHT / h, clips };
   }
 
-  async function preload(onProgress) {
-    if (!THREE.GLTFLoader) return;
-    const loader = new THREE.GLTFLoader();
-    const keys = Object.keys(FILES);
-    let done = 0;
-    const total = keys.length + 1;
-    // En la app de escritorio (file://) fetch no puede leer archivos locales: se usa XHR
-    const load = (url) =>
-      location.protocol !== 'file:'
-        ? loader.loadAsync(url)
-        : new Promise((ok, fail) => {
-            const x = new XMLHttpRequest();
-            x.open('GET', url);
-            x.responseType = 'arraybuffer';
-            x.onload = () => (x.response ? loader.parse(x.response, url.replace(/[^/]*$/, ''), ok, fail) : fail(new Error('vacío')));
-            x.onerror = () => fail(new Error('No se pudo leer ' + url));
-            x.send();
-          });
-    // Primero las animaciones compartidas (los modelos las necesitan al prepararse)
-    try {
-      const lib = await load(LIBRARY);
-      library = { clips: Object.fromEntries(lib.animations.map((c) => [c.name, c])), hipLen: hipLength(lib.scene) };
-    } catch (e) {
-      console.warn('No se pudieron cargar las animaciones compartidas', e);
+  let loader = null;
+  // En la app de escritorio (file://) fetch no puede leer archivos locales: se usa XHR
+  const load = (url) => {
+    loader = loader || new THREE.GLTFLoader();
+    return location.protocol !== 'file:'
+      ? loader.loadAsync(url)
+      : new Promise((ok, fail) => {
+          const x = new XMLHttpRequest();
+          x.open('GET', url);
+          x.responseType = 'arraybuffer';
+          x.onload = () => (x.response ? loader.parse(x.response, url.replace(/[^/]*$/, ''), ok, fail) : fail(new Error('vacío')));
+          x.onerror = () => fail(new Error('No se pudo leer ' + url));
+          x.send();
+        });
+  };
+
+  // Al iniciar solo se cargan las animaciones compartidas (1,4 MB). Cada modelo se descarga recién
+  // cuando aparece en pantalla un personaje de esa raza y sexo: mientras tanto se ve su figura de
+  // bloques y luego se cambia sola por la 3D.
+  let libReady = null;
+  function preload(onProgress) {
+    if (!THREE.GLTFLoader) return Promise.resolve();
+    libReady =
+      libReady ||
+      load(LIBRARY)
+        .then((lib) => {
+          library = { clips: Object.fromEntries(lib.animations.map((c) => [c.name, c])), hipLen: hipLength(lib.scene) };
+        })
+        .catch((e) => console.warn('No se pudieron cargar las animaciones compartidas', e))
+        .finally(() => onProgress && onProgress(1));
+    return libReady;
+  }
+
+  const loading = {};
+  // Pide el modelo de una raza y sexo (una sola vez); devuelve una promesa
+  function request(cls, sex) {
+    const k = `${cls}_${sex}`;
+    if (!FILES[k] || !THREE.GLTFLoader) return Promise.resolve(false);
+    if (assets[k]) return Promise.resolve(true);
+    if (!loading[k]) {
+      loading[k] = preload()
+        .then(() => load(FILES[k]))
+        .then((g) => {
+          assets[k] = prepare(g);
+          return true;
+        })
+        .catch((e) => {
+          console.warn('No se pudo cargar el modelo', k, e);
+          return false;
+        });
     }
-    if (onProgress) onProgress(++done / total);
-    await Promise.all(
-      keys.map((k) =>
-        load(FILES[k])
-          .then((g) => (assets[k] = prepare(g)))
-          .catch((e) => console.warn('No se pudo cargar el modelo', k, e))
-          .finally(() => onProgress && onProgress(++done / total))
-      )
-    );
+    return loading[k];
   }
 
   // Un "brazo" invisible que sigue a la mano, con las mismas medidas que el brazo de las figuras
@@ -305,7 +323,15 @@
 
   function buildHero(cls, sex) {
     const a = assets[`${cls}_${sex}`];
-    if (!a) return M.buildHumanoid(lookFor(cls, sex));
+    if (!a) {
+      // Figura de bloques mientras llega el modelo 3D (si existe): quien la use la cambia luego
+      const m = M.buildHumanoid(lookFor(cls, sex));
+      if (FILES[`${cls}_${sex}`] && THREE.GLTFLoader) {
+        m.pending3d = true;
+        request(cls, sex);
+      }
+      return m;
+    }
     const scene = THREE.SkeletonUtils.clone(a.gltf.scene);
     const root = new THREE.Group();
     const rig = new THREE.Group();
@@ -492,5 +518,5 @@
   const baseArmor = M.setArmorLook;
   M.setArmorLook = (m, item) => (m.skinned ? null : baseArmor(m, item));
 
-  V.Actors = { preload, buildHero, celebrate, has: (cls, sex) => !!assets[`${cls}_${sex}`] };
+  V.Actors = { preload, request, buildHero, celebrate, has: (cls, sex) => !!assets[`${cls}_${sex}`] };
 })();

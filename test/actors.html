@@ -41,6 +41,7 @@
     base.href = '../juego/';
     document.head.prepend(base);
     await V.Actors.preload();
+    await Promise.all(Object.keys(V.Data.ARCHETYPES).flatMap((r) => ['m', 'f'].map((x) => V.Actors.request(r, x))));
     start();
   })().catch((e) => (document.getElementById('msg').textContent = 'Error: ' + e.message));
 

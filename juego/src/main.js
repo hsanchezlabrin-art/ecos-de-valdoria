@@ -313,6 +313,7 @@
     }
     box.hidden = false;
     if (!pv.renderer) initPreview();
+    pv.info = info;
     const key = `${info.cls}|${info.sex}|${info.equip.weapon}|${info.equip.armor}`;
     if (key !== pv.key) {
       pv.key = key;
@@ -337,6 +338,11 @@
 
   function renderPreview(dt) {
     if (!pv.renderer || $('preview').hidden || !pv.model) return;
+    // Llegó el modelo 3D de la vista previa: se redibuja
+    if (pv.model.pending3d && pv.info && V.Actors.has(pv.info.cls, pv.info.sex)) {
+      pv.key = null;
+      showPreview(pv.info);
+    }
     const c = pv.renderer.domElement;
     const w = c.clientWidth;
     const h = c.clientHeight;
