@@ -92,11 +92,11 @@
     progress('Moldeando las tierras de Valdoria…', 0.3);
     await frame();
     G.world = buildWorld(scene);
-    G.world.zones = ZONES.filter((z) => !z.safe);
+    G.world.zones = ZONES.filter((z) => z.id !== 'aldea'); // todas las zonas fuera de la aldea (con camino)
     V.Gfx.attach({ renderer, scene, sun, hemi, skyMesh: G.world.sky, water: G.world.water });
     V.Gfx.update(0, new THREE.Vector3(), null);
 
-    progress('Despertando a los habitantes de Brezal…', 0.62);
+    progress('Despertando a los habitantes de la aldea…', 0.62);
     await frame();
     updateCamera(0);
     renderer.compile(scene, camera);
@@ -401,6 +401,12 @@
   async function ensureConnected() {
     if (Game.connected) return;
     await Game.connect(V.Config.SERVER_URL);
+    // Conexión nueva (p. ej. el servidor se reinició): hay que volver a identificarse
+    const saved = store.get(SESSION_KEY);
+    if (account && saved) {
+      const auth = await Game.resume(saved);
+      if (auth.chars) chars = auth.chars;
+    }
   }
 
   function gotAuth(auth, remember) {
@@ -648,7 +654,7 @@
     UI.log(`Bienvenido a Valdoria, ${p.name}.`, 'sys');
     UI.log('Pulsa Enter para hablar. Empieza con # para hablar con tu grupo. Pulsa H para ver los controles.', 'sys');
     UI.log('Habla con la Capitana Brisa si no sabes a dónde ir.', 'sys');
-    UI.banner('Aldea de Brezal', 'En línea · Zona segura');
+    UI.banner('Aldea de los Bloques', 'En línea · Zona segura');
   }
   $('btnPlay').addEventListener('click', enterWorld);
   document.getElementById('btnRespawn').addEventListener('click', () => Game.respawnPlayer());
@@ -707,6 +713,24 @@
       f.light.intensity = f.base * (0.4 + V.Gfx.sky.night * 0.6) * (0.85 + Math.sin(G.time * 13) * 0.08 + Math.random() * 0.07);
       f.flame.scale.y = 0.9 + Math.sin(G.time * 17) * 0.12;
     }
+    // Decorado animado: molinos, géiseres, islotes, botones de la Fábrica y portales
+    const A = G.world.anim;
+    if (A) {
+      for (const hub of A.mills) hub.rotation.z += dt * 0.9;
+      for (const g of A.geysers) {
+        const k = (Math.sin(G.time * 1.3 + g.phase) + 1) / 2;
+        g.steam.scale.set(1, 0.2 + k * k * 1.2, 1);
+        g.steam.position.y = 0.6 + 3 * (0.2 + k * k * 1.2);
+        g.steam.material.opacity = 0.15 + k * 0.3;
+      }
+      for (const t of A.islets) t.g.position.y = t.y + Math.sin(G.time * 0.6 + t.phase) * 0.6;
+      for (const pl of A.plates) {
+        const lit = (pl.userData.litUntil || 0) > G.time;
+        pl.material.color.setHex(lit ? 0x3ad85a : 0x8a2a1a);
+        pl.material.emissive.setHex(lit ? 0x1a8a2a : 0x401008);
+      }
+    }
+    for (const n of G.world.npcs) if (n.model && n.model.root.userData.veil) n.model.root.userData.veil.material.opacity = 0.4 + Math.sin(G.time * 3) * 0.15;
     if (G.world.crystal) {
       G.world.crystal.rotation.y += dt * 0.8;
       G.world.crystal.position.y = 1.45 + Math.sin(G.time * 1.6) * 0.08;

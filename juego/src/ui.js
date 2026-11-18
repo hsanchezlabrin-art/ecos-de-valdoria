@@ -402,7 +402,17 @@ function togglePanel(name, force) {
 
 const shopOpen = () => !!E && !E.shop.hidden;
 
-function openShop() {
+// Tienda abierta: id de la tienda y NPC que la atiende (para cerrarla al alejarse)
+let shopId = 'orlen';
+const shopNpc = () => G.world.npcs.find((n) => n.role === 'shop' && n.shop === shopId);
+const shopEntry = (id) => V.Data.shopItems(shopId, G.player.cls).find((x) => x.id === id);
+const priceText = (n, currency) => (currency ? `${n} ${ITEMS[currency].glyph}` : `${n.toLocaleString('es')} oro`);
+const wallet = (currency) => (currency ? countItem(currency) : G.player.gold);
+
+function openShop(id = 'orlen') {
+  shopId = id;
+  const npc = shopNpc();
+  $('shopTitle').textContent = npc ? npc.name : 'Tienda';
   togglePanel('shop', true);
   togglePanel('inv', true);
 }
@@ -416,10 +426,13 @@ function openTrade(mode, ref) {
   const id = mode === 'buy' ? ref : p.inv[ref] && p.inv[ref].id;
   if (!id) return;
   const it = ITEMS[id];
-  const unit = mode === 'buy' ? it.price : sellPrice(it);
+  const entry = mode === 'buy' ? shopEntry(id) : null;
+  if (mode === 'buy' && !entry) return;
+  const currency = entry && entry.currency;
+  const unit = mode === 'buy' ? entry.price : sellPrice(it);
   const have = mode === 'sell' ? p.inv[ref].qty : 0;
-  const max = mode === 'buy' ? (it.stack ? Math.max(1, Math.min(99, Math.floor(p.gold / unit))) : 1) : have;
-  trade = { mode, ref, id, unit, max, qty: 1 };
+  const max = mode === 'buy' ? (it.stack ? Math.max(1, Math.min(99, Math.floor(wallet(currency) / unit))) : 1) : have;
+  trade = { mode, ref, id, unit, max, qty: 1, currency };
 
   const box = $('tradePanel');
   $('trTitle').textContent = mode === 'buy' ? 'Comprar' : 'Vender';
@@ -443,8 +456,8 @@ function setTradeQty(q) {
   $('trRange').value = trade.qty;
   $('trNum').value = trade.qty;
   const total = trade.unit * trade.qty;
-  const poor = trade.mode === 'buy' && G.player.gold < total;
-  $('trTotal').textContent = `${trade.mode === 'buy' ? 'Total' : 'Recibes'}: ${total.toLocaleString('es')} oro`;
+  const poor = trade.mode === 'buy' && wallet(trade.currency) < total;
+  $('trTotal').textContent = `${trade.mode === 'buy' ? 'Total' : 'Recibes'}: ${priceText(total, trade.currency)}`;
   $('trTotal').classList.toggle('poor', poor);
   $('trOk').disabled = poor;
   $('trOk').textContent = trade.mode === 'buy' ? `Comprar ${trade.qty > 1 ? `×${trade.qty}` : ''}` : `Vender ${trade.qty > 1 ? `×${trade.qty}` : ''}`;
@@ -698,7 +711,7 @@ function refreshPanels() {
   if (!E.shop.hidden) {
     const list = $('shopList');
     list.innerHTML = '';
-    for (const id of shopFor(p.cls)) {
+    for (const { id, price, currency } of V.Data.shopItems(shopId, p.cls)) {
       const it = ITEMS[id];
       const row = document.createElement('li');
       const ic = slotEl(id, 1, () => buyItem(id));
@@ -713,8 +726,8 @@ function refreshPanels() {
       info.append(nm, meta);
       const buy = document.createElement('button');
       buy.className = 'buy';
-      buy.textContent = `${it.price} oro`;
-      buy.disabled = p.gold < it.price;
+      buy.textContent = priceText(price, currency);
+      buy.disabled = wallet(currency) < price;
       buy.addEventListener('click', () => buyItem(id));
       row.append(ic, info, buy);
       list.append(row);
@@ -909,7 +922,8 @@ function updateUI() {
       E.zone.textContent = z ? z.name : 'Tierras salvajes';
     }
     if (!E.master.hidden && !masterNear()) togglePanel('master', false);
-    if (shopOpen() && Math.hypot(p.pos.x - G.world.merchant.root.position.x, p.pos.z - G.world.merchant.root.position.z) > 8) {
+    const sn = shopNpc();
+    if (shopOpen() && (!sn || Math.hypot(p.pos.x - sn.root.position.x, p.pos.z - sn.root.position.z) > 8)) {
       togglePanel('shop', false);
     }
   }
@@ -977,10 +991,7 @@ function openMaster() {
 }
 
 function masterNear() {
-  const n = G.world.npcs.find((x) => x.id === 'maestro');
-  if (!n) return false;
-  const np = n.root.position;
-  return Math.hypot(G.player.pos.x - np.x, G.player.pos.z - np.z) < 8;
+  return G.world.npcs.some((n) => n.role === 'master' && Math.hypot(G.player.pos.x - n.root.position.x, G.player.pos.z - n.root.position.z) < 8);
 }
 
 function refreshMaster() {

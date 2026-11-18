@@ -36,7 +36,7 @@
   }
 
   const fieldZones = () => D.ZONES.filter((z) => !z.safe);
-  const lvRange = (z) => z.lvl.split(' ')[0].split('–').map(Number);
+  const lvRange = (z) => z.lvl.split(' ')[0].split('–').map((v) => parseInt(v, 10) || 99);
 
   // Zona con monstruos de al menos ese nivel (la más fácil que cumpla)
   function zoneWithMobs(minLvl) {

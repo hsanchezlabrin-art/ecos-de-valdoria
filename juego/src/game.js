@@ -6,7 +6,7 @@
 // se reconecta solo y vuelve a entrar con el mismo personaje.
 (function () {
   const G = V.G;
-  const { buildHumanoid, buildQuadruped, buildPet, animateModel, animateDeath, setWeaponLook, setArmorLook } = V.Models;
+  const { buildHumanoid, buildQuadruped, buildMob, buildPet, animateModel, animateDeath, setWeaponLook, setArmorLook } = V.Models;
   const { heightAt } = V.Terrain;
   const { ITEMS, CLASSES, MOBS, lookFor, skillsFor } = V.Data;
   const UI = new Proxy({}, { get: (_, k) => V.UI[k] }); // ui.js se carga después
@@ -361,9 +361,9 @@
       let m = net.mobs.get(id);
       if (!m) {
         const def = MOBS[row[1]];
-        m = { id, kind: 'mob', key: row[1], def, pos: { x: 0, y: 0, z: 0 }, facing: 0, height: (def.kind === 'quad' ? 1.5 : 2.5) * (def.scale || 1) };
+        m = { id, kind: 'mob', key: row[1], def, pos: { x: 0, y: 0, z: 0 }, facing: 0, height: V.Data.mobHeight(def) };
         net.mobs.set(id, m);
-        attachView(m, def.kind === 'quad' ? buildQuadruped(def) : buildHumanoid(def));
+        attachView(m, buildMob(def));
         m.model.root.traverse((o) => (o.userData.mob = m));
         UI.createNameplate(m);
         added = true;
@@ -385,6 +385,7 @@
       m.stunned = !!row[14];
       m.slowed = !!row[15];
       m.poisoned = !!row[16];
+      m.shielded = !!row[17];
       m.hidden = false;
     }
     for (const [id, m] of net.mobs) if (!seenM.has(id)) m.hidden = true;
@@ -653,7 +654,33 @@
         if (mine(ev)) UI.refreshPanels();
         break;
       case 'openShop':
-        if (mine(ev)) UI.openShop();
+        if (mine(ev)) UI.openShop(ev.shop || 'orlen');
+        break;
+      case 'telegraph':
+        spawnTelegraph(ev.at, ev.r, ev.dur, ev.color);
+        break;
+      case 'firewave':
+        spawnZone(ev.at, ev.r, 0xff6a2a, 1.2);
+        spawnRing(ev.at, 0xff4a1a, ev.r, 0.9);
+        for (let k = 0; k < 10; k++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.random() * ev.r;
+          spawnFaller('meteor', { x: ev.at.x + Math.cos(a) * r, y: heightAt(ev.at.x + Math.cos(a) * r, ev.at.z + Math.sin(a) * r), z: ev.at.z + Math.sin(a) * r }, 0.25 + Math.random() * 0.3);
+        }
+        break;
+      case 'plate':
+        if (G.world.anim && G.world.anim.plates[ev.i]) G.world.anim.plates[ev.i].userData.litUntil = G.time + ev.dur;
+        spawnRing(ev.at, 0x3ad85a, 1.6, 0.5);
+        break;
+      case 'shield':
+        if (ev.ent) spawnRing(ev.ent.pos, ev.down ? 0x3ad85a : 0x8fb8ff, 5, 0.8);
+        break;
+      case 'geyser':
+        spawnRing(ev.at, 0xf4f0e6, 2.4, 0.6);
+        break;
+      case 'teleport':
+        if (ev.ent) ev.ent.seen = false; // en la próxima instantánea aparece directamente en el destino
+        if (mine(ev)) UI.banner(ev.title || 'Viaje', 'Has llegado');
         break;
       case 'petFetch':
         if (ev.ent && ev.ent.petView && ev.ent.petView.form === 'pet') ev.ent.petView.fetch = { at: ev.at, t: 0 };
@@ -965,6 +992,28 @@
     const s = polyProtos[form].clone();
     G.scene.add(s);
     return s;
+  }
+
+  // Aviso de un jefe: un círculo en el suelo que se va llenando hasta que explota
+  function spawnTelegraph(at, r, dur, color) {
+    const g = new THREE.Group();
+    const y = heightAt(at.x, at.z) + 0.1;
+    g.position.set(at.x, y, at.z);
+    const edge = new THREE.Mesh(new THREE.RingGeometry(r * 0.92, r, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(r, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
+    fill.scale.setScalar(0.05);
+    g.add(edge, fill);
+    G.scene.add(g);
+    const t0 = G.time;
+    props.push({
+      obj: g,
+      mats: [edge.material, fill.material],
+      t: 0,
+      life: dur + 0.15,
+      fade: 0.15,
+      base: [0.9, 0.35],
+      tick: () => fill.scale.setScalar(Math.min(1, (G.time - t0) / dur)),
+    });
   }
 
   // ---------- Mascotas y monturas ----------
@@ -1311,6 +1360,7 @@
         m.opacity = pr.base[k] * a;
       });
       if (pr.obj.userData.spin) pr.obj.userData.spin.rotation.y += dt * 3;
+      if (pr.tick) pr.tick();
       if (left <= 0) {
         G.scene.remove(pr.obj);
         pr.obj.traverse((o) => {
@@ -1464,6 +1514,16 @@
     v.atkAnim = Math.max(0, v.atkAnim - dt * (ent.kind === 'mob' ? 2.2 : 2.4));
     v.walkBlend += ((ent.moving ? 1 : 0) - v.walkBlend) * Math.min(1, dt * (ent.kind === 'mob' ? 8 : 10));
     v.swim += ((ent.swimming ? 1 : 0) - v.swim) * Math.min(1, dt * 6);
+    // Jefe con escudo (Mega-Autómata): burbuja azul mientras no se pisen los botones
+    if (ent.kind === 'mob' && ent.def.mech && ent.def.mech.type === 'plates') {
+      if (!v.shield) {
+        v.shield = new THREE.Mesh(new THREE.SphereGeometry(ent.height * 0.75, 18, 12), new THREE.MeshBasicMaterial({ color: 0x8fb8ff, transparent: true, opacity: 0.22, depthWrite: false }));
+        v.shield.position.y = ent.height * 0.5;
+        ent.model.root.add(v.shield);
+      }
+      v.shield.visible = !!ent.shielded;
+      v.shield.material.opacity = 0.18 + Math.sin(G.time * 4) * 0.06;
+    }
     // Monstruo aturdido: se tambalea quieto
     if (ent.stunned) ent.model.root.rotation.z = Math.sin(G.time * 12) * 0.08;
     else if (ent.model.root.rotation.z) ent.model.root.rotation.z = 0;

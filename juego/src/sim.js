@@ -15,7 +15,8 @@
 })(function (Data, Terrain) {
   const { ARCHETYPES, isArchetype, MOBS, ITEMS, ZONES, NPCS, MAX_LEVEL, STAGES, GRADES, ARMOR_TYPES, xpToNext, mobStats, playerBaseStats, sellPrice, resolveDrop, shopFor, CRIT_MULT, MOVE_SPEED } = Data;
   const { skillsFor, passiveFor, equipProblem, startGear, questFor, weaponFor, className, raceName, GEM_MULT } = Data;
-  const { heightAt, inVillage, zoneAt, WORLD_LIMIT, collide, waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y, WATER_Y } = Terrain;
+  const { heightAt, inVillage, inSafe, zoneAt, WORLD_LIMIT, collide, waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y, WATER_Y, layout } = Terrain;
+  const { ARENAS, shopItems, SHOPS, mobHeight } = Data;
   const { PETS, isPet, PET_LVL, MOUNT_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName } = Data;
   const LOOT_LIFE = 30; // segundos: luego el botín llega solo a la mochila (nunca se pierde)
   const PICK_R = 1.8;
@@ -254,7 +255,7 @@
   };
   const playerAtk = (p) => p.stats.atk * (1 + buffSum(p, 'atk'));
   const playerCrit = (p) => p.stats.crit + buffSum(p, 'crit');
-  const moveSpeed = (p) => p.stats.speed * (1 + buffSum(p, 'speed') + (MOUNT_SPEED[p.mounted] || 0)) * (p.debuffs.slow ? 0.6 : 1);
+  const moveSpeed = (p) => (p.debuffs.root ? 0 : p.stats.speed * (1 + buffSum(p, 'speed') + (MOUNT_SPEED[p.mounted] || 0)) * (p.debuffs.slow ? 0.6 : 1));
   const attackInterval = (p) => p.stats.atkSpeed / (1 + buffSum(p, 'haste') + p.frenzy * (p.passive.frenzy || 0));
   const reachTo = (p, m) => p.stats.range + bodyR(m);
 
@@ -291,7 +292,8 @@
       const pt = { x: z.x + Math.cos(a) * r, z: z.z + Math.sin(a) * r };
       // Evita aparecer dentro de un árbol o en aguas profundas
       const c = { x: pt.x, z: pt.z };
-      if (!collide(c, 0.6) && waterDepth(pt.x, pt.z) < SWIM_DEPTH) return pt;
+      const arena = Object.values(ARENAS).some((a) => Math.hypot(pt.x - a.x, pt.z - a.z) < a.r + 3);
+      if (!arena && !inSafe(pt) && !collide(c, 0.6) && waterDepth(pt.x, pt.z) < SWIM_DEPTH) return pt;
     }
     return { x: z.x, z: z.z };
   }
@@ -300,7 +302,7 @@
     for (const [key, def] of Object.entries(MOBS)) {
       const zone = zoneById(def.zone);
       for (let i = 0; i < def.count; i++) {
-        const sp = def.boss ? { x: zone.x + 4, z: zone.z + 4 } : randomPointInZone(zone);
+        const sp = def.at ? { ...def.at } : def.boss ? { x: zone.x + 4, z: zone.z + 4 } : randomPointInZone(zone);
         const m = {
           id: `m${w.nextId++}`,
           kind: 'mob',
@@ -310,7 +312,7 @@
           pos: { x: 0, y: 0, z: 0 },
           spawn: { x: 0, z: 0 },
           facing: Math.random() * Math.PI * 2,
-          height: (def.kind === 'quad' ? 1.5 : 2.5) * (def.scale || 1),
+          height: mobHeight(def),
           moving: false,
           slowT: 0,
           stunT: 0,
@@ -351,6 +353,12 @@
     m.dots = [];
     m.deadT = 0;
     m.hitBy = new Set();
+    // Estado de la mecánica de jefe
+    m.mechT = m.def.mech ? m.def.mech.every || 0 : 0;
+    m.shieldDownT = 0;
+    m.plateT = [0, 0, 0];
+    m.addsDone = false;
+    if (m.def.boss && w.time > 5 && (m.def.world || m.def.raid)) emit(w, { type: 'banner', to: null, title: `¡${m.def.name} despertó!`, sub: `${m.zone.name} · nivel ${m.lvl}${m.def.raid ? ' · ¡Lleva un grupo!' : ''}` });
     emit(w, { type: 'mobSpawn', ent: m });
   }
 
@@ -454,6 +462,18 @@
 
   function damageMob(w, p, m, mult, opts = {}) {
     if (!m || m.dead) return;
+    if (m.def.mech && m.def.mech.type === 'plates' && !(m.shieldDownT > 0)) {
+      if (!m.aggro || m.aggro.dead) m.aggro = p;
+      if ((m.shieldMsgT || 0) <= w.time) {
+        m.shieldMsgT = w.time + 1.2;
+        float(w, m, 'Escudo', 'mana', 0.3);
+      }
+      if ((p.plateHintT || 0) <= w.time) {
+        p.plateHintT = w.time + 15;
+        log(w, p, '¡El Mega-Autómata tiene un escudo! Pisen a la vez los 3 botones de la Fábrica para apagarlo.', 'warn');
+      }
+      return;
+    }
     let critMult = p.stats.critMult;
     // Ojo del Sol: el crítico pega más cuanto más lejos está el objetivo
     if (p.passive.farCrit) critMult += p.passive.farCrit * Math.min(1, d2(p.pos, m.pos) / p.stats.range);
@@ -531,7 +551,7 @@
       questProgress(w, q, m);
       emit(w, { type: 'inventory', to: q.id });
     }
-    if (m.def.boss) emit(w, { type: 'banner', to: null, title: `${m.def.name} ha sido derrotado`, sub: 'Vuelve a aparecer en 3 minutos' });
+    if (m.def.boss) emit(w, { type: 'banner', to: null, title: `${m.def.name} ha sido derrotado`, sub: `Vuelve a aparecer en ${Math.round(m.respawnTime / 60)} minutos` });
   }
 
   // ---------- Botín en el suelo y mascotas ----------
@@ -940,10 +960,7 @@
     emit(w, { type: 'quest', to: p.id });
   }
 
-  function nearMaster(p) {
-    const n = npcById('maestro');
-    return n && d2(p.pos, n) < MASTER_R;
-  }
+  const nearMaster = (p) => NPCS.some((n) => n.role === 'master' && d2(p.pos, n) < MASTER_R);
 
   // action: 'accept' (branch: 'a' | 'b' en el nivel 25), 'complete' o 'abandon'
   function classQuest(w, p, action, branch) {
@@ -1088,38 +1105,69 @@
     lagarto: 'Quema a los enemigos con el Aliento de Chispa y remata con Corte Cruzado: ¡críticos seguros!',
   };
 
+  // Zona recomendada para un nivel
+  function zoneFor(level) {
+    const field = ZONES.filter((z) => !z.safe);
+    return (
+      field.find((z) => {
+        const [a, b] = z.lvl.split(' ')[0].split('–').map((v) => parseInt(v, 10));
+        return level >= a - 1 && level <= (b || 99);
+      }) || field[field.length - 1]
+    );
+  }
+
   function interactWith(w, p, npc) {
-    if (npc.id === 'mercader') {
-      emit(w, { type: 'openShop', to: p.id });
-      return log(w, p, 'Orlen: «Pociones frescas y equipo para tu raza. ¿Qué necesitas?»', 'npc');
+    const first = npc.name.split(' ').pop();
+    if (npc.role === 'shop') {
+      emit(w, { type: 'openShop', to: p.id, shop: npc.shop });
+      const line = npc.shop === 'herrero' ? '«Tráeme Polvo de Arcoíris y forjaré tu equipo celestial.»' : '«Pociones, gemas y equipo para tu raza. ¿Qué necesitas?»';
+      return log(w, p, `${first}: ${line}`, 'npc');
     }
-    if (npc.id === 'sanadora') {
-      if (p.combatT > 0) return log(w, p, 'Ilwen: «Primero aléjate del peligro, viajero.»', 'npc');
+    if (npc.role === 'heal') {
+      if (p.combatT > 0) return log(w, p, `${first}: «Primero aléjate del peligro, viajero.»`, 'npc');
       const full = p.hp >= p.stats.maxHp && p.mp >= p.stats.maxMp;
       p.hp = p.stats.maxHp;
       p.mp = p.stats.maxMp;
+      p.debuffs = {};
       ring(w, p.pos, 0x7fe0b0, 3, 0.9);
-      return log(w, p, full ? 'Ilwen: «Tu luz ya está completa. Ve con cuidado.»' : 'Ilwen: «Que la luz del cristal cierre tus heridas.» Vida y maná restaurados.', 'npc');
+      return log(w, p, full ? `${first}: «Tu luz ya está completa. Ve con cuidado.»` : `${first}: «Que la luz cierre tus heridas.» Vida y maná restaurados.`, 'npc');
     }
-    if (npc.id === 'maestro') {
+    if (npc.role === 'master') {
       emit(w, { type: 'openMaster', to: p.id });
       const st = STAGES[p.stage + 1];
-      if (p.quest) return log(w, p, 'Aldric: «¿Cómo va tu misión?»', 'npc');
-      if (st && p.level >= st.lvl) return log(w, p, `Aldric: «Estás listo para el ${st.name}.»`, 'npc');
-      return log(w, p, st ? `Aldric: «Vuelve en el nivel ${st.lvl} para el ${st.name}.»` : 'Aldric: «Eres un verdadero maestro.»', 'npc');
+      if (p.quest) return log(w, p, `${first}: «¿Cómo va tu misión?»`, 'npc');
+      if (st && p.level >= st.lvl) return log(w, p, `${first}: «Estás listo para el ${st.name}.»`, 'npc');
+      return log(w, p, st ? `${first}: «Vuelve en el nivel ${st.lvl} para el ${st.name}.»` : `${first}: «Eres un verdadero maestro.»`, 'npc');
     }
-    if (npc.id === 'capitana') {
-      const field = ZONES.filter((z) => !z.safe);
-      const rec =
-        field.find((z) => {
-          const [a, b] = z.lvl.split(' ')[0].split('–').map(Number);
-          return p.level >= a - 1 && p.level <= b;
-        }) || field[field.length - 1];
-      log(w, p, `Brisa: «A tu nivel te recomiendo ${rec.name} (nivel ${rec.lvl}). ${TIPS[p.cls]} Cazar en grupo da más experiencia.»`, 'npc');
+    if (npc.role === 'guide') {
+      const rec = zoneFor(p.level);
+      return log(w, p, `${first}: «A tu nivel te recomiendo ${rec.name} (nivel ${rec.lvl}). ${TIPS[p.cls]} Cazar en grupo da más experiencia.»`, 'npc');
     }
+    if (npc.role === 'travel') {
+      if (npc.minLvl && p.level < npc.minLvl) return log(w, p, `${npc.name}: necesitas nivel ${npc.minLvl}.`, 'warn');
+      if (p.combatT > 0) return log(w, p, 'No puedes viajar en pleno combate.', 'warn');
+      const to = npcById(npc.to);
+      // Aparece un poco al lado del destino, hacia el centro de su zona
+      const z = zoneAt(to) || ZONES[0];
+      const dx = z.x - to.x;
+      const dz = z.z - to.z;
+      const len = Math.hypot(dx, dz) || 1;
+      p.pos.x = to.x + (dx / len) * 3;
+      p.pos.z = to.z + (dz / len) * 3;
+      collide(p.pos, PLAYER_R);
+      p.pos.y = groundY(p.pos.x, p.pos.z);
+      p.moveTarget = null;
+      p.autoAttack = false;
+      p.target = null;
+      for (const m of w.mobs) if (m.aggro === p) dropAggro(m);
+      emit(w, { type: 'teleport', to: p.id, ent: p, title: zoneAt(p.pos) ? zoneAt(p.pos).name : to.name });
+      return log(w, p, npc.prop === 'cart' ? '¡La vagoneta corre por las vías!' : 'Cruzas el portal entre destellos.', 'sys');
+    }
+    if (npc.role === 'info') return log(w, p, `${npc.name}: «${npc.text}»`, 'npc');
   }
 
-  const nearMerchant = (p) => d2(p.pos, npcById('mercader')) < SHOP_R;
+  // Tienda junto a la que está el jugador (o null)
+  const nearShop = (p) => NPCS.find((n) => n.role === 'shop' && d2(p.pos, n) < SHOP_R) || null;
 
   // ---------- Habilidades ----------
 
@@ -1677,7 +1725,7 @@
   function sellItem(w, p, index, qty = 1) {
     const slot = p.inv[index];
     if (!slot) return;
-    if (!nearMerchant(p)) return log(w, p, 'Acércate al Mercader Orlen para vender.', 'warn');
+    if (!nearShop(p)) return log(w, p, 'Acércate a un mercader para vender.', 'warn');
     const it = ITEMS[slot.id];
     if (it.type === 'egg') return log(w, p, 'El Huevo de Mascota no se puede vender.', 'warn');
     const n = tradeQty(qty, slot.qty);
@@ -1690,10 +1738,27 @@
 
   function buyItem(w, p, id, qty = 1) {
     const it = ITEMS[id];
-    if (!it || !shopFor(p.cls).includes(id)) return;
-    if (!nearMerchant(p)) return log(w, p, 'Acércate al Mercader Orlen para comprar.', 'warn');
+    const npc = nearShop(p);
+    if (!it) return;
+    if (!npc) return log(w, p, 'Acércate a un mercader para comprar.', 'warn');
+    const entry = shopItems(npc.shop, p.cls).find((x) => x.id === id);
+    if (!entry) return;
     const n = it.stack ? tradeQty(qty, MAX_TRADE) : 1;
-    const total = it.price * n;
+    const total = entry.price * n;
+    if (entry.currency) {
+      // Se paga con un material (Polvo de Arcoíris en el Herrero Celestial)
+      if (countItem(p, entry.currency) < total) return log(w, p, `Necesitas ${total} ${ITEMS[entry.currency].name}.`, 'warn');
+      if (!addItem(p, id, n)) return log(w, p, 'No hay espacio en el inventario.', 'warn');
+      let left = total;
+      for (let i = p.inv.length - 1; i >= 0 && left > 0; i--) {
+        if (p.inv[i].id !== entry.currency) continue;
+        const k = Math.min(left, p.inv[i].qty);
+        removeAt(p, i, k);
+        left -= k;
+      }
+      emit(w, { type: 'loot', to: p.id, id, qty: n, verb: 'Forjas' });
+      return emit(w, { type: 'inventory', to: p.id });
+    }
     if (p.gold < total) return log(w, p, 'No tienes oro suficiente.', 'warn');
     if (!addItem(p, id, n)) return log(w, p, 'No hay espacio en el inventario.', 'warn');
     p.gold -= total;
@@ -1809,6 +1874,7 @@
     updateAuras(w);
     for (const p of w.players.values()) updatePlayer(w, p, dt);
     for (const m of w.mobs) updateMob(w, m, dt);
+    if (w.mobs.some((m) => m.remove)) w.mobs = w.mobs.filter((m) => !m.remove);
     updateSummons(w, dt);
     updateLoot(w, dt);
     updateProjectiles(w, dt);
@@ -1848,7 +1914,7 @@
     updateDebuffs(w, p, dt);
     if (p.dead) return;
 
-    const rate = p.combatT > 0 ? 0.004 : inVillage(p.pos) ? 0.08 : 0.025;
+    const rate = p.combatT > 0 ? 0.004 : inSafe(p.pos) ? 0.08 : 0.025;
     p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.maxHp * rate * dt);
     p.mp = Math.min(p.stats.maxMp, p.mp + p.stats.maxMp * rate * 1.4 * p.cdef.mpRegen * (1 + (p.aura && p.aura.mp ? p.aura.mp : 0)) * dt);
 
@@ -1963,6 +2029,20 @@
     }
 
     if (gliding && !p.leap) p.pos.y = bodyY(p.pos.x, p.pos.z);
+    // Géiseres del Valle: al pisarlos te lanzan hacia adelante
+    p.geyserCd = Math.max(0, (p.geyserCd || 0) - dt);
+    if (!p.leap && !p.geyserCd && !p.mounted) {
+      for (const g of layout().geysers) {
+        if (Math.hypot(p.pos.x - g.x, p.pos.z - g.z) > 1.3) continue;
+        const to = { x: p.pos.x + Math.sin(p.facing) * 12, z: p.pos.z + Math.cos(p.facing) * 12 };
+        collide(to, PLAYER_R);
+        p.leap = { fx: p.pos.x, fz: p.pos.z, tx: to.x, tz: to.z, t: 0, dur: 1, hop: 7 };
+        p.geyserCd = 2;
+        p.moveTarget = null;
+        emit(w, { type: 'geyser', at: { x: g.x, y: g.y, z: g.z } });
+        break;
+      }
+    }
     const r = Math.hypot(p.pos.x, p.pos.z);
     if (r > WORLD_LIMIT) {
       p.pos.x *= WORLD_LIMIT / r;
@@ -1997,10 +2077,155 @@
     }
   }
 
+  // ---------- Mecánicas de jefes ----------
+
+  // Daño especial de un jefe (no se esquiva; la burbuja, los escudos y la reducción sí cuentan)
+  function bossHit(w, m, p, pct) {
+    if (p.dead) return;
+    if (p.bubble > 0) {
+      p.bubble = 0;
+      return float(w, p, 'Burbuja', 'mana');
+    }
+    let dmg = Math.round(p.stats.maxHp * pct * (1 - Math.min(0.7, buffSum(p, 'dr'))));
+    if (p.shield > 0) {
+      const ab = Math.min(p.shield, dmg);
+      p.shield -= ab;
+      dmg -= ab;
+    }
+    p.combatT = 6;
+    if (dmg <= 0) return;
+    p.hp -= dmg;
+    float(w, p, `-${dmg}`, 'hurt');
+    if (p.hp <= 0) killPlayer(w, p, m.def.name);
+  }
+
+  const playersNear = (w, at, r) => [...w.players.values()].filter((p) => !p.dead && d2(p.pos, at) <= r);
+
+  // Círculos marcados en el suelo que explotan al rato (raíces del Rey Tronco, estrellas del Guardián)
+  function marks(w, m, mech, color, onHit) {
+    const near = playersNear(w, m.pos, 26);
+    const spots = near.slice(0, mech.count).map((p) => ({ x: p.pos.x, z: p.pos.z }));
+    while (spots.length < mech.count) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 3 + Math.random() * 10;
+      spots.push({ x: m.pos.x + Math.cos(a) * r, z: m.pos.z + Math.sin(a) * r });
+    }
+    for (const at of spots) {
+      at.y = heightAt(at.x, at.z);
+      emit(w, { type: 'telegraph', at, r: mech.r, dur: mech.delay, color });
+      later(w, mech.delay, () => {
+        if (m.dead) return;
+        ring(w, at, color, mech.r, 0.6);
+        for (const p of playersNear(w, at, mech.r)) onHit(p);
+      });
+    }
+  }
+
+  // ¿Hay una roca entre Ignis y el jugador?
+  function sheltered(m, p) {
+    const ax = m.pos.x;
+    const az = m.pos.z;
+    const bx = p.pos.x;
+    const bz = p.pos.z;
+    const len2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1;
+    return ARENAS.ignis.shelters.some((r) => {
+      const t = ((r.x - ax) * (bx - ax) + (r.z - az) * (bz - az)) / len2;
+      if (t <= 0 || t >= 1) return false;
+      return Math.hypot(r.x - (ax + (bx - ax) * t), r.z - (az + (bz - az) * t)) < 1.9;
+    });
+  }
+
+  function spawnAdds(w, m, adds) {
+    const def = MOBS[adds.key];
+    for (let i = 0; i < adds.count; i++) {
+      const a = (i / adds.count) * Math.PI * 2;
+      const sp = { x: m.pos.x + Math.cos(a) * 4, z: m.pos.z + Math.sin(a) * 4 };
+      const add = { id: `m${w.nextId++}`, kind: 'mob', key: adds.key, def, zone: m.zone, pos: { x: 0, y: 0, z: 0 }, spawn: { x: 0, z: 0 }, facing: 0, height: mobHeight(def), moving: false, slowT: 0, stunT: 0, rootT: 0, polyT: 0, markT: 0, markPct: 0, dots: [], slide: null, temp: true };
+      rollMob(w, add, sp);
+      add.aggro = m.aggro && m.aggro.kind === 'player' ? m.aggro : null;
+      w.mobs.push(add);
+    }
+  }
+
+  function bossMech(w, m, dt) {
+    const mech = m.def.mech;
+    if (mech.type === 'plates') {
+      // Botones de la Fábrica: se encienden al pisarlos y duran unos segundos
+      const plates = ARENAS.fabrica.plates;
+      plates.forEach((pl, i) => {
+        const was = m.plateT[i] > 0;
+        m.plateT[i] = Math.max(0, m.plateT[i] - dt);
+        if (playersNear(w, pl, 1.6).length) {
+          m.plateT[i] = mech.lit;
+          if (!was) emit(w, { type: 'plate', i, at: { x: pl.x, y: heightAt(pl.x, pl.z), z: pl.z }, dur: mech.lit });
+        }
+      });
+      const wasDown = m.shieldDownT > 0;
+      m.shieldDownT = Math.max(0, m.shieldDownT - dt);
+      if (!wasDown && m.plateT.every((t) => t > 0)) {
+        m.shieldDownT = mech.open;
+        m.plateT = [0, 0, 0];
+        emit(w, { type: 'shield', ent: m, down: true, dur: mech.open });
+        for (const p of playersNear(w, m.pos, 30)) emit(w, { type: 'banner', to: p.id, title: '¡Escudo desactivado!', sub: `¡Ataquen al Mega-Autómata! ${mech.open} segundos` });
+      } else if (wasDown && !m.shieldDownT) {
+        emit(w, { type: 'shield', ent: m, down: false });
+        float(w, m, 'Escudo activado', 'mana', 0.5);
+      }
+      return;
+    }
+    if (!m.aggro || m.dead) {
+      m.mechT = mech.every || 0;
+      return;
+    }
+    m.mechT -= dt;
+    if (mech.adds && !m.addsDone && m.hp <= m.maxHp * mech.adds.at) {
+      m.addsDone = true;
+      spawnAdds(w, m, mech.adds);
+      for (const p of playersNear(w, m.pos, 30)) emit(w, { type: 'banner', to: p.id, title: `¡${m.def.name} llama refuerzos!`, sub: `Aparecen ${mech.adds.count} ${MOBS[mech.adds.key].name}` });
+    }
+    if (m.mechT > 0) return;
+    m.mechT = mech.every;
+    if (mech.type === 'roots') {
+      marks(w, m, mech, 0x8a5a34, (p) => {
+        bossHit(w, m, p, mech.dmg);
+        if (!p.dead && !Object.values(p.buffs).some((b) => b.ccImmune)) {
+          p.debuffs.root = { t: mech.root };
+          float(w, p, 'Enraizado', 'stun', 0.5);
+        }
+      });
+      for (const p of playersNear(w, m.pos, 26)) log(w, p, '¡Raíces en el suelo! Sal de los círculos marcados.', 'warn');
+    } else if (mech.type === 'stars') {
+      marks(w, m, mech, 0xffe08a, (p) => bossHit(w, m, p, mech.dmg));
+    } else if (mech.type === 'yawn') {
+      // Ignis bosteza fuego: solo se salvan los que estén escondidos detrás de una roca
+      const at = { x: m.pos.x, y: m.pos.y, z: m.pos.z };
+      emit(w, { type: 'telegraph', at, r: mech.r, dur: mech.warn, color: 0xff5a1a });
+      for (const p of playersNear(w, at, mech.r + 6)) emit(w, { type: 'banner', to: p.id, title: '¡Ignis está bostezando!', sub: 'Escóndete detrás de una roca' });
+      m.stunT = Math.max(m.stunT, mech.warn + 0.6); // se queda quieto mientras bosteza
+      later(w, mech.warn, () => {
+        if (m.dead) return;
+        emit(w, { type: 'firewave', at, r: mech.r });
+        for (const p of playersNear(w, at, mech.r)) {
+          if (sheltered(m, p)) {
+            float(w, p, '¡A salvo!', 'heal', 0.5);
+            continue;
+          }
+          bossHit(w, m, p, mech.dmg);
+          if (!p.dead) p.debuffs.burn = { t: mech.burn.dur, perSec: m.atk * mech.burn.pct, tick: 1, src: m.def.name };
+        }
+      });
+    }
+  }
+
   function updateMob(w, m, dt) {
     m.moving = false;
     if (m.dead) {
       m.deadT -= dt;
+      if (m.temp) {
+        // Refuerzos de un jefe: no reaparecen
+        if (m.deadT < m.respawnTime - 3) m.remove = true;
+        return;
+      }
       if (m.deadT <= 0) rollMob(w, m, m.def.boss ? m.spawn : randomPointInZone(m.zone));
       return;
     }
@@ -2040,6 +2265,9 @@
       if (d.left <= 0) m.dots.splice(i, 1);
     }
 
+    if (m.def.mech) bossMech(w, m, dt);
+    if (m.remove) return;
+
     // Aturdido u oveja: no se mueve ni ataca
     if (m.stunT > 0) {
       m.stunT -= dt;
@@ -2049,9 +2277,9 @@
     const fromHome = d2(m.pos, m.spawn);
     if (m.state !== 'return') {
       const a = m.aggro;
-      if (a && (!aggroAlive(w, a) || fromHome > LEASH_R || inVillage(a.pos))) {
+      if (a && (!aggroAlive(w, a) || fromHome > LEASH_R || inSafe(a.pos))) {
         dropAggro(m);
-      } else if (!a && m.def.aggressive && near && nearD < AGGRO_R && !inVillage(near.pos) && m.lvl >= near.level - 8) {
+      } else if (!a && m.def.aggressive && near && nearD < AGGRO_R && !inSafe(near.pos) && m.lvl >= near.level - 8) {
         m.aggro = near;
       }
     }
@@ -2097,7 +2325,7 @@
 
   // Bonificaciones activas para mostrar en pantalla
   const buffList = (p) => Object.entries(p.buffs).filter(([k]) => k !== 'dome').map(([, b]) => ({ name: b.name, t: Math.round(b.t * 10) / 10 })).concat(p.buffs.dome ? [{ name: 'Dentro de la cúpula', t: 0 }] : []);
-  const DEBUFF_NAMES = { poison: 'Envenenado', burn: 'Quemado', slow: 'Lento' };
+  const DEBUFF_NAMES = { poison: 'Envenenado', burn: 'Quemado', slow: 'Lento', root: 'Enraizado' };
   const debuffList = (p) => Object.entries(p.debuffs).map(([k, d]) => ({ name: DEBUFF_NAMES[k] || k, t: Math.round(d.t * 10) / 10 }));
   const liveStats = (p) => ({
     ...p.stats,

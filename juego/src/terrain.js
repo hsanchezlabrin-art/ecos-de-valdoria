@@ -7,7 +7,7 @@
     V.Terrain = factory(V.Data);
   }
 })(function (Data) {
-  const { ZONES } = Data;
+  const { ZONES, ARENAS } = Data;
 
   const WORLD = 440;
   const WORLD_LIMIT = 188;
@@ -31,7 +31,9 @@
     };
   }
 
-  const FIELD_ZONES = ZONES.filter((z) => !z.safe);
+  // Zonas fuera de la aldea (todas tienen camino); las de combate no son seguras
+  const OUTER_ZONES = ZONES.filter((z) => z.id !== 'aldea');
+  const FIELD_ZONES = OUTER_ZONES.filter((z) => !z.safe);
 
   function distSeg(px, pz, ax, az, bx, bz) {
     const dx = bx - ax;
@@ -41,7 +43,7 @@
   }
   function pathDist(x, z) {
     let d = Infinity;
-    for (const zn of FIELD_ZONES) d = Math.min(d, distSeg(x, z, 0, 0, zn.x, zn.z));
+    for (const zn of OUTER_ZONES) d = Math.min(d, distSeg(x, z, 0, 0, zn.x, zn.z));
     return d;
   }
 
@@ -51,12 +53,17 @@
       Math.sin(x * 0.055 + 1.3) * Math.sin(z * 0.049 + 0.7) * 1.8 +
       Math.sin((x - z) * 0.012) * 3.5 +
       Math.cos(z * 0.09 + x * 0.03) * 0.6;
-    for (const zn of FIELD_ZONES) {
-      const w = 1 - ss(zn.r * 0.6, zn.r * 1.35, Math.hypot(x - zn.x, z - zn.z));
-      if (w > 0) h = lerp(h, zn.ground + h * 0.12, w * 0.85);
+    for (const zn of OUTER_ZONES) {
+      // Las Islas (zona alta) tienen una subida larga y suave
+      const hi = zn.ground > 10;
+      const dz = Math.hypot(x - zn.x, z - zn.z);
+      // La Ciudadela se aplana por completo (sin lagos dentro de las murallas)
+      const w = hi ? 1 - Math.min(1, Math.max(0, (dz - zn.r * 0.75) / (zn.r * 1.4))) : zn.hub ? 1 - ss(zn.r * 1.05, zn.r * 1.6, dz) : 1 - ss(zn.r * 0.6, zn.r * 1.35, dz);
+      if (w > 0) h = lerp(h, zn.ground + h * (hi ? 0.05 : zn.hub ? 0 : 0.12), w * (hi || zn.hub ? 0.98 : 0.85));
     }
+    // Caminos más llanos (salvo la subida a las Islas, que no se hunde)
     const pd = pathDist(x, z);
-    if (pd < 6) h = lerp(h, Math.max(h * 0.4, 0.2), (1 - ss(2, 6, pd)) * 0.7);
+    if (pd < 6 && h < 6) h = lerp(h, Math.max(h * 0.4, 0.2), (1 - ss(2, 6, pd)) * 0.7);
     const d = Math.hypot(x, z);
     h *= ss(VILLAGE_R * 0.8, VILLAGE_R + 20, d);
     h += Math.max(0, d - 168) * 0.6;
@@ -64,10 +71,13 @@
   }
 
   const inVillage = (p) => Math.hypot(p.x, p.z) < VILLAGE_R;
+  const SAFE_ZONES = OUTER_ZONES.filter((z) => z.safe);
+  // Zonas seguras: la aldea y la Ciudadela (los monstruos no entran)
+  const inSafe = (p) => inVillage(p) || SAFE_ZONES.some((z) => Math.hypot(p.x - z.x, p.z - z.z) < z.r);
 
   function zoneAt(p) {
     if (inVillage(p)) return ZONES[0];
-    for (const z of FIELD_ZONES) if (Math.hypot(p.x - z.x, p.z - z.z) < z.r * 1.1) return z;
+    for (const z of OUTER_ZONES) if (Math.hypot(p.x - z.x, p.z - z.z) < z.r * 1.1) return z;
     return null;
   }
 
@@ -85,8 +95,14 @@
   function layout() {
     if (LAYOUT) return LAYOUT;
     const { NPCS } = Data;
-    const L = { trunks: [], pines: [], rounds: [], rocks: [], lava: [], houses: [], tents: [], logs: [], fires: [], obstacles: [] };
+    const L = {
+      trunks: [], pines: [], rounds: [], rocks: [], lava: [], houses: [], fires: [], obstacles: [],
+      windmills: [], shrooms: [], crystals: [], rails: [], walls: [], cityHouses: [], geysers: [], jelly: [], clouds: [], islets: [], bridges: [], pillars: [],
+    };
     const block = (x, z, r) => L.obstacles.push({ x, z, r });
+    const zoneById = (id) => ZONES.find((z) => z.id === id);
+    // Sin árboles ni rocas en las arenas de jefes ni junto a los NPCs
+    const inArena = (x, z) => Object.values(ARENAS).some((a) => Math.hypot(x - a.x, z - a.z) < a.r + 2) || NPCS.some((n) => Math.hypot(x - n.x, z - n.z) < 4);
 
     // Vegetación
     const r = rng(42);
@@ -95,56 +111,59 @@
       const z = (r() - 0.5) * 2 * 182;
       const d = Math.hypot(x, z);
       if (d > 182 || d < VILLAGE_R + 5) continue;
-      if (pathDist(x, z) < 4) continue;
+      if (pathDist(x, z) < 4 || inArena(x, z)) continue;
       const h = heightAt(x, z);
       if (h < WATER_Y + 0.2) continue;
-      const zn = FIELD_ZONES.find((zz) => Math.hypot(x - zz.x, z - zz.z) < zz.r * 1.15);
+      const zn = OUTER_ZONES.find((zz) => Math.hypot(x - zz.x, z - zz.z) < zz.r * 1.15);
+      if (zn && zn.safe) continue;
       let density = zn ? zn.trees : 0.16;
-      if (zn && zn.treeType !== 'pine' && Math.hypot(x - zn.x, z - zn.z) < zn.r * 0.5) density *= 0.2;
+      if (zn && zn.treeType !== 'giant' && Math.hypot(x - zn.x, z - zn.z) < zn.r * 0.5) density *= 0.2;
       if (d > 150) density = 0.45;
       if (r() > density) continue;
       const type = zn ? zn.treeType : r() < 0.5 ? 'pine' : 'round';
       const s = 0.8 + r() * 0.7;
       const rot = r() * Math.PI * 2;
+      if (type === 'none') continue;
+      if (type === 'giant') {
+        // Árbol colosal del bosque: tronco enorme y copa muy ancha
+        const g = 2.2 + r() * 1.2;
+        L.trunks.push({ x, y: h, z, s: g, rot, c: 0x5a4130, tall: 1.4 });
+        L.rounds.push({ x, y: h + 3.4 * g, z, s: g * 1.9, rot, c: r() < 0.5 ? 0x3f6a2c : 0x4f7a34 });
+        block(x, z, 0.3 * g + 0.15);
+        // Setas brillantes al pie
+        if (r() < 0.5) L.shrooms.push({ x: x + 1.2 * g, y: heightAt(x + 1.2 * g, z), z, s: 0.6 + r() * 0.6, c: r() < 0.5 ? 0x7fe0ff : 0xc895ff });
+        continue;
+      }
       if (type === 'pine') {
         L.trunks.push({ x, y: h, z, s, rot, c: 0x4a3626, tall: 1 });
         L.pines.push({ x, y: h + 2.0 * s, z, s: s * 1.25, rot, c: r() < 0.5 ? 0x2d4a2a : 0x34552e });
         L.pines.push({ x, y: h + 3.4 * s, z, s: s * 0.9, rot, c: 0x3a5e33 });
       } else if (type === 'round') {
         L.trunks.push({ x, y: h, z, s, rot, c: 0x5a4130, tall: 1 });
-        L.rounds.push({ x, y: h + 2.6 * s, z, s: s * 1.5, rot, c: r() < 0.5 ? 0x4f7a34 : 0x5e8a3a });
-      } else if (type === 'swamp') {
-        L.trunks.push({ x, y: h, z, s, rot, c: 0x3a3226, tall: 1.3 });
-        L.rounds.push({ x, y: h + 3.1 * s, z, s: s * 1.2, rot, c: 0x324a2a });
+        L.rounds.push({ x, y: h + 2.6 * s, z, s: s * 1.5, rot, c: zn && zn.id === 'islas' ? 0x7fb84a : r() < 0.5 ? 0x4f7a34 : 0x5e8a3a });
       } else {
         L.trunks.push({ x, y: h, z, s: s * 0.8, rot, c: 0x3d3835, tall: 1.6 });
       }
       block(x, z, 0.3 * s + 0.12);
     }
-    // Rocas: solo las grandes bloquean el paso
-    for (let i = 0; i < 420; i++) {
+    // Rocas: solo las grandes bloquean el paso. Naranjas en las minas, oscuras en el valle.
+    for (let i = 0; i < 520; i++) {
       const x = (r() - 0.5) * 2 * 182;
       const z = (r() - 0.5) * 2 * 182;
       const d = Math.hypot(x, z);
-      if (d < VILLAGE_R + 3 || pathDist(x, z) < 3) continue;
-      const zn = FIELD_ZONES.find((zz) => Math.hypot(x - zz.x, z - zz.z) < zz.r);
-      const s = 0.4 + r() * (d > 150 ? 3 : 1.2);
-      L.rocks.push({ x, y: heightAt(x, z), z, s, rot: r() * 6, c: zn && zn.id === 'ceniza' ? 0x2f2c2a : 0x77716a });
+      if (d < VILLAGE_R + 3 || pathDist(x, z) < 3 || inArena(x, z)) continue;
+      const zn = OUTER_ZONES.find((zz) => Math.hypot(x - zz.x, z - zz.z) < zz.r);
+      if (zn && zn.safe) continue;
+      const big = zn && zn.id === 'minas';
+      const s = 0.4 + r() * (d > 150 || big ? 2.6 : 1.2);
+      const c = !zn ? 0x77716a : zn.id === 'minas' ? 0xb5703f : zn.id === 'valle' ? 0x2f2c2a : zn.id === 'islas' ? 0xd8d4cc : 0x77716a;
+      L.rocks.push({ x, y: heightAt(x, z), z, s, rot: r() * 6, c });
       if (s > 0.75) block(x, z, s * 0.85);
     }
-    // Grietas de lava (decorativas)
-    const cz = ZONES.find((z) => z.id === 'ceniza');
-    for (let i = 0; i < 46; i++) {
-      const a = r() * Math.PI * 2;
-      const rr = Math.sqrt(r()) * cz.r;
-      const x = cz.x + Math.cos(a) * rr;
-      const z = cz.z + Math.sin(a) * rr;
-      L.lava.push({ x, y: heightAt(x, z) + 0.04, z, s: 1 + r() * 2.5, rot: r() * 6 });
-    }
 
-    // Aldea: casas alrededor de la plaza, sin tapar los caminos
+    // ---------- Aldea de los Bloques: cabañas alrededor de la plaza, sin tapar los caminos ----------
     const rv = rng(5);
-    const pathAngles = FIELD_ZONES.map((zn) => Math.atan2(zn.z, zn.x));
+    const pathAngles = OUTER_ZONES.map((zn) => Math.atan2(zn.z, zn.x));
     const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
     let placed = 0;
     for (let i = 0; i < 24 && placed < 8; i++) {
@@ -172,28 +191,126 @@
     L.shrine = { x: sn.x * 1.22, z: sn.z * 1.22 };
     block(L.shrine.x, L.shrine.z, 0.95);
 
-    // Campamento goblin: tiendas y fogata
-    const gz = ZONES.find((z) => z.id === 'goblin');
-    L.fires.push({ x: gz.x, z: gz.z, big: false });
-    block(gz.x, gz.z, 0.9);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + 0.3;
-      const x = gz.x + Math.cos(a) * 9;
-      const z = gz.z + Math.sin(a) * 9;
-      L.tents.push({ x, z, c: i % 2 ? 0x7d6440 : 0x6a5233 });
-      block(x, z, 1.75);
+    // ---------- Praderas: molinos ----------
+    const pz = zoneById('praderas');
+    for (const [dx, dz] of [[-6, -14], [10, 12], [20, -6]]) {
+      const x = pz.x + dx;
+      const z = pz.z + dz;
+      L.windmills.push({ x, y: heightAt(x, z), z, rot: rv() * 6 });
+      block(x, z, 1.8);
     }
-    // Fuerte orco: empalizada circular con dos entradas
-    const fz = ZONES.find((z) => z.id === 'fuerte');
-    L.fires.push({ x: fz.x, z: fz.z, big: true });
-    block(fz.x, fz.z, 0.9);
-    for (let i = 0; i < 90; i++) {
-      const a = (i / 90) * Math.PI * 2;
-      if (Math.abs(Math.sin(a - 0.6)) < 0.12) continue;
-      const x = fz.x + Math.cos(a) * 21;
-      const z = fz.z + Math.sin(a) * 21;
-      L.logs.push({ x, z, a });
-      block(x, z, 0.42);
+
+    // ---------- Minas: cristales, vías de vagonetas y La Fábrica ----------
+    const mz = zoneById('minas');
+    for (let i = 0; i < 40; i++) {
+      const a = r() * Math.PI * 2;
+      const rr = 6 + Math.sqrt(r()) * (mz.r - 6);
+      const x = mz.x + Math.cos(a) * rr;
+      const z = mz.z + Math.sin(a) * rr;
+      if (pathDist(x, z) < 3 || inArena(x, z)) continue;
+      const s = 0.5 + r() * 1.1;
+      L.crystals.push({ x, y: heightAt(x, z), z, s, rot: r() * 6, c: r() < 0.5 ? 0x7fd0ff : 0xc895ff });
+      if (s > 0.9) block(x, z, s * 0.5);
+    }
+    // Vías desde la aldea hasta las minas (decorativas, junto al camino)
+    const va = NPCS.find((n) => n.id === 'vagoneta_aldea');
+    const vm = NPCS.find((n) => n.id === 'vagoneta_minas');
+    const railLen = Math.hypot(vm.x - va.x, vm.z - va.z);
+    for (let k = 0; k <= railLen; k += 2.5) {
+      const t = k / railLen;
+      const x = va.x + (vm.x - va.x) * t;
+      const z = va.z + (vm.z - va.z) * t;
+      L.rails.push({ x, y: heightAt(x, z), z, rot: Math.atan2(vm.x - va.x, vm.z - va.z) });
+    }
+    // Paredes de la Fábrica Descontrolada (con entrada hacia el norte)
+    const fa = ARENAS.fabrica;
+    for (let i = 0; i < 36; i++) {
+      const a = (i / 36) * Math.PI * 2;
+      if (Math.abs(Math.atan2(Math.sin(a + Math.PI / 2), Math.cos(a + Math.PI / 2))) < 0.35) continue;
+      const x = fa.x + Math.cos(a) * fa.r;
+      const z = fa.z + Math.sin(a) * fa.r;
+      L.walls.push({ x, y: heightAt(x, z), z, rot: -a, h: 3.2, c: 0x6a6460 });
+      block(x, z, 1.15);
+    }
+
+    // ---------- Ciudadela de Gludio-Cubo: murallas blancas, casas de colores y fuente ----------
+    const cz = zoneById('ciudadela');
+    for (let i = 0; i < 64; i++) {
+      const a = (i / 64) * Math.PI * 2;
+      // Cuatro puertas (una mira a la aldea)
+      const toVillage = Math.atan2(-cz.z, -cz.x);
+      if ([0, Math.PI / 2, Math.PI, -Math.PI / 2].some((g) => angDiff(a, toVillage + g) < 0.16)) continue;
+      const x = cz.x + Math.cos(a) * (cz.r - 1);
+      const z = cz.z + Math.sin(a) * (cz.r - 1);
+      L.walls.push({ x, y: heightAt(x, z), z, rot: -a, h: 4.2, c: 0xf2efe6 });
+      block(x, z, 1.4);
+    }
+    const roofs = [0xd84a3a, 0x3a7ad8, 0xf2c13a, 0x5ab06a, 0xc895ff];
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + 0.31;
+      const x = cz.x + Math.cos(a) * 19;
+      const z = cz.z + Math.sin(a) * 19;
+      if (angDiff(a, Math.atan2(-cz.z, -cz.x)) < 0.4) continue;
+      L.cityHouses.push({ x, z, rot: Math.atan2(cz.x - x, cz.z - z), w: 5, d: 4.5, roof: roofs[i % roofs.length] });
+      block(x, z, 2.6);
+    }
+    L.fountain = { x: cz.x, z: cz.z };
+    block(cz.x, cz.z, 2);
+
+    // ---------- Valle: lava de gelatina, géiseres y rocas del nido de Ignis ----------
+    const vz = zoneById('valle');
+    for (let i = 0; i < 14; i++) {
+      const a = r() * Math.PI * 2;
+      const rr = 6 + Math.sqrt(r()) * (vz.r - 8);
+      const x = vz.x + Math.cos(a) * rr;
+      const z = vz.z + Math.sin(a) * rr;
+      if (pathDist(x, z) < 5 || inArena(x, z)) continue;
+      const s = 1.5 + r() * 2;
+      L.jelly.push({ x, y: heightAt(x, z) + 0.05, z, s });
+      block(x, z, s * 0.9);
+    }
+    for (let i = 0; i < 46; i++) {
+      const a = r() * Math.PI * 2;
+      const rr = Math.sqrt(r()) * vz.r;
+      const x = vz.x + Math.cos(a) * rr;
+      const z = vz.z + Math.sin(a) * rr;
+      L.lava.push({ x, y: heightAt(x, z) + 0.04, z, s: 1 + r() * 2.5, rot: r() * 6 });
+    }
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + 0.4;
+      const x = vz.x + Math.cos(a) * (vz.r * 0.55);
+      const z = vz.z + Math.sin(a) * (vz.r * 0.55);
+      if (inArena(x, z)) continue;
+      L.geysers.push({ x, y: heightAt(x, z), z });
+    }
+    for (const sh of ARENAS.ignis.shelters) {
+      L.rocks.push({ x: sh.x, y: heightAt(sh.x, sh.z), z: sh.z, s: 2, rot: 0.5, c: 0x3a3532, shelter: true });
+      block(sh.x, sh.z, 1.6);
+    }
+
+    // ---------- Islas Flotantes: nubes, islotes, puentes de arcoíris y templo ----------
+    const iz = zoneById('islas');
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2;
+      const rr = iz.r * (1.05 + r() * 0.35);
+      L.clouds.push({ x: iz.x + Math.cos(a) * rr, y: iz.ground - 6 + r() * 4, z: iz.z + Math.sin(a) * rr, s: 4 + r() * 4 });
+    }
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.2;
+      const rr = iz.r + 10 + r() * 10;
+      L.islets.push({ x: iz.x + Math.cos(a) * rr, y: iz.ground + 4 + r() * 10, z: iz.z + Math.sin(a) * rr, s: 3 + r() * 3 });
+    }
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.9;
+      L.bridges.push({ x: iz.x + Math.cos(a) * (iz.r * 0.7), z: iz.z + Math.sin(a) * (iz.r * 0.7), rot: a, y: iz.ground });
+    }
+    const ga = ARENAS.guardian;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const x = ga.x + Math.cos(a) * ga.r;
+      const z = ga.z + Math.sin(a) * ga.r;
+      L.pillars.push({ x, y: heightAt(x, z), z });
+      block(x, z, 0.8);
     }
 
     // Rejilla espacial para consultar obstáculos cercanos rápido
@@ -234,7 +351,7 @@
   }
 
   return {
-    WORLD, WORLD_LIMIT, VILLAGE_R, WATER_Y, FIELD_ZONES, ss, lerp, rng, pathDist, heightAt, inVillage, zoneAt,
+    WORLD, WORLD_LIMIT, VILLAGE_R, WATER_Y, FIELD_ZONES, OUTER_ZONES, ss, lerp, rng, pathDist, heightAt, inVillage, inSafe, zoneAt,
     waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y, layout, collide,
   };
 });

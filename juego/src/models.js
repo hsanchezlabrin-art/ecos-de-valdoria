@@ -116,6 +116,36 @@
       head.add(part(box(0.62, 0.05, 0.05), mat(0x3a2a1c), 0, 0.14, 0.02));
     }
     if (o.cape) rig.add(part(box(0.74, 1.15, 0.06), mat(o.cape), 0, 1.33, -0.27));
+    if (o.treeKing) {
+      // Rey Tronco: copa de hojas como corona y ramas en los hombros
+      const leaf = mat(o.crown);
+      head.add(part(geo('crown', () => new THREE.IcosahedronGeometry(0.75, 0)), leaf, 0, 0.55, 0));
+      for (const sx of [1, -1]) {
+        const br = part(box(0.14, 0.7, 0.14), body, sx * 0.55, 2.15, -0.05);
+        br.rotation.z = sx * -0.6;
+        rig.add(br);
+        rig.add(part(geo('leafball', () => new THREE.IcosahedronGeometry(0.38, 0)), leaf, sx * 0.85, 2.5, -0.05));
+      }
+    }
+    if (o.robot) {
+      // Mega-Autómata: casco cuadrado, antena y engranaje en el pecho
+      head.add(part(box(0.72, 0.62, 0.66), body, 0, 0.05, 0));
+      head.add(part(box(0.06, 0.4, 0.06), mat(0x8a8f9a), 0, 0.55, 0));
+      head.add(part(sphere(0.1), mat(o.glow, { emissive: o.glow, emissiveIntensity: 0.6 }), 0, 0.8, 0));
+      rig.add(part(geo('gear', () => new THREE.CylinderGeometry(0.3, 0.3, 0.08, 8)), mat(0xd9b25f, { metalness: 0.4 }), 0, 1.5, 0.27).rotateX(Math.PI / 2));
+    }
+    if (o.halo) {
+      // Gran Guardián: aureola y alas de luz
+      const hal = part(geo('halo', () => new THREE.TorusGeometry(0.38, 0.05, 6, 20)), mat(0xffe9a0, { emissive: 0xffd36b, emissiveIntensity: 0.6 }), 0, 0.62, 0);
+      hal.rotation.x = Math.PI / 2;
+      head.add(hal);
+      const wm = mat(0xffffff, { transparent: true, opacity: 0.8 });
+      for (const sx of [1, -1]) {
+        const w = part(box(1, 1.3, 0.05), wm, sx * 0.75, 1.75, -0.35);
+        w.rotation.set(0.1, sx * -0.4, sx * 0.25);
+        rig.add(w);
+      }
+    }
     if (o.tail) {
       // Cola: corta (oso), larga y gruesa (lagarto) o fina y curvada (gato)
       const tm = mat(o.tail === 'stub' ? o.hair || o.skin : o.skin);
@@ -225,13 +255,29 @@
     const d = mat(new THREE.Color(o.color).multiplyScalar(0.62));
     const black = mat(0x15110d);
 
-    rig.add(part(box(0.72, 0.62, 1.35), c, 0, 0.88, 0));
-    if (o.mane) rig.add(part(box(0.5, 0.2, 0.9), d, 0, 1.25, 0.15));
+    rig.add(part(box(o.wool ? 0.9 : 0.72, o.wool ? 0.8 : 0.62, 1.35), c, 0, 0.88, 0));
+    if (o.mane) rig.add(part(box(0.5, 0.2, 0.9), o.maneColor ? mat(o.maneColor, { emissive: o.maneColor, emissiveIntensity: 0.3 }) : d, 0, 1.25, 0.15));
     const head = new THREE.Group();
     head.position.set(0, 1.02, 0.72);
     rig.add(head);
-    head.add(part(box(0.5, 0.46, 0.52), c, 0, 0, 0.2));
-    head.add(part(box(0.3, 0.26, 0.34), d, 0, -0.08, 0.58));
+    const hm = o.head ? mat(o.head) : c;
+    head.add(part(box(0.5, 0.46, 0.52), hm, 0, 0, 0.2));
+    head.add(part(box(0.3, 0.26, 0.34), o.head ? hm : d, 0, -0.08, 0.58));
+    if (o.beak) head.add(part(box(0.16, 0.14, 0.24), mat(0xf2b13a), 0, -0.05, 0.62));
+    if (o.dragon) {
+      // Ignis: cuernos, púas en el lomo y alas grandes
+      const horn = mat(0xece3c8);
+      head.add(part(box(0.09, 0.32, 0.09), horn, 0.16, 0.38, 0.02), part(box(0.09, 0.32, 0.09), horn, -0.16, 0.38, 0.02));
+      for (let i = 0; i < 4; i++) rig.add(part(box(0.1, 0.22, 0.14), d, 0, 1.3, 0.45 - i * 0.32));
+    }
+    if (o.wings || o.dragon) {
+      const wm = mat(o.dragon ? 0x8a2a1a : 0xe8dcc2);
+      for (const sx of [1, -1]) {
+        const w = part(box(o.dragon ? 1.6 : 1, 0.05, 0.7), wm, sx * (o.dragon ? 1.1 : 0.8), 1.25, 0.05);
+        w.rotation.z = sx * 0.35;
+        rig.add(w);
+      }
+    }
     head.add(part(box(0.1, 0.18, 0.08), d, 0.17, 0.3, 0.08));
     head.add(part(box(0.1, 0.18, 0.08), d, -0.17, 0.3, 0.08));
     head.add(part(box(0.06, 0.06, 0.03), black, 0.14, 0.07, 0.46));
@@ -247,13 +293,94 @@
       [-0.24, -0.45],
       [0.24, -0.45],
     ].map(([x, z]) => limb(rig, x, 0.62, z, 0.17, 0.62, d));
-    const tail = part(box(0.1, 0.1, 0.4), d, 0, 1.0, -0.8);
-    tail.rotation.x = 0.5;
+    const tail = part(box(o.tail ? 0.16 : 0.1, o.tail ? 0.14 : 0.1, o.tail ? 0.9 : 0.4), d, 0, o.tail ? 0.85 : 1.0, o.tail ? -1.05 : -0.8);
+    tail.rotation.x = o.tail ? 0.25 : 0.5;
     rig.add(tail);
 
     const s = o.scale || 1;
     rig.scale.setScalar(s);
     return { kind: 'quad', root, rig, head, legs, height: 1.5 * s };
+  }
+
+  // Monstruos de bloques simples (kind 'blob'): se mueven saltando o flotando
+  function buildBlob(o) {
+    const root = new THREE.Group();
+    const rig = new THREE.Group();
+    root.add(rig);
+    const c = mat(o.color);
+    const black = mat(0x15110d);
+    const head = new THREE.Group();
+    rig.add(head);
+    const wings = [];
+    let fly = 0;
+    const eyes = (y, z, gap = 0.12, m = black) => head.add(part(box(0.08, 0.08, 0.04), m, gap, y, z), part(box(0.08, 0.08, 0.04), m, -gap, y, z));
+    if (o.kind === 'mush') {
+      rig.add(part(box(0.5, 0.6, 0.5), mat(o.body), 0, 0.3, 0));
+      head.add(part(geo('mushcap', () => new THREE.CylinderGeometry(0.2, 0.62, 0.4, 8)), c, 0, 0.8, 0));
+      head.add(part(box(0.12, 0.12, 0.04), mat(0xffffff), 0.25, 0.92, 0.42), part(box(0.1, 0.1, 0.04), mat(0xffffff), -0.2, 0.86, 0.45));
+      eyes(0.42, 0.26);
+    } else if (o.kind === 'crab') {
+      rig.add(part(box(0.9, 0.35, 0.6), c, 0, 0.35, 0));
+      for (const sx of [1, -1]) {
+        head.add(part(box(0.28, 0.2, 0.3), c, sx * 0.62, 0.42, 0.42));
+        for (let i = 0; i < 3; i++) rig.add(part(box(0.06, 0.25, 0.06), mat(new THREE.Color(o.color).multiplyScalar(0.7)), sx * 0.5, 0.15, -0.2 + i * 0.2));
+      }
+      head.add(part(box(0.06, 0.2, 0.06), black, 0.12, 0.62, 0.22), part(box(0.06, 0.2, 0.06), black, -0.12, 0.62, 0.22));
+    } else if (o.kind === 'bug') {
+      fly = 1.1;
+      const stripe = mat(o.stripe);
+      rig.add(part(box(0.45, 0.45, 0.4), c, 0, 0.5, 0.2), part(box(0.47, 0.47, 0.18), stripe, 0, 0.5, -0.05), part(box(0.4, 0.4, 0.35), c, 0, 0.5, -0.3));
+      rig.add(part(geo('sting', () => new THREE.ConeGeometry(0.08, 0.3, 4)), stripe, 0, 0.5, -0.58).rotateX(-Math.PI / 2));
+      eyes(0.55, 0.42, 0.12);
+      const wm = mat(0xe8f0ff, { transparent: true, opacity: 0.6 });
+      for (const sx of [1, -1]) {
+        const g = new THREE.Group();
+        g.position.set(sx * 0.2, 0.75, 0.05);
+        g.add(part(box(0.5, 0.03, 0.3), wm, sx * 0.25, 0, 0));
+        rig.add(g);
+        wings.push(g);
+      }
+    } else if (o.kind === 'bat') {
+      fly = 1.4;
+      rig.add(part(box(0.4, 0.5, 0.35), c, 0, 0.5, 0));
+      eyes(0.6, 0.18, 0.1, mat(o.glow, { emissive: o.glow, emissiveIntensity: 0.6 }));
+      head.add(part(geo('batear', () => new THREE.ConeGeometry(0.08, 0.2, 4)), c, 0.12, 0.85, 0), part(geo('batear', () => new THREE.ConeGeometry(0.08, 0.2, 4)), c, -0.12, 0.85, 0));
+      const wm = mat(o.glow, { transparent: true, opacity: 0.75, emissive: o.glow, emissiveIntensity: 0.2 });
+      for (const sx of [1, -1]) {
+        const g = new THREE.Group();
+        g.position.set(sx * 0.2, 0.6, 0);
+        g.add(part(box(0.8, 0.04, 0.45), wm, sx * 0.4, 0, 0));
+        rig.add(g);
+        wings.push(g);
+      }
+    } else if (o.kind === 'slime') {
+      rig.add(part(box(0.9, 0.8, 0.9), mat(o.color, { transparent: true, opacity: 0.8, roughness: 0.2 }), 0, 0.4, 0));
+      rig.add(part(box(0.4, 0.4, 0.4), mat(new THREE.Color(o.color).multiplyScalar(0.6)), 0, 0.35, 0));
+      eyes(0.55, 0.46, 0.18);
+    } else if (o.kind === 'orb') {
+      fly = 1;
+      const star = mat(o.color, { emissive: o.color, emissiveIntensity: 0.55 });
+      rig.add(part(geo('starcore', () => new THREE.OctahedronGeometry(0.5, 0)), star, 0, 0.9, 0));
+      for (let i = 0; i < 4; i++) {
+        const g = new THREE.Group();
+        g.position.y = 0.9;
+        g.rotation.y = (i * Math.PI) / 2;
+        g.add(part(geo('starpt', () => new THREE.ConeGeometry(0.14, 0.5, 4)), star, 0, 0, 0.6).rotateX(Math.PI / 2));
+        rig.add(g);
+        wings.push(g);
+      }
+      eyes(0.95, 0.42, 0.12);
+    }
+    const s = o.scale || 1;
+    rig.scale.setScalar(s);
+    return { kind: 'blob', form: o.kind, root, rig, head, wings, fly, height: (o.h || 1.2) * s };
+  }
+
+  // Elige el modelo según la forma del monstruo
+  function buildMob(def) {
+    if (def.kind === 'quad') return buildQuadruped(def);
+    if (def.kind === 'hum') return buildHumanoid(def);
+    return buildBlob(def);
   }
 
   // Mascotas y monturas de bloques. form: 'pet' (pequeña), 'mount' (terrestre) o 'glider' (con alas grandes)
@@ -298,6 +425,21 @@
 
   function animateModel(m, t, walk, atk, swim = 0) {
     const swing = atk > 0 ? Math.sin(Math.PI * (1 - atk)) : 0;
+    if (m.kind === 'blob') {
+      // Saltitos al moverse; los voladores flotan y aletean; al atacar se lanzan hacia adelante
+      if (m.fly) {
+        m.rig.position.y = m.fly + Math.sin(t * 3) * 0.15;
+        for (const [i, w] of m.wings.entries()) {
+          if (m.form === 'orb') w.rotation.y = (i * Math.PI) / 2 + t * 2;
+          else w.rotation.z = (i ? -1 : 1) * Math.sin(t * 22) * 0.7;
+        }
+      } else {
+        m.rig.position.y = Math.abs(Math.sin(t * 7)) * 0.35 * walk;
+        m.rig.scale.y = m.rig.scale.x * (1 - Math.abs(Math.sin(t * 7)) * 0.12 * walk);
+      }
+      m.rig.position.z = swing * 0.4;
+      return;
+    }
     if (m.kind === 'hum' && swim > 0.01) {
       // Nadar: cuerpo inclinado, brazadas alternas y patada
       const s = Math.sin(t * 5);
@@ -397,5 +539,5 @@
     m.torsoMat.color.setHex(item ? item.look : m.baseBody);
   }
 
-  V.Models = { mat, buildHumanoid, buildQuadruped, buildPet, animateModel, animateDeath, setWeaponLook, setArmorLook };
+  V.Models = { mat, buildHumanoid, buildQuadruped, buildBlob, buildMob, buildPet, animateModel, animateDeath, setWeaponLook, setArmorLook };
 })();

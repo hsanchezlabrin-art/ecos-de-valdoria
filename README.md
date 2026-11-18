@@ -1,7 +1,7 @@
 # Ecos de Valdoria
 
 RPG de fantasía en 3D para Windows, hecho con three.js y Electron.
-Cinco razas (Oso Pardo, Elfo del Bosque Cubo, Gnomo Ingeniero, Hada-Gato y Caballero Lagarto) con tres cambios de clase (niveles 10, 25 y 40), equipo por grados, siete tierras alrededor de la Aldea de Brezal y un jefe final, Tharmok.
+Cinco razas (Oso Pardo, Elfo del Bosque Cubo, Gnomo Ingeniero, Hada-Gato y Caballero Lagarto) con tres cambios de clase (niveles 10, 25 y 40), equipo por grados, seis tierras del nivel 1 al 40 alrededor de la Aldea de Brezal y un jefe final, Tharmok.
 
 - Web y guía: https://ecos-de-valdoria.vercel.app
 - Jugar en el navegador: https://ecos-de-valdoria.vercel.app/jugar

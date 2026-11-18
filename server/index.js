@@ -114,7 +114,7 @@ function playerRow(q) {
 }
 
 function mobRow(m) {
-  return [m.id, m.key, r2(m.pos.x), r2(m.pos.y), r2(m.pos.z), r2(m.facing), m.moving ? 1 : 0, m.dead ? 1 : 0, Math.max(0, Math.round(m.hp)), m.maxHp, m.lvl, m.aggro ? 1 : 0, r2(m.deadT || 0), m.respawnTime || 0, m.stunT > 0 ? 1 : 0, m.slowT > 0 ? 1 : 0, m.dots.length ? 1 : 0];
+  return [m.id, m.key, r2(m.pos.x), r2(m.pos.y), r2(m.pos.z), r2(m.facing), m.moving ? 1 : 0, m.dead ? 1 : 0, Math.max(0, Math.round(m.hp)), m.maxHp, m.lvl, m.aggro ? 1 : 0, r2(m.deadT || 0), m.respawnTime || 0, m.stunT > 0 ? 1 : 0, m.slowT > 0 ? 1 : 0, m.dots.length ? 1 : 0, m.def.mech && m.def.mech.type === 'plates' && !(m.shieldDownT > 0) ? 1 : 0];
 }
 
 function meData(c) {
@@ -313,7 +313,8 @@ function onCommand(c, msg) {
       if (Number.isFinite(+msg.x) && Number.isFinite(+msg.z)) C.moveTo(world, p, { x: +msg.x, z: +msg.z });
       return;
     case 'target': {
-      const m = typeof msg.id === 'string' ? mobsById.get(msg.id) : null;
+      // Los refuerzos de los jefes aparecen después: se buscan también en la lista viva
+      const m = typeof msg.id === 'string' ? mobsById.get(msg.id) || world.mobs.find((x) => x.id === msg.id) : null;
       if (m && !near(m.pos, p.pos, 40)) return;
       return C.setTarget(world, p, m);
     }

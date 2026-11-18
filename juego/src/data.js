@@ -403,6 +403,26 @@
     amuleto_hueso: { name: 'Amuleto de Hueso', type: 'junk', price: 22, stack: true, glyph: '◎', rarity: 'comun', desc: 'Talismán orco. Se vende en el mercado.' },
     nucleo_ceniza: { name: 'Núcleo de Ceniza', type: 'junk', price: 36, stack: true, glyph: '✹', rarity: 'refinado', desc: 'Aún está tibio. Se vende en el mercado.' },
     mucosa: { name: 'Mucosa de Ciénaga', type: 'junk', price: 32, stack: true, glyph: '●', rarity: 'comun', desc: 'Viscosa. Se vende en el mercado.' },
+
+    seta: { name: 'Sombrero de Hongo', type: 'junk', price: 3, stack: true, glyph: '⌂', rarity: 'comun', desc: 'Todavía rebota. Se vende en el mercado.' },
+    lana: { name: 'Lana Cuadrada', type: 'junk', price: 5, stack: true, glyph: '▦', rarity: 'comun', desc: 'Suave y cúbica. Se vende en el mercado.' },
+    pinza: { name: 'Pinza de Cangrejo', type: 'junk', price: 7, stack: true, glyph: '⋎', rarity: 'comun', desc: 'Se vende en el mercado.' },
+    corteza: { name: 'Corteza de Lobo', type: 'junk', price: 10, stack: true, glyph: '▤', rarity: 'comun', desc: 'Huele a pino. Se vende en el mercado.' },
+    gorro_duende: { name: 'Gorro de Duende', type: 'junk', price: 14, stack: true, glyph: '▲', rarity: 'comun', desc: 'Con cascabel. Se vende en el mercado.' },
+    miel: { name: 'Tarro de Miel', type: 'junk', price: 18, stack: true, glyph: '◍', rarity: 'comun', desc: 'Dulcísima. Se vende en el mercado.' },
+    cristal_murcielago: { name: 'Ala de Cristal', type: 'junk', price: 24, stack: true, glyph: '◆', rarity: 'comun', desc: 'Brilla en la oscuridad. Se vende en el mercado.' },
+    gel_cobre: { name: 'Gel de Cobre', type: 'junk', price: 28, stack: true, glyph: '●', rarity: 'comun', desc: 'Pegajoso. Se vende en el mercado.' },
+    engranaje: { name: 'Engranaje Viejo', type: 'junk', price: 34, stack: true, glyph: '⚙', rarity: 'comun', desc: 'Aún gira. Se vende en el mercado.' },
+    escama_fuego: { name: 'Escama de Fuego', type: 'junk', price: 45, stack: true, glyph: '◈', rarity: 'refinado', desc: 'Tibia al tacto. Se vende en el mercado.' },
+    cola_salamandra: { name: 'Cola de Salamandra', type: 'junk', price: 52, stack: true, glyph: '∿', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    nucleo_magma: { name: 'Núcleo de Magma', type: 'junk', price: 60, stack: true, glyph: '✹', rarity: 'refinado', desc: 'Sigue ardiendo. Se vende en el mercado.' },
+    pluma_nube: { name: 'Pluma de Nube', type: 'junk', price: 72, stack: true, glyph: '☁', rarity: 'refinado', desc: 'Ligera como el aire. Se vende en el mercado.' },
+    polvo_estelar: { name: 'Polvo Estelar', type: 'junk', price: 80, stack: true, glyph: '✦', rarity: 'refinado', desc: 'Centellea. Se vende en el mercado.' },
+    pluma_grifo: { name: 'Pluma de Grifo', type: 'junk', price: 90, stack: true, glyph: '❦', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    savia_real: { name: 'Savia del Rey Tronco', type: 'junk', price: 140, stack: true, glyph: '❂', rarity: 'azul', desc: 'Trofeo del Rey Tronco. Se vende caro.' },
+    chip_automata: { name: 'Chip del Mega-Autómata', type: 'junk', price: 220, stack: true, glyph: '▣', rarity: 'azul', desc: 'Trofeo de La Fábrica Descontrolada. Se vende caro.' },
+    colmillo_ignis: { name: 'Colmillo de Ignis', type: 'junk', price: 420, stack: true, glyph: '◣', rarity: 'morado', desc: 'Trofeo del Dragón Dormilón. Se vende muy caro.' },
+    polvo_arcoiris: { name: 'Polvo de Arcoíris', type: 'material', price: 60, stack: true, glyph: '✧', rarity: 'arcoiris', desc: 'Material celestial: el Herrero Celestial de la Ciudadela lo cambia por equipo Dorado y Arcoíris.' },
   };
 
   // Armas por raza y grado: [tipo, nombre, descripción]
@@ -538,7 +558,7 @@
   function mobStats(def, lvl) {
     const boss = !!def.boss;
     return {
-      maxHp: Math.round((35 + 26 * lvl) * (boss ? 6 : 1)),
+      maxHp: Math.round((35 + 26 * lvl) * (boss ? def.hpMult || 6 : 1)),
       atk: (4 + 2.6 * lvl) * (boss ? 1.5 : 1),
       armor: 1 + 1.3 * lvl,
       xp: Math.round(14 * Math.pow(lvl, 1.4) * (boss ? 10 : 1)),
@@ -549,64 +569,145 @@
   // ---------- Mundo ----------
 
   // ground: altura base a la que se aplana el terreno de la zona
-  // trees: densidad de árboles; treeType: pine | round | dead | swamp
+  // trees: densidad de árboles; treeType: round | pine | giant | dead | none
   const ZONES = [
-    { id: 'aldea', name: 'Aldea de Brezal', x: 0, z: 0, r: 22, safe: true, tint: [0.5, 0.42, 0.3], desc: 'Tu hogar. Zona segura: los monstruos no entran y recuperas vida y maná más rápido.' },
-    { id: 'prados', name: 'Prados de Brezo', lvl: '1–2', x: 50, z: 14, r: 26, ground: 0.6, trees: 0.06, treeType: 'round', tint: [0.46, 0.6, 0.27], desc: 'Praderas abiertas al este. Jabalíes que solo atacan si los provocas.' },
-    { id: 'bosque', name: 'Bosque Aullante', lvl: '3–4', x: -54, z: 46, r: 28, ground: 1.2, trees: 0.55, treeType: 'pine', tint: [0.2, 0.36, 0.2], desc: 'Pinar cerrado al noroeste. Los lobos cazan en manada y atacan al verte.' },
-    { id: 'goblin', name: 'Campamento Goblin', lvl: '5–7', x: 22, z: -80, r: 25, ground: 0.8, trees: 0.12, treeType: 'round', tint: [0.5, 0.43, 0.27], desc: 'Tiendas y fogatas al sur. Saqueadores rápidos y numerosos.' },
-    { id: 'fuerte', name: 'Fuerte de los Orcos', lvl: '8–11', x: -92, z: -62, r: 28, ground: 1.5, trees: 0.08, treeType: 'pine', tint: [0.43, 0.36, 0.29], desc: 'Una empalizada al suroeste. Orcos con garrotes que pegan muy fuerte.' },
-    { id: 'ceniza', name: 'Llanura de Ceniza', lvl: '12–14', x: 104, z: -96, r: 30, ground: 1.0, trees: 0.1, treeType: 'dead', tint: [0.33, 0.31, 0.3], desc: 'Tierra quemada con grietas de lava. Gólems lentos y muy resistentes.' },
-    { id: 'pantano', name: 'Pantano de Tharmok', lvl: '13–15 · Jefe', x: 108, z: 96, r: 26, ground: -1.1, trees: 0.3, treeType: 'swamp', tint: [0.24, 0.31, 0.2], desc: 'Ciénaga al noreste donde aguarda Tharmok, el jefe final.' },
+    { id: 'aldea', name: 'Aldea de los Bloques', x: 0, z: 0, r: 22, safe: true, tint: [0.5, 0.42, 0.3], desc: 'Tu hogar. Zona segura con cabañas, molinos y el Maestro de Clase. Los monstruos no entran y recuperas vida y maná más rápido.' },
+    { id: 'praderas', name: 'Praderas de los Bloques', lvl: '1–5', x: 52, z: 18, r: 30, ground: 0.6, trees: 0.05, treeType: 'round', tint: [0.46, 0.62, 0.28], desc: 'Praderas verdes junto a la aldea, con molinos. Hongos, ovejas y cangrejos tranquilos: solo atacan si los provocas.' },
+    { id: 'bosque', name: 'Bosque de Árboles Gigantes', lvl: '5–12', x: -58, z: 52, r: 34, ground: 1.2, trees: 0.42, treeType: 'giant', tint: [0.2, 0.38, 0.2], desc: 'Árboles colosales y setas brillantes. Lobos de madera, duendes traviesos y avispas de miel. Aquí despierta el Rey Tronco.' },
+    { id: 'minas', name: 'Minas de Cristal y Engranajes', lvl: '12–20', x: 25, z: -98, r: 32, ground: 3, trees: 0, treeType: 'none', tint: [0.42, 0.38, 0.36], desc: 'Rocas naranjas, cristales y vías de vagonetas. Dentro está La Fábrica Descontrolada del Mega-Autómata 3000.' },
+    { id: 'ciudadela', name: 'Ciudadela de Gludio-Cubo', lvl: '15+', x: -100, z: -60, r: 28, safe: true, hub: true, ground: 1, tint: [0.66, 0.64, 0.58], desc: 'Gran ciudad blanca de techos de colores. Mercader de grados altos, Herrero Celestial, Maestra de Clase, gremios, establo y portales.' },
+    { id: 'valle', name: 'Valle de los Dragones Dormidos', lvl: '20–30', x: 110, z: -78, r: 34, ground: 1.5, trees: 0.06, treeType: 'dead', tint: [0.38, 0.26, 0.2], desc: 'Montañas volcánicas con lava de gelatina naranja y géiseres que te lanzan por los aires. Aquí duerme Ignis.' },
+    { id: 'islas', name: 'Islas Flotantes del Cielo', lvl: '30–40+', x: 70, z: 118, r: 34, ground: 24, trees: 0.08, treeType: 'round', tint: [0.55, 0.75, 0.45], desc: 'Ruinas antiguas sobre las nubes, con puentes de arcoíris. Se llega por el portal de la Ciudadela. Hogar del Gran Guardián Celestial.' },
   ];
 
+  // Arenas de jefes: botones de la Fábrica, rocas para esconderse de Ignis
+  const ring = (cx, cz, r, n, a0 = 0) => Array.from({ length: n }, (_, i) => ({ x: cx + Math.cos(a0 + (i / n) * Math.PI * 2) * r, z: cz + Math.sin(a0 + (i / n) * Math.PI * 2) * r }));
+  const ARENAS = {
+    fabrica: { name: 'La Fábrica Descontrolada', x: 30, z: -108, r: 12, plates: ring(30, -108, 8.5, 3, Math.PI / 2) },
+    ignis: { name: 'Nido de Ignis', x: 124, z: -88, r: 15, shelters: ring(124, -88, 9, 5, 0.3) },
+    guardian: { name: 'Templo Estelar', x: 76, z: 128, r: 13 },
+  };
+
+  // kind: forma del modelo (quad, hum, mush, crab, bug, bat, slime, orb)
   // Botín: [id, probabilidad, [cantidad mín, máx]]. '@w:grado' = arma de ese grado para la raza
   // de quien lo recibe; '@a:grado' = armadura. onHit: estado que pueden causar al golpear
   // (poison/burn: % de su ataque por segundo; slow: segundos de lentitud).
+  // Jefes: hpMult (vida extra), at (dónde aparece), mech (mecánica especial).
   const MOBS = {
-    jabali: {
-      name: 'Jabalí Salvaje', kind: 'quad', lvl: [1, 2], zone: 'prados', count: 16,
-      color: 0x6b4a32, scale: 0.85, tusks: true, mane: true, aggressive: false, speed: 4.6,
-      drops: [['piel', 0.55], ['pocion_vida', 0.12], ['gema_poder', 0.25, [2, 5]], ['@w:madera', 0.03], ['@a:madera', 0.05]],
+    // 1. Praderas de los Bloques (1–5): pacíficos
+    hongo: {
+      name: 'Hongo Saltarín', kind: 'mush', lvl: [1, 2], zone: 'praderas', count: 14,
+      color: 0xd84a3a, body: 0xf0e6d0, scale: 0.9, aggressive: false, speed: 3.6,
+      drops: [['seta', 0.55], ['pocion_vida', 0.12], ['gema_poder', 0.25, [2, 5]], ['@w:madera', 0.03], ['@a:madera', 0.05]],
     },
-    lobo: {
-      name: 'Lobo Gris', kind: 'quad', lvl: [3, 4], zone: 'bosque', count: 15,
-      color: 0x7b7f87, scale: 0.9, aggressive: true, speed: 5.6,
-      onHit: { slow: 2, chance: 0.25 },
-      drops: [['gema_poder', 0.3, [3, 6]], ['colmillo', 0.5], ['pocion_vida', 0.15], ['pocion_mana', 0.1], ['@a:madera', 0.05], ['@w:cobre', 0.02]],
+    oveja: {
+      name: 'Oveja Cubo', kind: 'quad', lvl: [2, 3], zone: 'praderas', count: 14,
+      color: 0xf4f0e6, head: 0x3a3430, wool: true, scale: 0.85, aggressive: false, speed: 4.2,
+      drops: [['lana', 0.55], ['pocion_vida', 0.12], ['gema_poder', 0.25, [2, 5]], ['@w:madera', 0.03], ['@a:madera', 0.05]],
     },
-    goblin: {
-      name: 'Goblin Saqueador', kind: 'hum', lvl: [5, 7], zone: 'goblin', count: 15,
-      skin: 0x76a03d, body: 0x5a3d22, legs: 0x3b2a1a, scale: 0.72, ears: true, aggressive: true, speed: 5.2,
+    cangrejo: {
+      name: 'Cangrejo de Río', kind: 'crab', lvl: [3, 5], zone: 'praderas', count: 12,
+      color: 0xd8643a, scale: 0.9, aggressive: false, speed: 4.4,
+      drops: [['pinza', 0.5], ['pocion_vida', 0.15], ['pocion_mana', 0.1], ['gema_poder', 0.3, [3, 6]], ['@w:cobre', 0.02], ['@a:madera', 0.05]],
+    },
+    // 2. Bosque de Árboles Gigantes (5–12)
+    lobo_madera: {
+      name: 'Lobo de Madera', kind: 'quad', lvl: [5, 7], zone: 'bosque', count: 14,
+      color: 0x8a6a46, scale: 0.95, aggressive: true, speed: 5.6,
+      onHit: { slow: 2, chance: 0.2 },
+      drops: [['corteza', 0.5], ['pocion_vida', 0.18], ['pocion_mana', 0.12], ['gema_poder', 0.3, [4, 8]], ['@w:cobre', 0.05], ['@a:cobre', 0.04]],
+    },
+    duende: {
+      name: 'Duende Travieso', kind: 'hum', lvl: [7, 9], zone: 'bosque', count: 14,
+      skin: 0x8ac04a, body: 0x3f7a3a, legs: 0x5a3d22, hat: 0xd84a3a, ears: true, scale: 0.65, aggressive: true, speed: 5.6,
       weaponColor: 0x8d8a80,
-      drops: [['gema_poder', 0.3, [4, 8]], ['oreja_goblin', 0.45], ['pocion_vida', 0.18], ['pocion_mana', 0.12], ['@w:cobre', 0.05], ['@a:cobre', 0.04]],
+      drops: [['gorro_duende', 0.45], ['pocion_vida', 0.2], ['pocion_mana', 0.15], ['gema_poder', 0.3, [4, 8]], ['@w:cobre', 0.05], ['@a:cobre', 0.05]],
     },
-    orco: {
-      name: 'Orco Guerrero', kind: 'hum', lvl: [8, 11], zone: 'fuerte', count: 16,
-      skin: 0x557043, body: 0x6e2a22, legs: 0x2f2a26, scale: 1.18, tusks: true, aggressive: true, speed: 5,
-      club: true,
-      onHit: { slow: 2.5, chance: 0.2 },
-      drops: [['gema_poder', 0.35, [5, 10]], ['amuleto_hueso', 0.4], ['pocion_vida', 0.2], ['pocion_mana', 0.15], ['@w:cobre', 0.05], ['@a:cobre', 0.05], ['@w:azul', 0.02], ['@a:azul', 0.02]],
+    avispa: {
+      name: 'Avispa de Miel', kind: 'bug', lvl: [9, 11], zone: 'bosque', count: 12,
+      color: 0xf2c13a, stripe: 0x2a2119, scale: 0.9, aggressive: true, speed: 6,
+      onHit: { poison: { pct: 0.3, dur: 4 }, chance: 0.3 },
+      drops: [['miel', 0.45], ['pocion_vida', 0.2], ['pocion_mana', 0.15], ['gema_poder', 0.35, [5, 10]], ['@w:cobre', 0.04], ['@w:azul', 0.015], ['@a:azul', 0.015]],
     },
-    golem: {
-      name: 'Gólem de Ceniza', kind: 'hum', lvl: [12, 14], zone: 'ceniza', count: 14,
-      skin: 0x5a5652, body: 0x46423e, legs: 0x3a3734, scale: 1.4, glow: 0xff6a2a, weapon: false, aggressive: true, speed: 4.4,
-      onHit: { burn: { pct: 0.35, dur: 4 }, chance: 0.3 },
-      drops: [['gema_poder', 0.4, [6, 12]], ['nucleo_ceniza', 0.4], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w:azul', 0.04], ['@a:azul', 0.04]],
+    rey_tronco: {
+      name: 'Rey Tronco', kind: 'hum', lvl: [12, 12], zone: 'bosque', count: 1, boss: true, world: true, respawn: 300, hpMult: 8,
+      at: { x: -62, z: 60 }, treeKing: true, skin: 0x6b4a2e, body: 0x5a3d22, legs: 0x4a3020, crown: 0x4f7a34, glow: 0xb6ff5a, scale: 2.8, weapon: false, aggressive: true, speed: 3.8,
+      mech: { type: 'roots', every: 7, count: 4, r: 3, delay: 1.6, dmg: 0.3, root: 2 },
+      drops: [['savia_real', 1, [1, 2]], ['gema_poder', 1, [15, 25]], ['@w:cobre', 0.5], ['@a:cobre', 0.5], ['@w:azul', 0.25], ['@a:azul', 0.25], ['pocion_vida', 1], ['pocion_mana', 1]],
     },
-    sapo: {
-      name: 'Sapo de Ciénaga', kind: 'quad', lvl: [13, 14], zone: 'pantano', count: 7,
-      color: 0x4c6a36, scale: 1.05, aggressive: false, speed: 4,
-      onHit: { poison: { pct: 0.3, dur: 5 }, chance: 0.4 },
-      drops: [['gema_poder', 0.4, [6, 12]], ['mucosa', 0.5], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['@w:azul', 0.04], ['@a:azul', 0.04]],
+    // 3. Minas de Cristal y Engranajes (12–20)
+    murcielago: {
+      name: 'Murciélago de Cristal', kind: 'bat', lvl: [12, 14], zone: 'minas', count: 14,
+      color: 0x5a6a8a, glow: 0x9fd8ff, scale: 0.9, aggressive: true, speed: 6.2,
+      drops: [['cristal_murcielago', 0.45], ['pocion_vida', 0.22], ['pocion_mana', 0.18], ['gema_poder', 0.35, [6, 12]], ['@w:azul', 0.04], ['@a:azul', 0.04]],
     },
-    tharmok: {
-      name: 'Tharmok, Señor del Pantano', kind: 'hum', lvl: [15, 15], zone: 'pantano', count: 1, boss: true, respawn: 180,
-      skin: 0x3d5a3a, body: 0x2c3a24, legs: 0x1f2a1a, scale: 2.3, tusks: true, glow: 0xb6ff5a, club: true, aggressive: true, speed: 4.8,
-      onHit: { poison: { pct: 0.3, dur: 6 }, slow: 2, chance: 0.35 },
-      drops: [['gema_poder', 1, [25, 40]], ['@w:azul', 0.6], ['@a:azul', 0.6], ['@w:morado', 0.1], ['@a:morado', 0.1], ['pocion_vida', 1], ['pocion_mana', 1]],
+    slime: {
+      name: 'Slime de Cobre', kind: 'slime', lvl: [14, 16], zone: 'minas', count: 14,
+      color: 0xd8843a, scale: 1, aggressive: true, speed: 4,
+      onHit: { slow: 2.5, chance: 0.3 },
+      drops: [['gel_cobre', 0.45], ['pocion_vida', 0.22], ['pocion_mana', 0.18], ['gema_poder', 0.35, [6, 12]], ['@w:azul', 0.04], ['@a:azul', 0.04]],
+    },
+    golem_piedra: {
+      name: 'Gólem de Piedra Pequeño', kind: 'hum', lvl: [16, 19], zone: 'minas', count: 12,
+      skin: 0x8a8478, body: 0x77716a, legs: 0x5f5a54, glow: 0x9fd8ff, scale: 1.05, weapon: false, aggressive: true, speed: 4.6,
+      drops: [['engranaje', 0.45], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['gema_poder', 0.4, [6, 12]], ['@w:azul', 0.05], ['@a:azul', 0.05], ['@w:morado', 0.01]],
+    },
+    mega_automata: {
+      name: 'Mega-Autómata 3000', kind: 'hum', lvl: [18, 18], zone: 'minas', count: 1, boss: true, dungeon: 'fabrica', respawn: 300, hpMult: 10,
+      at: { x: 30, z: -108 }, robot: true, skin: 0x9aa0aa, body: 0xb5703f, legs: 0x5f5a54, glow: 0xff5a3a, scale: 2.6, weapon: false, aggressive: true, speed: 3.6,
+      mech: { type: 'plates', open: 12, lit: 6 },
+      drops: [['chip_automata', 1, [1, 2]], ['gema_poder', 1, [20, 30]], ['@w:azul', 0.6], ['@a:azul', 0.6], ['@w:morado', 0.15], ['@a:morado', 0.15], ['pocion_vida', 1], ['pocion_mana', 1]],
+    },
+    // 5. Valle de los Dragones Dormidos (20–30)
+    lagarto_fuego: {
+      name: 'Lagarto de Fuego', kind: 'quad', lvl: [20, 23], zone: 'valle', count: 14,
+      color: 0xd8643a, scale: 1, aggressive: true, speed: 5.4, tail: true,
+      onHit: { burn: { pct: 0.3, dur: 4 }, chance: 0.25 },
+      drops: [['escama_fuego', 0.45], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['gema_poder', 0.4, [8, 14]], ['@w:morado', 0.03], ['@a:morado', 0.03]],
+    },
+    salamandra: {
+      name: 'Salamandra Cubo', kind: 'quad', lvl: [23, 26], zone: 'valle', count: 14,
+      color: 0x2f2a28, mane: true, maneColor: 0xff8a3d, scale: 0.85, aggressive: true, speed: 6.2, tail: true,
+      drops: [['cola_salamandra', 0.45], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['gema_poder', 0.4, [8, 14]], ['@w:morado', 0.03], ['@a:morado', 0.03], ['@w:dorado', 0.006]],
+    },
+    golem_magma: {
+      name: 'Gólem de Magma', kind: 'hum', lvl: [26, 29], zone: 'valle', count: 12,
+      skin: 0x3a2a24, body: 0x2a1f1a, legs: 0x241a16, glow: 0xff6a2a, scale: 1.5, weapon: false, aggressive: true, speed: 4.4,
+      onHit: { burn: { pct: 0.3, dur: 4 }, chance: 0.3 },
+      drops: [['nucleo_magma', 0.45], ['pocion_vida', 0.28], ['pocion_mana', 0.22], ['gema_poder', 0.45, [10, 16]], ['@w:morado', 0.04], ['@a:morado', 0.04], ['@w:dorado', 0.01], ['@a:dorado', 0.01]],
+    },
+    ignis: {
+      name: 'Ignis, el Dragón Dormilón', kind: 'quad', lvl: [28, 28], zone: 'valle', count: 1, boss: true, raid: true, respawn: 600, hpMult: 25,
+      at: { x: 124, z: -88 }, color: 0xc8402a, dragon: true, scale: 3.2, aggressive: true, speed: 4.5,
+      mech: { type: 'yawn', every: 14, warn: 2.8, dmg: 0.7, r: 22, burn: { pct: 0.5, dur: 5 } },
+      drops: [['colmillo_ignis', 1, [1, 2]], ['gema_poder', 1, [30, 45]], ['@w:morado', 0.5], ['@a:morado', 0.5], ['@w:dorado', 0.15], ['@a:dorado', 0.15], ['pocion_vida', 1], ['pocion_mana', 1]],
+    },
+    // 6. Islas Flotantes del Cielo (30–40+)
+    caballero_nube: {
+      name: 'Caballero Nube', kind: 'hum', lvl: [30, 33], zone: 'islas', count: 14,
+      skin: 0xf0eee8, body: 0xe8f0ff, legs: 0xc9d4e2, cape: 0x9fd8ff, glow: 0x9fd8ff, weaponColor: 0xe8f0ff, scale: 1.15, aggressive: true, speed: 5.4,
+      drops: [['pluma_nube', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.45, [10, 18]], ['@w:dorado', 0.02], ['@a:dorado', 0.02]],
+    },
+    elemental: {
+      name: 'Elemental de Estrella', kind: 'orb', lvl: [33, 36], zone: 'islas', count: 12,
+      color: 0xffe08a, scale: 1, aggressive: true, speed: 5,
+      drops: [['polvo_estelar', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.45, [10, 18]], ['@w:dorado', 0.02], ['@a:dorado', 0.02], ['polvo_arcoiris', 0.04]],
+    },
+    grifo: {
+      name: 'Grifo Cubo', kind: 'quad', lvl: [36, 39], zone: 'islas', count: 12,
+      color: 0xc9a46a, wings: true, beak: true, scale: 1.2, aggressive: true, speed: 6,
+      drops: [['pluma_grifo', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [12, 20]], ['@w:dorado', 0.03], ['@a:dorado', 0.03], ['polvo_arcoiris', 0.06]],
+    },
+    guardian: {
+      name: 'Gran Guardián Celestial', kind: 'hum', lvl: [40, 40], zone: 'islas', count: 1, boss: true, raid: true, respawn: 900, hpMult: 30,
+      at: { x: 76, z: 128 }, halo: true, skin: 0xf6f0e0, body: 0xffe9a0, legs: 0xd9b25f, cape: 0xffffff, glow: 0xfff0a0, weaponColor: 0xfff0c0, scale: 3, aggressive: true, speed: 4.6,
+      mech: { type: 'stars', every: 8, count: 6, r: 3.5, delay: 1.8, dmg: 0.35, adds: { key: 'elemental', count: 3, at: 0.5 } },
+      drops: [['polvo_arcoiris', 1, [8, 15]], ['gema_poder', 1, [40, 60]], ['@w:dorado', 0.5], ['@a:dorado', 0.5], ['@w:arcoiris', 0.15], ['@a:arcoiris', 0.15], ['pocion_vida', 1], ['pocion_mana', 1]],
     },
   };
+  // Altura de cada forma de monstruo (para nombres, proyectiles y selección)
+  const MOB_H = { quad: 1.5, hum: 2.5, mush: 1.3, crab: 0.9, bug: 1.8, bat: 2.2, slime: 1.1, orb: 2 };
+  const mobHeight = (def) => (MOB_H[def.kind] || 1.5) * (def.scale || 1);
   // Nivel de monstruo más alto (sin jefes) y jefe más fuerte: lo usan las misiones de cambio de clase
   const TOP_MOB_LVL = Math.max(...Object.values(MOBS).filter((m) => !m.boss).map((m) => m.lvl[1]));
   const TOP_BOSS = Object.entries(MOBS)
@@ -628,30 +729,106 @@
   };
 
   const GEM_MULT = 1.25;
-  const shopFor = (cls) => ['pocion_vida', 'pocion_mana', 'gema_poder', ...['madera', 'cobre', 'azul'].flatMap((g) => [weaponFor(cls, g), armorFor(cls, g)])];
-  const sellPrice = (item) => (item.type === 'junk' ? item.price : Math.floor(item.price * 0.4));
+  // Tiendas: lista de { id, price, currency } (currency: objeto con el que se paga; sin él, oro)
+  const gearOf = (cls, grades) => grades.flatMap((g) => [weaponFor(cls, g), armorFor(cls, g)]);
+  const SHOPS = {
+    orlen: { name: 'Mercader Orlen', items: (cls) => ['pocion_vida', 'pocion_mana', 'gema_poder', ...gearOf(cls, ['madera', 'cobre', 'azul'])].map((id) => ({ id, price: ITEMS[id].price })) },
+    corvin: { name: 'Mercader Corvin', items: (cls) => ['pocion_vida', 'pocion_mana', 'gema_poder', ...gearOf(cls, ['azul', 'morado', 'dorado'])].map((id) => ({ id, price: ITEMS[id].price })) },
+    herrero: {
+      name: 'Herrero Celestial',
+      currency: 'polvo_arcoiris',
+      items: (cls) => {
+        const list = [
+          { id: weaponFor(cls, 'dorado'), price: 4 },
+          { id: armorFor(cls, 'dorado'), price: 4 },
+          { id: weaponFor(cls, 'arcoiris'), price: 12 },
+          { id: armorFor(cls, 'arcoiris'), price: 14 },
+        ];
+        if (cls === 'oso') list.push({ id: 'gran_martillo_tronador', price: 6 }, { id: 'martillo_coloso', price: 16 });
+        return list.map((x) => ({ ...x, currency: 'polvo_arcoiris' }));
+      },
+    },
+  };
+  const shopItems = (shop, cls) => (SHOPS[shop] ? SHOPS[shop].items(cls) : []);
+  const shopFor = (cls) => shopItems('orlen', cls).map((x) => x.id);
+  const sellPrice = (item) => (item.type === 'junk' || item.type === 'material' ? item.price : Math.floor(item.price * 0.4));
 
-  // Personajes de la aldea. x, z: posición; se les habla con clic.
+  // Personajes no jugadores. role: shop | heal | guide | master | travel | info.
+  // prop: se dibuja un objeto en vez de una persona (cart = vagoneta, portal).
   const NPCS = [
     {
-      id: 'mercader', name: 'Mercader Orlen', title: 'Comerciante', x: 6.5, z: -5.5,
+      id: 'mercader', role: 'shop', shop: 'orlen', name: 'Mercader Orlen', title: 'Comerciante', x: 6.5, z: -5.5,
       look: { skin: 0xd9a77e, body: 0x6a4c7a, legs: 0x3a2e40, hair: 0xbfb8ab, robe: true, weapon: false },
-      desc: 'Vende pociones, armas de tu raza y armaduras de tu tipo (grados Madera, Cobre y Cristal Azul). También compra todo tu botín.',
+      desc: 'Vende pociones, Gemas de Poder, armas de tu raza y armaduras de tu tipo (grados Madera, Cobre y Cristal Azul). También compra todo tu botín.',
     },
     {
-      id: 'sanadora', name: 'Sanadora Ilwen', title: 'Sacerdotisa', x: -8, z: -2.5,
+      id: 'sanadora', role: 'heal', name: 'Sanadora Ilwen', title: 'Sacerdotisa', x: -8, z: -2.5,
       look: { skin: 0xe8c4a2, body: 0xe6dfcc, legs: 0xcfc6b2, hair: 0xc9a46a, longHair: true, robe: true, weapon: false },
       desc: 'Restaura por completo tu vida y tu maná, gratis, siempre que no estés en combate.',
     },
     {
-      id: 'capitana', name: 'Capitana Brisa', title: 'Guardia de Brezal', x: 3.5, z: 9.5,
+      id: 'capitana', role: 'guide', name: 'Capitana Brisa', title: 'Guardia de la Aldea', x: 3.5, z: 9.5,
       look: { skin: 0xc99a74, body: 0x858b93, legs: 0x3b3127, hair: 0x2a1c12, cape: 0x34557d, weaponType: 'sword' },
       desc: 'Conoce las tierras de Valdoria: te recomienda a qué zona ir según tu nivel y te da consejos.',
     },
     {
-      id: 'maestro', name: 'Maestro Aldric', title: 'Maestro de Clase', x: -6, z: 8.5,
+      id: 'maestro', role: 'master', name: 'Maestro Aldric', title: 'Maestro de Clase', x: -6, z: 8.5,
       look: { skin: 0xd6a882, body: 0x7a2630, legs: 0x2a1f1a, hair: 0xe6e0d6, beard: true, cape: 0xd9b25f, weapon: false },
       desc: 'Guía los cambios de clase: Despertar (nivel 10), Especialización (nivel 25) y Ascensión Maestra (nivel 40).',
+    },
+    {
+      id: 'vagoneta_aldea', role: 'travel', to: 'vagoneta_minas', prop: 'cart', name: 'Vagoneta a las Minas', title: 'Transporte', x: 8, z: -18,
+      desc: 'Una vagoneta que corre por las vías hasta las Minas de Cristal y Engranajes.',
+    },
+    {
+      id: 'vagoneta_minas', role: 'travel', to: 'vagoneta_aldea', prop: 'cart', name: 'Vagoneta a la Aldea', title: 'Transporte', x: 22, z: -69,
+      desc: 'Te lleva de vuelta a la Aldea de los Bloques.',
+    },
+    // Ciudadela de Gludio-Cubo
+    {
+      id: 'maestra', role: 'master', name: 'Maestra Lys', title: 'Maestra de Clase', x: -95, z: -55,
+      look: { skin: 0xe8c4a2, body: 0x34557d, legs: 0x2a2c55, hair: 0xe6e0d6, longHair: true, female: true, cape: 0xd9b25f, weapon: false },
+      desc: 'Maestra de Clase de la Ciudadela: hace los mismos cambios de clase que el Maestro Aldric.',
+    },
+    {
+      id: 'corvin', role: 'shop', shop: 'corvin', name: 'Mercader Corvin', title: 'Comerciante de la Ciudadela', x: -105, z: -55,
+      look: { skin: 0xd9a77e, body: 0x2f5a8a, legs: 0x2a2c55, hair: 0x3a2a1c, beard: true, robe: true, weapon: false },
+      desc: 'Vende equipo de grados Cristal Azul, Oro Morado y Diamante Dorado, además de pociones y gemas.',
+    },
+    {
+      id: 'herrero', role: 'shop', shop: 'herrero', name: 'Herrero Celestial', title: 'Forja de Arcoíris', x: -106, z: -65,
+      look: { skin: 0xc99a74, body: 0x5a5652, legs: 0x3a3734, hair: 0x2a1c12, beard: true, weapon: false },
+      desc: 'Cambia Polvo de Arcoíris (lo suelta el Gran Guardián Celestial) por equipo Diamante Dorado y Arcoíris Celestial.',
+    },
+    {
+      id: 'sanador', role: 'heal', name: 'Sanador Tobías', title: 'Clérigo', x: -94, z: -65,
+      look: { skin: 0xe8c4a2, body: 0xe6dfcc, legs: 0xcfc6b2, hair: 0x8a6a46, robe: true, weapon: false },
+      desc: 'Restaura tu vida y tu maná, gratis, fuera de combate.',
+    },
+    {
+      id: 'gremio', role: 'info', name: 'Maestro del Gremio', title: 'Gremios', x: -100, z: -50,
+      look: { skin: 0xc99a74, body: 0x7a2630, legs: 0x2a1f1a, hair: 0x5a3a1c, cape: 0x7a2630, weaponType: 'sword' },
+      desc: 'Aquí se fundarán los gremios de jugadores.',
+      text: 'Los gremios llegarán pronto: podrás fundar el tuyo con tus amigos, elegir un emblema y participar en los Asedios.',
+    },
+    {
+      id: 'establo', role: 'info', name: 'Cuidadora Mabel', title: 'Establo de Monturas', x: -110, z: -60,
+      look: { skin: 0xe6bf9a, body: 0x6b4a2e, legs: 0x4a3a28, hair: 0x9a4a22, longHair: true, female: true, weapon: false },
+      desc: 'Experta en mascotas y monturas.',
+      text: 'Tu mascota nace del Huevo (nivel 5), crece a montura en el nivel 20 (tecla 0) y con la Ascensión Maestra aprende a planear sobre el agua. ¡Cuídala mucho!',
+    },
+    {
+      id: 'portal_asedio', role: 'info', prop: 'portal', portalColor: 0xd84a3a, name: 'Portal de Asedios', title: 'Castillos de Juguete', x: -100, z: -72,
+      desc: 'Portal a los Asedios de Castillos de Juguete.',
+      text: 'Asedios de Castillos de Juguete: los gremios se inscribirán aquí para pelear los fines de semana. ¡Muy pronto!',
+    },
+    {
+      id: 'portal_islas', role: 'travel', to: 'portal_ciudadela', prop: 'portal', portalColor: 0x9fd8ff, name: 'Portal a las Islas Flotantes', title: 'Nivel 30+', minLvl: 30, x: -88, z: -60,
+      desc: 'Te lleva a las Islas Flotantes del Cielo (nivel 30 o más).',
+    },
+    {
+      id: 'portal_ciudadela', role: 'travel', to: 'portal_islas', prop: 'portal', portalColor: 0xffd36b, name: 'Portal a la Ciudadela', title: 'Transporte', x: 60, z: 99,
+      desc: 'Vuelve a la Ciudadela de Gludio-Cubo.',
     },
   ];
 
@@ -706,6 +883,7 @@
     raceName, className, skillsFor, passiveFor, skillLock, lookFor, playerBaseStats, mobStats,
     ITEMS, WEAPON_TIERS, ARMOR_TIERS, weaponFor, armorFor, startGear, equipProblem,
     ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT,
+    ARENAS, SHOPS, shopItems, MOB_H, mobHeight,
     PETS, isPet, PET_LVL, MOUNT_LVL, GLIDER_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName,
     OLD_CLASS_MAP, migrateCharacter,
   };

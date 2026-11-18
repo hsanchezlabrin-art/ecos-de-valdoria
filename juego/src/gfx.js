@@ -296,15 +296,16 @@
   // Pesos de textura por vértice: x pasto, y tierra, z roca
   function splatAt(x, z, h, zone) {
     let dirt = 0;
-    let rock = ss(6, 13, h);
+    const sky = zone && zone.ground > 10 ? 1 - ss(zone.r * 0.9, zone.r * 1.6, Math.hypot(x - zone.x, z - zone.z)) : 0;
+    let rock = ss(6, 13, h) * (1 - sky * 0.9);
     dirt = Math.max(dirt, 1 - ss(9, 17, Math.hypot(x, z)));
     dirt = Math.max(dirt, 1 - ss(1.4, 3.4, pathDist(x, z)));
     dirt = Math.max(dirt, 1 - ss(WATER_Y - 0.3, WATER_Y + 0.8, h));
     if (zone) {
       const w = 1 - ss(zone.r * 0.55, zone.r * 1.2, Math.hypot(x - zone.x, z - zone.z));
-      if (zone.id === 'ceniza') rock = Math.max(rock, w * 0.85);
-      if (zone.id === 'goblin' || zone.id === 'fuerte') dirt = Math.max(dirt, w * 0.55);
-      if (zone.id === 'pantano') dirt = Math.max(dirt, w * 0.35);
+      if (zone.id === 'valle') rock = Math.max(rock, w * 0.8);
+      if (zone.id === 'minas') rock = Math.max(rock, w * 0.6);
+      if (zone.id === 'minas' || zone.id === 'ciudadela') dirt = Math.max(dirt, w * 0.6);
     }
     rock = Math.min(1, rock);
     dirt = Math.min(1 - rock, dirt);
@@ -323,14 +324,14 @@
   }
 
   function grassDensityAt(x, z, h) {
-    if (h < WATER_Y + 0.25 || h > 9) return 0;
+    if (h < WATER_Y + 0.25 || (h > 9 && h < 18)) return 0;
     const d = Math.hypot(x, z);
     if (d > 182) return 0;
     let dens = ss(10, 16, d) * ss(1.6, 3.6, pathDist(x, z));
-    const zone = FIELD_ZONES.find((zn) => Math.hypot(x - zn.x, z - zn.z) < zn.r * 1.25);
+    const zone = V.Data.ZONES.find((zn) => zn.id !== 'aldea' && Math.hypot(x - zn.x, z - zn.z) < zn.r * 1.25);
     if (zone) {
       const w = 1 - ss(zone.r * 0.5, zone.r * 1.2, Math.hypot(x - zone.x, z - zone.z));
-      const keep = { prados: 1, bosque: 0.75, goblin: 0.35, fuerte: 0.3, ceniza: 0, pantano: 0.7 }[zone.id];
+      const keep = { praderas: 1, bosque: 0.75, minas: 0.1, ciudadela: 0.2, valle: 0.05, islas: 0.9 }[zone.id];
       dens *= 1 - w * (1 - (keep == null ? 1 : keep));
     }
     const L = layout();

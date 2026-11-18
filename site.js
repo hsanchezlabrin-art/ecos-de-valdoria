@@ -192,16 +192,16 @@
       svg.append(n);
       return n;
     };
-    const field = D.ZONES.filter((z) => !z.safe);
+    const field = D.ZONES.filter((z) => z.id !== 'aldea');
     for (const z of field) add('line', { x1: 0, y1: 0, x2: z.x, y2: z.z, stroke: 'rgba(176,146,98,.6)', 'stroke-width': 4, 'stroke-linecap': 'round' });
     for (const z of field) add('circle', { cx: z.x, cy: z.z, r: z.r, fill: tint(z.tint), 'fill-opacity': 0.75, stroke: 'rgba(0,0,0,.35)' });
     add('circle', { cx: 0, cy: 0, r: 22, fill: 'rgba(217,181,106,.45)', stroke: '#d9b56a', 'stroke-width': 1.5 });
     for (const z of D.ZONES) {
       const t = add('text', { x: z.x, y: z.z + 3, 'text-anchor': 'middle', fill: '#f3e7cc', 'font-size': z.safe ? 9 : 10, 'font-family': 'Cinzel, Georgia, serif', 'font-weight': 700, 'paint-order': 'stroke', stroke: 'rgba(0,0,0,.7)', 'stroke-width': 3 });
-      t.textContent = { aldea: 'Brezal', prados: 'Prados', bosque: 'Bosque', goblin: 'Goblins', fuerte: 'Fuerte Orco', ceniza: 'Ceniza', pantano: 'Pantano' }[z.id] || z.name;
+      t.textContent = { aldea: 'Aldea', praderas: 'Praderas', bosque: 'Bosque', minas: 'Minas', ciudadela: 'Ciudadela', valle: 'Valle', islas: 'Islas' }[z.id] || z.name;
     }
-    const boss = D.ZONES.find((z) => z.id === 'pantano');
-    add('text', { x: boss.x, y: boss.z - 10, 'text-anchor': 'middle', 'font-size': 14, fill: '#c895ff' }).textContent = '☠';
+    // Jefes
+    for (const m of Object.values(D.MOBS).filter((mm) => mm.boss)) add('text', { x: m.at.x, y: m.at.z - 8, 'text-anchor': 'middle', 'font-size': 13, fill: '#c895ff' }).textContent = '☠';
     box.append(svg);
 
     const list = $('#zoneList');

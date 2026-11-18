@@ -70,7 +70,7 @@ for (const cls of Data.CLASS_IDS) {
   Sim.spawnMobs(w);
   const data = Sim.newCharacter(`Bot ${cls}`, cls, cls === 'elfo' ? 'f' : 'm');
   data.level = 4;
-  data.pos = { x: 50, z: 14 }; // Prados de Brezo
+  data.pos = { x: 50, z: 14 }; // Praderas de los Bloques
   const p = Sim.addPlayer(w, data);
   let kills = 0;
   const tick = bot(w, p);
@@ -147,7 +147,7 @@ for (const cls of Data.CLASS_IDS) {
 {
   const w = Sim.createWorld();
   Sim.spawnMobs(w);
-  const m = w.mobs.find((x) => x.key === 'lobo');
+  const m = w.mobs.find((x) => x.key === 'lobo_madera');
   const p = Sim.addPlayer(w, { ...Sim.newCharacter('Cazador', 'elfo'), level: 6, pos: { x: m.pos.x + 5, z: m.pos.z } });
   m.hp = Math.round(m.maxHp * 0.3);
   m.aggro = p;
@@ -162,7 +162,7 @@ for (const cls of Data.CLASS_IDS) {
   const w = Sim.createWorld();
   Sim.spawnMobs(w);
   const g = Sim.addPlayer(w, { ...Sim.newCharacter('Gu', 'lagarto'), level: 15, pos: { x: 22, z: -70 } });
-  const goblin = w.mobs.filter((m) => m.key === 'goblin').sort((a, b) => Math.hypot(a.pos.x - 22, a.pos.z + 70) - Math.hypot(b.pos.x - 22, b.pos.z + 70))[0];
+  const goblin = w.mobs.filter((m) => m.key === 'duende').sort((a, b) => Math.hypot(a.pos.x - 22, a.pos.z + 70) - Math.hypot(b.pos.x - 22, b.pos.z + 70))[0];
   goblin.pos.x = 30;
   goblin.pos.z = -70;
   goblin.maxHp = goblin.hp = 1e6;
@@ -172,13 +172,13 @@ for (const cls of Data.CLASS_IDS) {
   ok(goblin.stunT > 0, 'la Carga Heroica aturde al objetivo');
 
   const mg = Sim.addPlayer(w, { ...Sim.newCharacter('Ma', 'gnomo', 'f'), level: 15, pos: { x: 22, z: -74 } });
-  for (const m of w.mobs.filter((x) => x.key === 'goblin').slice(0, 3)) {
+  for (const m of w.mobs.filter((x) => x.key === 'duende').slice(0, 3)) {
     m.pos.x = 28 + Math.random() * 3;
     m.pos.z = -74 + Math.random() * 3;
     m.maxHp = m.hp = 1e6;
   }
   Sim.drainEvents(w);
-  C.setTarget(w, mg, w.mobs.find((x) => x.key === 'goblin' && x !== goblin));
+  C.setTarget(w, mg, w.mobs.find((x) => x.key === 'duende' && x !== goblin));
   C.useSkill(w, mg, 0); // Rayo de Cristal
   run(w, 0.2);
   const chain = Sim.drainEvents(w).find((e) => e.type === 'chain');
@@ -273,10 +273,10 @@ for (const cls of Data.CLASS_IDS) {
   ok(p.quest && p.quest.stage === 1, 'en el nivel 10 se acepta la Prueba del Gremio');
   C.classQuest(w, p, 'complete');
   ok(p.stage === 0, 'no se completa sin cumplir la misión');
-  // Caza en el Fuerte de los Orcos (nivel 8–11): cuenta para la misión
+  // Caza en el Bosque de Árboles Gigantes (nivel 5–12): cuenta para la misión
   const def = Data.questFor(1);
-  p.pos.x = -92;
-  p.pos.z = -62;
+  p.pos.x = -50;
+  p.pos.z = 48;
   p.level = 14;
   const tick = bot(w, p);
   for (let t = 0; t < 400 && p.quest.kills < def.need; t += DT) {
@@ -312,6 +312,7 @@ for (const cls of Data.CLASS_IDS) {
   C.attack(w, p);
   // Se mantiene al jefe con 1 de vida (sin volver a su sitio) hasta que cae
   run(w, 4, () => {
+    p.hp = p.stats.maxHp; // el jefe pega muy fuerte: la prueba solo comprueba la misión
     if (!boss.dead) {
       boss.hp = Math.min(boss.hp, 1);
       boss.state = 'idle';
@@ -331,7 +332,7 @@ for (const cls of Data.CLASS_IDS) {
   Sim.spawnMobs(w);
   const p = Sim.addPlayer(w, { ...Sim.newCharacter('Kiko', 'gnomo'), level: 5, xp: 300, pos: { x: 50, z: 14 } });
   p.hp = 1;
-  const m = w.mobs.find((x) => x.key === 'jabali');
+  const m = w.mobs.find((x) => x.key === 'oveja');
   m.aggro = p;
   m.pos.x = p.pos.x + 1;
   m.pos.z = p.pos.z;
@@ -348,7 +349,7 @@ for (const cls of Data.CLASS_IDS) {
   C.partyInvite(w, a, b.id);
   C.partyAnswer(w, b, true);
   const goldB = b.gold;
-  const target = w.mobs.find((x) => x.key === 'jabali' && !x.dead);
+  const target = w.mobs.find((x) => x.key === 'oveja' && !x.dead);
   target.hp = 1;
   target.pos.x = 52;
   target.pos.z = 14;
@@ -367,11 +368,13 @@ for (const cls of Data.CLASS_IDS) {
 {
   const w = Sim.createWorld();
   Sim.spawnMobs(w);
-  const orcs = w.mobs.filter((m) => m.key === 'orco').slice(0, 3);
-  const at = { x: -92, z: -62 };
+  const orcs = w.mobs.filter((m) => m.key === 'golem_piedra').slice(0, 3);
+  const at = { x: 58, z: 22 }; // campo abierto en las Praderas
   for (const m of orcs) {
     m.pos.x = at.x + 3;
     m.pos.z = at.z;
+    m.spawn.x = m.pos.x; // su "casa" también se mueve, para que no vuelvan a las Minas
+    m.spawn.z = m.pos.z;
     m.maxHp = m.hp = 1e6;
   }
   // Mecha-Gólem: entidad que atrae a los monstruos y recibe sus golpes
@@ -410,8 +413,8 @@ for (const cls of Data.CLASS_IDS) {
   ok(w.summons.filter((u) => u.type === 'clone' && u.owner === e).length === 2, 'el Tornado Maestro crea 2 clones de viento');
 
   // Estados alterados: el sapo envenena y el Destello Purificador lo quita
-  const h = Sim.addPlayer(w, { ...Sim.newCharacter('Mimi', 'hada', 'f'), level: 15, stage: 1, pos: { x: 108, z: 96 } });
-  const sapo = w.mobs.find((m) => m.key === 'sapo');
+  const h = Sim.addPlayer(w, { ...Sim.newCharacter('Mimi', 'hada', 'f'), level: 15, stage: 1, pos: { x: -50, z: 44 } });
+  const sapo = w.mobs.find((m) => m.key === 'avispa');
   h.debuffs = {};
   // El sapo golpea una y otra vez hasta que envenena (40% por golpe)
   for (let i = 0; i < 40 && !h.debuffs.poison; i++) {
@@ -423,7 +426,7 @@ for (const cls of Data.CLASS_IDS) {
     Sim.step(w, DT);
   }
   Sim.drainEvents(w);
-  ok(!!h.debuffs.poison, 'el Sapo de Ciénaga puede envenenar');
+  ok(!!h.debuffs.poison, 'la Avispa de Miel puede envenenar');
   const hp0 = h.hp;
   sapo.hp = 0;
   sapo.dead = true;
@@ -437,7 +440,7 @@ for (const cls of Data.CLASS_IDS) {
   const lz = Sim.addPlayer(w, { ...Sim.newCharacter('Gema', 'lagarto'), level: 10, pos: { x: 50, z: 14 } });
   const gems0 = Sim.countItem(lz, 'gema_poder');
   C.setGems(w, lz, true);
-  const boar = w.mobs.find((m) => m.key === 'jabali' && !m.dead);
+  const boar = w.mobs.find((m) => m.key === 'oveja' && !m.dead);
   boar.pos.x = 51.5;
   boar.pos.z = 14;
   boar.maxHp = boar.hp = 1e6;
@@ -470,7 +473,7 @@ for (const cls of Data.CLASS_IDS) {
   const p = Sim.addPlayer(w, { ...Sim.newCharacter('Pipo', 'elfo'), level: 4, pos: { x: 50, z: 14 } });
   ok(!p.inv.some((s) => s.id === 'huevo_mascota'), 'en el nivel 4 aún no hay huevo');
   p.xp = Data.xpToNext(4) - 1;
-  const boar = w.mobs.find((m) => m.key === 'jabali');
+  const boar = w.mobs.find((m) => m.key === 'oveja');
   boar.pos.x = 52;
   boar.pos.z = 14;
   boar.hp = 1;
@@ -508,7 +511,7 @@ for (const cls of Data.CLASS_IDS) {
   p.combatT = 0;
   C.toggleMount(w, p);
   ok(p.mounted === 1 && Sim.liveStats(p).speed > p.stats.speed * 1.5, 'en el nivel 20 se monta: +60% de velocidad');
-  const target = w.mobs.find((m) => !m.dead && m.key === 'jabali');
+  const target = w.mobs.find((m) => !m.dead && m.key === 'oveja');
   C.setTarget(w, p, target);
   C.attack(w, p);
   ok(!p.mounted, 'atacar te baja de la montura');
@@ -528,6 +531,107 @@ for (const cls of Data.CLASS_IDS) {
   // Personajes antiguos de nivel 5 o más reciben su huevo al entrar
   const old = Sim.addPlayer(w, { ...Sim.newCharacter('Viejo', 'oso'), level: 12 });
   ok(old.inv.some((s) => s.id === 'huevo_mascota'), 'los personajes que ya pasaron el nivel 5 reciben su huevo');
+}
+
+// 14) Fase 4: zonas del 1 al 40, Ciudadela segura, transporte, Herrero y jefes con mecánicas
+{
+  const w = Sim.createWorld();
+  Sim.spawnMobs(w);
+  const ids = Data.ZONES.map((z) => z.id).join(',');
+  ok(ids === 'aldea,praderas,bosque,minas,ciudadela,valle,islas', 'el mundo tiene las 6 zonas del documento más la aldea');
+  ok(Data.TOP_BOSS === 'guardian' && ['rey_tronco', 'mega_automata', 'ignis', 'guardian'].every((k) => Data.MOBS[k].boss), 'hay 4 jefes y el Gran Guardián es el de la Ascensión');
+  ok(w.mobs.every((m) => !Terrain.inSafe(m.pos)), 'ningún monstruo aparece en la aldea ni en la Ciudadela');
+  const isl = Data.ZONES.find((z) => z.id === 'islas');
+  ok(Terrain.heightAt(isl.x, isl.z) > 15, 'las Islas Flotantes están sobre las nubes');
+
+  // La Ciudadela es zona segura: los monstruos dejan de perseguirte
+  const cz = Data.ZONES.find((z) => z.id === 'ciudadela');
+  const safe = Sim.addPlayer(w, { ...Sim.newCharacter('Seguro', 'oso'), level: 30, pos: { x: cz.x, z: cz.z + 6 } });
+  const chaser = w.mobs.find((m) => m.key === 'lobo_madera');
+  chaser.aggro = safe;
+  run(w, 0.3);
+  ok(chaser.aggro !== safe, 'en la Ciudadela los monstruos dejan de perseguirte');
+
+  // Vagoneta y portal
+  const traveller = Sim.addPlayer(w, { ...Sim.newCharacter('Viajera', 'elfo', 'f'), level: 12 });
+  const cart = Data.NPCS.find((n) => n.id === 'vagoneta_aldea');
+  traveller.pos.x = cart.x + 1;
+  traveller.pos.z = cart.z + 1;
+  C.talkTo(w, traveller, 'vagoneta_aldea');
+  ok(Terrain.zoneAt(traveller.pos) && Terrain.zoneAt(traveller.pos).id === 'minas', 'la vagoneta lleva a las Minas');
+  const portal = Data.NPCS.find((n) => n.id === 'portal_islas');
+  traveller.pos.x = portal.x - 1;
+  traveller.pos.z = portal.z;
+  C.talkTo(w, traveller, 'portal_islas');
+  ok(Terrain.zoneAt(traveller.pos).id === 'ciudadela', 'el portal a las Islas exige nivel 30');
+  traveller.level = 30;
+  C.talkTo(w, traveller, 'portal_islas');
+  ok(Terrain.zoneAt(traveller.pos).id === 'islas', 'con nivel 30 el portal lleva a las Islas Flotantes');
+
+  // Herrero Celestial: equipo a cambio de Polvo de Arcoíris
+  const smith = Data.NPCS.find((n) => n.id === 'herrero');
+  const buyer = Sim.addPlayer(w, { ...Sim.newCharacter('Forja', 'lagarto'), level: 40, stage: 3, branch: 'a', pos: { x: smith.x + 1.5, z: smith.z } });
+  buyer.inv.push({ id: 'polvo_arcoiris', qty: 12 });
+  const gold0 = buyer.gold;
+  C.buyItem(w, buyer, Data.weaponFor('lagarto', 'arcoiris'));
+  ok(Sim.countItem(buyer, Data.weaponFor('lagarto', 'arcoiris')) === 1 && Sim.countItem(buyer, 'polvo_arcoiris') === 0 && buyer.gold === gold0, 'el Herrero cambia 12 Polvos de Arcoíris por un arma Arcoíris');
+  C.buyItem(w, buyer, Data.armorFor('lagarto', 'arcoiris'));
+  ok(!buyer.inv.some((s) => s.id === Data.armorFor('lagarto', 'arcoiris')), 'sin polvo suficiente no se forja');
+
+  // Géiser del Valle: lanza al jugador
+  const gy = Terrain.layout().geysers[0];
+  const jumper = Sim.addPlayer(w, { ...Sim.newCharacter('Salto', 'gnomo'), level: 22, pos: { x: gy.x, z: gy.z } });
+  run(w, 0.1);
+  ok(!!jumper.leap && jumper.leap.hop > 5, 'los géiseres del Valle lanzan por los aires');
+
+  // Rey Tronco: marca raíces en el suelo y enraíza a quien no se aparta
+  const rt = w.mobs.find((m) => m.key === 'rey_tronco');
+  const a = Sim.addPlayer(w, { ...Sim.newCharacter('Raiz', 'oso'), level: 15, pos: { x: rt.pos.x + 4, z: rt.pos.z } });
+  C.setTarget(w, a, rt);
+  C.attack(w, a);
+  let marks = 0;
+  let rooted = false;
+  run(w, 10, () => {
+    a.hp = a.stats.maxHp;
+    for (const e of Sim.drainEvents(w)) if (e.type === 'telegraph') marks++;
+    if (a.debuffs.root) rooted = true;
+  });
+  ok(marks >= 4 && rooted, 'el Rey Tronco marca raíces en el suelo y enraíza a quien no se aparta');
+
+  // Mega-Autómata: inmune hasta pisar los 3 botones
+  const ma = w.mobs.find((m) => m.key === 'mega_automata');
+  const b = Sim.addPlayer(w, { ...Sim.newCharacter('Golpe', 'lagarto'), level: 20, pos: { x: ma.pos.x + 3, z: ma.pos.z } });
+  C.setTarget(w, b, ma);
+  C.attack(w, b);
+  run(w, 3, () => (b.hp = b.stats.maxHp));
+  ok(ma.hp === ma.maxHp, 'el Mega-Autómata no recibe daño con el escudo');
+  const helpers = Data.ARENAS.fabrica.plates.map((pl, i) => Sim.addPlayer(w, { ...Sim.newCharacter(`Boton${i}`, 'hada'), level: 20, pos: { x: pl.x, z: pl.z } }));
+  run(w, 3, () => [b, ...helpers].forEach((q) => (q.hp = q.stats.maxHp)));
+  ok(ma.hp < ma.maxHp, 'pisando los 3 botones a la vez se apaga el escudo y recibe daño');
+
+  // Ignis: el bostezo de fuego no daña a quien se esconde detrás de una roca
+  const ig = w.mobs.find((m) => m.key === 'ignis');
+  const sh = Data.ARENAS.ignis.shelters[0];
+  const dx = sh.x - ig.pos.x;
+  const dz = sh.z - ig.pos.z;
+  const len = Math.hypot(dx, dz);
+  const hidden = Sim.addPlayer(w, { ...Sim.newCharacter('Escondido', 'oso'), level: 30, pos: { x: sh.x + (dx / len) * 2.6, z: sh.z + (dz / len) * 2.6 } });
+  const exposed = Sim.addPlayer(w, { ...Sim.newCharacter('Expuesto', 'oso'), level: 30, pos: { x: ig.pos.x - 6, z: ig.pos.z + 6 } });
+  ig.aggro = exposed;
+  ig.mechT = 0.1;
+  const hp1 = hidden.hp;
+  const hp2 = exposed.hp;
+  run(w, 3.5);
+  ok(hidden.hp === hp1 && exposed.hp < hp2 * 0.5, 'Ignis bosteza fuego: detrás de la roca no pasa nada, al descubierto duele mucho');
+
+  // Guardián: llama refuerzos a la mitad de su vida
+  const gd = w.mobs.find((m) => m.key === 'guardian');
+  const gg = Sim.addPlayer(w, { ...Sim.newCharacter('Final', 'elfo'), level: 40, pos: { x: gd.pos.x + 6, z: gd.pos.z } });
+  C.setTarget(w, gg, gd);
+  C.attack(w, gg);
+  gd.hp = gd.maxHp * 0.49;
+  run(w, 0.5, () => (gg.hp = gg.stats.maxHp));
+  ok(w.mobs.filter((m) => m.temp).length === 3, 'el Gran Guardián Celestial llama 3 refuerzos a la mitad de su vida');
 }
 
 console.log(`\nSimulación OK: ${checks} comprobaciones superadas.`);

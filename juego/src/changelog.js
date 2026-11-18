@@ -8,6 +8,22 @@
 })(function () {
   return [
     {
+      version: '0.10.0',
+      date: '2026-11-18',
+      title: 'Un mundo nuevo: seis tierras y cuatro jefes',
+      items: [
+        'El mapa cambia por completo: Aldea de los Bloques, Praderas (1–5), Bosque de Árboles Gigantes (5–12), Minas de Cristal y Engranajes (12–20), Ciudadela de Gludio-Cubo, Valle de los Dragones Dormidos (20–30) e Islas Flotantes del Cielo (30–40+).',
+        'Monstruos nuevos: hongos saltarines, ovejas cubo, cangrejos, lobos de madera, duendes, avispas, murciélagos de cristal, slimes, gólems, lagartos de fuego, salamandras, caballeros nube, elementales de estrella y grifos.',
+        'Rey Tronco (nivel 12): esquiva las raíces marcadas en el suelo.',
+        'Mega-Autómata 3000 (nivel 18) en La Fábrica Descontrolada: pisen los 3 botones en equipo para apagar su escudo.',
+        'Ignis, el Dragón Dormilón (nivel 28): escóndete detrás de las rocas cuando bostece fuego.',
+        'Gran Guardián Celestial (nivel 40): lluvia de estrellas, refuerzos y Polvo de Arcoíris para forjar equipo Arcoíris con el Herrero Celestial.',
+        'Ciudadela de Gludio-Cubo: zona segura con Maestra de Clase, Mercader Corvin (grados Azul, Morado y Dorado), Herrero Celestial, sanador, gremio, establo y portales.',
+        'Vagoneta de la aldea a las Minas, portal de la Ciudadela a las Islas (nivel 30) y géiseres que te lanzan por el Valle.',
+        'Arreglado: si el servidor se reiniciaba mientras estabas eligiendo personaje, «Entrar al mundo» fallaba hasta recargar.',
+      ],
+    },
+    {
       version: '0.9.0',
       date: '2026-11-18',
       title: 'Mascotas, monturas y guía',
