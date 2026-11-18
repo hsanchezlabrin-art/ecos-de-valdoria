@@ -665,6 +665,16 @@
   $('btnPlay').addEventListener('click', enterWorld);
   document.getElementById('btnRespawn').addEventListener('click', () => Game.respawnPlayer());
   document.getElementById('btnReconnect').addEventListener('click', () => location.reload());
+  // Salir: confirma, el servidor guarda al personaje y se vuelve al selector (la sesión sigue abierta)
+  const exitAsk = $('exitAsk');
+  $('btnExit').addEventListener('click', () => (exitAsk.hidden = false));
+  $('btnExitNo').addEventListener('click', () => (exitAsk.hidden = true));
+  $('btnExitYes').addEventListener('click', async () => {
+    $('btnExitYes').disabled = true;
+    $('btnExitYes').textContent = 'Guardando…';
+    await Game.exitWorld();
+    location.reload(); // al abrir de nuevo, la sesión guardada lleva directo al selector
+  });
   document.getElementById('btnFull').addEventListener('click', () => V.Mobile.toggleFullscreen());
   // Calidad gráfica: Baja → Media → Alta (se guarda en este equipo)
   document.getElementById('hudVer').textContent = `v${V.VERSION}`;

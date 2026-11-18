@@ -110,6 +110,11 @@
   #netLost div { text-align: center; display: grid; gap: 14px; justify-items: center; max-width: 420px; padding: 0 16px; }
   #netLost h2 { margin: 0; font: 700 36px var(--display); color: var(--gold); }
   #netLost p { margin: 0; color: var(--parch); }
+  #exitAsk { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; background: rgba(0,0,0,.6); }
+  #exitAsk > div { text-align: center; display: grid; gap: 14px; justify-items: center; max-width: 420px; padding: 22px 20px; background: var(--panel-solid); border: 1px solid var(--edge); border-radius: 4px; margin: 0 16px; }
+  #exitAsk h2 { margin: 0; font: 700 30px var(--display); color: var(--gold); }
+  #exitAsk p { margin: 0; color: var(--parch); }
+  #exitAsk .exit-btns { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   #log p { margin: 0 0 2px; color: #d7ccb5; }
   #log p.sys { color: #bdb3a0; }
   #log p.warn { color: #ff8b78; }
@@ -194,6 +199,8 @@
   #labels, #floats { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
   .np { position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 2px; font-size: 12px; font-weight: 700; white-space: nowrap; color: #efe6d2; text-shadow: 0 0 3px #000, 0 1px 2px #000; will-change: transform; }
   .np b { font-weight: 700; margin-right: 2px; }
+  .np-aggro-key { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #d8402e; color: #fff; font-weight: 800; font-size: 12px; }
+  .np .np-aggro { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-right: 4px; border-radius: 50%; background: #d8402e; color: #fff; font: 800 11px/1 var(--body); font-style: normal; text-shadow: none; vertical-align: 1px; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
   .np.lv-grey { color: #8d8a84; } .np.lv-green { color: #8fd37a; } .np.lv-yellow { color: #f2cf5b; } .np.lv-red { color: #ff6b5a; }
   .np.is-target .np-name { text-decoration: underline; text-underline-offset: 3px; }
   .np-hp { width: 64px; height: 5px; background: #000; border: 1px solid rgba(0,0,0,.8); }
@@ -653,6 +660,17 @@
     <button id="btnGfx" data-icon="✦">Gráficos <kbd>✦</kbd></button>
     <button id="btnGuide" data-icon="➜">Guía: sí <kbd>➜</kbd></button>
     <button id="btnFull" data-icon="⛶" hidden>Pantalla completa <kbd>⛶</kbd></button>
+    <button id="btnExit" data-icon="⏏">Salir <kbd>⏏</kbd></button>
+  </div>
+  <div id="exitAsk" hidden>
+    <div>
+      <h2>¿Salir del mundo?</h2>
+      <p>Tu personaje queda guardado y vuelves a la selección de personajes.</p>
+      <div class="exit-btns">
+        <button class="btn" id="btnExitYes">Sí, salir</button>
+        <button class="btn ghost" id="btnExitNo">Seguir jugando</button>
+      </div>
+    </div>
   </div>
 
   <section class="panel" id="invPanel" hidden>
@@ -742,6 +760,7 @@
       <dt>I · C · M · H</dt><dd>Inventario · Estado · Mapa · Esta ayuda</dd>
       <dt>Enter</dt><dd>Chat. Empieza con # para hablar solo con tu grupo, o escribe /invitar Nombre</dd>
       <dt>Esc</dt><dd>Cerrar ventanas o soltar el objetivo</dd>
+      <dt><span class="np-aggro-key">!</span></dt><dd>Monstruo agresivo: te ataca si te acercas. Los demás solo pelean si los golpeas</dd>
     </dl>
     <p class="hint">Para formar un grupo, selecciona a otro jugador y pulsa «Invitar al grupo». La experiencia se reparte entre los miembros cercanos, con un 10% extra por cada uno. En aguas profundas se acaba el aire: vuelve a la orilla.</p>
   </section>

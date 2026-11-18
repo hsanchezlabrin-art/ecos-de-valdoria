@@ -211,8 +211,18 @@ function createNameplate(m) {
   refreshNameplate(m);
 }
 
+const AGGRO_HINT = 'Agresivo: te ataca si te acercas';
+
 function refreshNameplate(m) {
   m.np.name.innerHTML = '';
+  // Monstruo agresivo: un «!» rojo antes del nombre (ataca solo si uno se acerca)
+  if (m.def.aggressive) {
+    const a = document.createElement('i');
+    a.className = 'np-aggro';
+    a.textContent = '!';
+    a.title = AGGRO_HINT;
+    m.np.name.append(a);
+  }
   const b = document.createElement('b');
   b.textContent = m.lvl;
   m.np.name.append(b, ` ${m.def.name}`);
@@ -969,12 +979,16 @@ function updateUI() {
     tTitle.hidden = false;
     tBar.hidden = true;
   } else {
-    tTitle.hidden = true;
     tBar.hidden = false;
     E.tFrame.hidden = !t || t.dead || t.hidden;
+    tTitle.hidden = !(t && t.def && t.def.aggressive);
     if (t && !t.dead && !t.hidden) {
       E.tLvl.textContent = t.lvl;
       E.tName.textContent = t.def.name;
+      if (t.def.aggressive) {
+        const hint = `❗ ${AGGRO_HINT}`;
+        if (tTitle.textContent !== hint) tTitle.textContent = hint;
+      }
       E.tFrame.dataset.lv = levelClass(t.lvl - p.level);
       bar(E.tHp, E.tHpT, t.hp, t.maxHp);
     }

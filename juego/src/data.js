@@ -596,35 +596,35 @@
   const MOBS = {
     // 1. Praderas de los Bloques (1–5): pacíficos
     hongo: {
-      name: 'Hongo Saltarín', kind: 'mush', lvl: [1, 2], zone: 'praderas', count: 14,
+      name: 'Hongo Saltarín', kind: 'mush', lvl: [1, 2], zone: 'praderas', count: 10,
       color: 0xd84a3a, body: 0xf0e6d0, scale: 0.9, aggressive: false, speed: 3.6,
       drops: [['seta', 0.55], ['pocion_vida', 0.12], ['gema_poder', 0.25, [2, 5]], ['@w:madera', 0.03], ['@a:madera', 0.05]],
     },
     oveja: {
-      name: 'Oveja Cubo', kind: 'quad', lvl: [2, 3], zone: 'praderas', count: 14,
+      name: 'Oveja Cubo', kind: 'quad', lvl: [2, 3], zone: 'praderas', count: 10,
       color: 0xf4f0e6, head: 0x3a3430, wool: true, scale: 0.85, aggressive: false, speed: 4.2,
       drops: [['lana', 0.55], ['pocion_vida', 0.12], ['gema_poder', 0.25, [2, 5]], ['@w:madera', 0.03], ['@a:madera', 0.05]],
     },
     cangrejo: {
-      name: 'Cangrejo de Río', kind: 'crab', lvl: [3, 5], zone: 'praderas', count: 12,
+      name: 'Cangrejo de Río', kind: 'crab', lvl: [3, 5], zone: 'praderas', count: 9,
       color: 0xd8643a, scale: 0.9, aggressive: false, speed: 4.4,
       drops: [['pinza', 0.5], ['pocion_vida', 0.15], ['pocion_mana', 0.1], ['gema_poder', 0.3, [3, 6]], ['@w:cobre', 0.02], ['@a:madera', 0.05]],
     },
     // 2. Bosque de Árboles Gigantes (5–12)
     lobo_madera: {
-      name: 'Lobo de Madera', kind: 'quad', lvl: [5, 7], zone: 'bosque', count: 14,
+      name: 'Lobo de Madera', kind: 'quad', lvl: [5, 7], zone: 'bosque', count: 10,
       color: 0x8a6a46, scale: 0.95, aggressive: true, speed: 5.6,
       onHit: { slow: 2, chance: 0.2 },
       drops: [['corteza', 0.5], ['pocion_vida', 0.18], ['pocion_mana', 0.12], ['gema_poder', 0.3, [4, 8]], ['@w:cobre', 0.05], ['@a:cobre', 0.04]],
     },
     duende: {
-      name: 'Duende Travieso', kind: 'hum', lvl: [7, 9], zone: 'bosque', count: 14,
+      name: 'Duende Travieso', kind: 'hum', lvl: [7, 9], zone: 'bosque', count: 10,
       skin: 0x8ac04a, body: 0x3f7a3a, legs: 0x5a3d22, hat: 0xd84a3a, ears: true, scale: 0.65, aggressive: true, speed: 5.6,
       weaponColor: 0x8d8a80,
       drops: [['gorro_duende', 0.45], ['pocion_vida', 0.2], ['pocion_mana', 0.15], ['gema_poder', 0.3, [4, 8]], ['@w:cobre', 0.05], ['@a:cobre', 0.05]],
     },
     avispa: {
-      name: 'Avispa de Miel', kind: 'bug', lvl: [9, 11], zone: 'bosque', count: 12,
+      name: 'Avispa de Miel', kind: 'bug', lvl: [9, 11], zone: 'bosque', count: 9,
       color: 0xf2c13a, stripe: 0x2a2119, scale: 0.9, aggressive: true, speed: 6,
       onHit: { poison: { pct: 0.3, dur: 4 }, chance: 0.3 },
       drops: [['miel', 0.45], ['pocion_vida', 0.2], ['pocion_mana', 0.15], ['gema_poder', 0.35, [5, 10]], ['@w:cobre', 0.04], ['@w:azul', 0.015], ['@a:azul', 0.015]],
@@ -637,18 +637,18 @@
     },
     // 3. Minas de Cristal y Engranajes (12–20)
     murcielago: {
-      name: 'Murciélago de Cristal', kind: 'bat', lvl: [12, 14], zone: 'minas', count: 14,
+      name: 'Murciélago de Cristal', kind: 'bat', lvl: [12, 14], zone: 'minas', count: 10,
       color: 0x5a6a8a, glow: 0x9fd8ff, scale: 0.9, aggressive: true, speed: 6.2,
       drops: [['cristal_murcielago', 0.45], ['pocion_vida', 0.22], ['pocion_mana', 0.18], ['gema_poder', 0.35, [6, 12]], ['@w:azul', 0.04], ['@a:azul', 0.04]],
     },
     slime: {
-      name: 'Slime de Cobre', kind: 'slime', lvl: [14, 16], zone: 'minas', count: 14,
+      name: 'Slime de Cobre', kind: 'slime', lvl: [14, 16], zone: 'minas', count: 10,
       color: 0xd8843a, scale: 1, aggressive: true, speed: 4,
       onHit: { slow: 2.5, chance: 0.3 },
       drops: [['gel_cobre', 0.45], ['pocion_vida', 0.22], ['pocion_mana', 0.18], ['gema_poder', 0.35, [6, 12]], ['@w:azul', 0.04], ['@a:azul', 0.04]],
     },
     golem_piedra: {
-      name: 'Gólem de Piedra Pequeño', kind: 'hum', lvl: [16, 19], zone: 'minas', count: 12,
+      name: 'Gólem de Piedra Pequeño', kind: 'hum', lvl: [16, 19], zone: 'minas', count: 9,
       skin: 0x8a8478, body: 0x77716a, legs: 0x5f5a54, glow: 0x9fd8ff, scale: 1.05, weapon: false, aggressive: true, speed: 4.6,
       drops: [['engranaje', 0.45], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['gema_poder', 0.4, [6, 12]], ['@w:azul', 0.05], ['@a:azul', 0.05], ['@w:morado', 0.01]],
     },
@@ -660,18 +660,18 @@
     },
     // 5. Valle de los Dragones Dormidos (20–30)
     lagarto_fuego: {
-      name: 'Lagarto de Fuego', kind: 'quad', lvl: [20, 23], zone: 'valle', count: 14,
+      name: 'Lagarto de Fuego', kind: 'quad', lvl: [20, 23], zone: 'valle', count: 10,
       color: 0xd8643a, scale: 1, aggressive: true, speed: 5.4, tail: true,
       onHit: { burn: { pct: 0.3, dur: 4 }, chance: 0.25 },
       drops: [['escama_fuego', 0.45], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['gema_poder', 0.4, [8, 14]], ['@w:morado', 0.03], ['@a:morado', 0.03]],
     },
     salamandra: {
-      name: 'Salamandra Cubo', kind: 'quad', lvl: [23, 26], zone: 'valle', count: 14,
+      name: 'Salamandra Cubo', kind: 'quad', lvl: [23, 26], zone: 'valle', count: 10,
       color: 0x2f2a28, mane: true, maneColor: 0xff8a3d, scale: 0.85, aggressive: true, speed: 6.2, tail: true,
       drops: [['cola_salamandra', 0.45], ['pocion_vida', 0.25], ['pocion_mana', 0.2], ['gema_poder', 0.4, [8, 14]], ['@w:morado', 0.03], ['@a:morado', 0.03], ['@w:dorado', 0.006]],
     },
     golem_magma: {
-      name: 'Gólem de Magma', kind: 'hum', lvl: [26, 29], zone: 'valle', count: 12,
+      name: 'Gólem de Magma', kind: 'hum', lvl: [26, 29], zone: 'valle', count: 9,
       skin: 0x3a2a24, body: 0x2a1f1a, legs: 0x241a16, glow: 0xff6a2a, scale: 1.5, weapon: false, aggressive: true, speed: 4.4,
       onHit: { burn: { pct: 0.3, dur: 4 }, chance: 0.3 },
       drops: [['nucleo_magma', 0.45], ['pocion_vida', 0.28], ['pocion_mana', 0.22], ['gema_poder', 0.45, [10, 16]], ['@w:morado', 0.04], ['@a:morado', 0.04], ['@w:dorado', 0.01], ['@a:dorado', 0.01]],
@@ -684,17 +684,17 @@
     },
     // 6. Islas Flotantes del Cielo (30–40+)
     caballero_nube: {
-      name: 'Caballero Nube', kind: 'hum', lvl: [30, 33], zone: 'islas', count: 14,
+      name: 'Caballero Nube', kind: 'hum', lvl: [30, 33], zone: 'islas', count: 10,
       skin: 0xf0eee8, body: 0xe8f0ff, legs: 0xc9d4e2, cape: 0x9fd8ff, glow: 0x9fd8ff, weaponColor: 0xe8f0ff, scale: 1.15, aggressive: true, speed: 5.4,
       drops: [['pluma_nube', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.45, [10, 18]], ['@w:dorado', 0.02], ['@a:dorado', 0.02]],
     },
     elemental: {
-      name: 'Elemental de Estrella', kind: 'orb', lvl: [33, 36], zone: 'islas', count: 12,
+      name: 'Elemental de Estrella', kind: 'orb', lvl: [33, 36], zone: 'islas', count: 9,
       color: 0xffe08a, scale: 1, aggressive: true, speed: 5,
       drops: [['polvo_estelar', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.45, [10, 18]], ['@w:dorado', 0.02], ['@a:dorado', 0.02], ['polvo_arcoiris', 0.04]],
     },
     grifo: {
-      name: 'Grifo Cubo', kind: 'quad', lvl: [36, 39], zone: 'islas', count: 12,
+      name: 'Grifo Cubo', kind: 'quad', lvl: [36, 39], zone: 'islas', count: 9,
       color: 0xc9a46a, wings: true, beak: true, scale: 1.2, aggressive: true, speed: 6,
       drops: [['pluma_grifo', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [12, 20]], ['@w:dorado', 0.03], ['@a:dorado', 0.03], ['polvo_arcoiris', 0.06]],
     },

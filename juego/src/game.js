@@ -197,6 +197,17 @@
     send({ t: 'logout' });
     net.session = null;
   }
+
+  // Salir al selector de personajes: el servidor guarda y saca al personaje del mundo
+  async function exitWorld() {
+    net.playing = false; // así un corte durante la salida no intenta reconectar
+    send({ t: 'exit' });
+    try {
+      await Promise.race([waitFor(['chars']), new Promise((res) => setTimeout(res, 4000))]);
+    } catch {
+      /* si se cortó la conexión, el servidor igual guarda al desconectar */
+    }
+  }
   async function charRequest(msg) {
     send(msg);
     const r = await waitFor(['chars', 'charError']);
@@ -1646,7 +1657,7 @@
   }
 
   V.Game = {
-    PROTOCOL, connect, register, login, resume, logout, createChar, deleteChar, play,
+    PROTOCOL, connect, register, login, resume, logout, exitWorld, createChar, deleteChar, play,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
     clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat, sendPhrase, report, classQuest, toggleGems, hatch, toggleMount,
     invite, inviteByName, answerInvite, leaveParty, kickFromParty,

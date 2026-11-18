@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.16.0',
+      date: '2026-11-18',
+      title: 'Botón Salir y monstruos con aviso',
+      items: [
+        'Nuevo botón «Salir»: guarda tu personaje y vuelve a la selección de personajes sin cerrar la sesión.',
+        'Hay menos monstruos en cada zona, para explorar con más calma (los jefes siguen igual).',
+        'Los monstruos agresivos llevan un «!» rojo junto a su nombre: te atacan si te acercas. Los demás solo pelean si los golpeas.',
+      ],
+    },
+    {
       version: '0.15.1',
       date: '2026-11-18',
       title: 'El juego abre más rápido',

@@ -227,6 +227,17 @@ async function main() {
     await wait(300);
     ok(b2.last.me.gold === 20, 'el oro gastado quedó guardado en el servidor');
 
+    // Botón «Salir»: vuelve al selector sin cerrar la sesión y puede entrar de nuevo
+    b2.send({ t: 'exit' });
+    const exitList = await b2.next('chars');
+    await wait(300);
+    ok(exitList.exited && exitList.chars.length === 1 && exitList.chars[0].name === 'Orion', 'al salir del mundo se vuelve a la lista de personajes');
+    ok(a.chats.some((m) => m.kind === 'sys' && m.text === 'Orion ha dejado Valdoria.') && !a.last.p.some((r) => r[0] === b2.id), 'el personaje desaparece del mundo al salir');
+    b2.send({ t: 'play', id: exitList.chars[0].id });
+    await b2.next('welcome');
+    await wait(300);
+    ok(b2.last.me && b2.last.me.gold === 20, 'con la misma conexión se puede volver a entrar con el personaje guardado');
+
     // Una cuenta no puede jugar dos veces a la vez
     const b3 = await connect();
     b3.send({ t: 'login', v: V, user: 'beto', pass: 'clave123' });

@@ -383,6 +383,11 @@ function onCommand(c, msg) {
   const p = c.p;
   if (!p) return;
   switch (msg.t) {
+    case 'exit': {
+      // Volver al selector de personajes sin cerrar la sesión
+      leaveWorld(c);
+      return send(c, { t: 'chars', chars: DB.listChars(c.acc), exited: true });
+    }
     case 'dir': {
       const d = msg.d;
       if (!d) return C.setMoveDir(world, p, null);
@@ -475,6 +480,11 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
 
 function leave(c) {
   clients.delete(c);
+  leaveWorld(c);
+}
+
+// Saca al personaje del mundo y lo guarda (al desconectarse o al volver al selector)
+function leaveWorld(c) {
   if (!c.p) return;
   Sim.collectAllLoot(world, c.p); // el botín que quedó en el suelo pasa a la mochila
   savePlayer(c);

@@ -33,8 +33,18 @@ function bot(w, p) {
     if (p.hp < p.stats.maxHp * 0.4) C.usePotion(w, p, 'pocion_vida');
     if (p.mp < p.stats.maxMp * 0.2) C.usePotion(w, p, 'pocion_mana');
     if (!p.target || p.target.dead) {
-      C.targetNearest(w, p);
-      C.attack(w, p);
+      if (C.targetNearest(w, p)) C.attack(w, p);
+      else {
+        // Nada cerca: camina hacia el monstruo vivo más cercano (como haría un jugador)
+        let best = null;
+        let bd = Infinity;
+        for (const m of w.mobs) {
+          if (m.dead || m.def.boss) continue;
+          const d = Math.hypot(m.pos.x - p.pos.x, m.pos.z - p.pos.z);
+          if (d < bd) [best, bd] = [m, d];
+        }
+        if (best && !p.moveTarget) C.moveTo(w, p, best.pos);
+      }
     }
     if (p.target) C.useSkill(w, p, Math.floor(Math.random() * p.skills.length));
   };
@@ -279,7 +289,7 @@ for (const cls of Data.CLASS_IDS) {
   p.pos.z = 48;
   p.level = 14;
   const tick = bot(w, p);
-  for (let t = 0; t < 400 && p.quest.kills < def.need; t += DT) {
+  for (let t = 0; t < 900 && p.quest.kills < def.need; t += DT) {
     tick();
     p.hp = p.stats.maxHp;
     p.mp = p.stats.maxMp;
