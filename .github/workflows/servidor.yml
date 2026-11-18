@@ -70,6 +70,18 @@ jobs:
             done
           fi
 
+      # Contraseña del panel /admin: se toma del secreto ADMIN_PASSWORD de GitHub (si existe)
+      - name: Contraseña del panel de control
+        if: steps.token.outputs.skip != 'true'
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: |
+          if [ -n "$ADMIN_PASSWORD" ]; then
+            flyctl secrets set ADMIN_PASSWORD="$ADMIN_PASSWORD" --stage --app "$APP"
+          else
+            echo "::warning::Falta el secreto ADMIN_PASSWORD: el panel /admin queda cerrado."
+          fi
+
       - name: Desplegar
         if: steps.token.outputs.skip != 'true'
         run: flyctl deploy --remote-only --ha=false --app "$APP"

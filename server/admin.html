@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Panel de Valdoria</title>
+<style>
+:root {
+  --bg: #14110d; --panel: #1e1913; --panel2: #262017; --line: #3a3024; --text: #ece2cf; --dim: #a8997f;
+  --gold: #d9b25f; --ok: #6fbf73; --warn: #e0a64a; --bad: #e0675a; --blue: #7aa7d9;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+button { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--gold); }
+button.gold { background: var(--gold); color: #1c150c; border-color: var(--gold); font-weight: 600; }
+button.danger { border-color: #6b2f29; color: #ffb3aa; }
+button.danger:hover { background: #3a1915; border-color: var(--bad); }
+button:disabled { opacity: .5; cursor: default; }
+input, select { background: #0f0c09; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+input:focus, select:focus { outline: none; border-color: var(--gold); }
+[hidden] { display: none !important; }
+
+.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.login form { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px; width: min(360px, 100%); display: grid; gap: 12px; }
+.login h1 { margin: 0; font-size: 20px; color: var(--gold); }
+.login p { margin: 0; color: var(--dim); font-size: 13px; }
+.err { color: var(--bad); font-size: 13px; min-height: 1em; }
+
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+header h1 { margin: 0; font-size: 17px; color: var(--gold); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px; background: var(--panel2); border: 1px solid var(--line); font-size: 12px; color: var(--dim); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.pill.off .dot { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
+.pill.wait .dot { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+header .sp { flex: 1; }
+
+main { padding: 18px 20px 40px; max-width: 1280px; margin: 0 auto; display: grid; gap: 18px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.tile .k { color: var(--dim); font-size: 12px; }
+.tile .v { font-size: 24px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .s { color: var(--dim); font-size: 12px; margin-top: 2px; }
+.bar { height: 4px; border-radius: 4px; background: var(--panel2); margin-top: 8px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--gold); width: 0; transition: width .4s; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.card h2 { margin: 0 0 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.card h2 .n { color: var(--dim); font-weight: 400; font-size: 13px; }
+.grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+
+.chart svg { width: 100%; height: 150px; display: block; }
+.chart .axis { fill: var(--dim); font-size: 10px; }
+
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--dim); font-weight: 500; font-size: 12px; }
+td.num { font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+.empty { color: var(--dim); padding: 14px 4px; }
+.cls { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 12px; background: var(--panel2); }
+.cls.guerrero { color: #f0a080; } .cls.arquera { color: #9fd98a; } .cls.mago { color: #a9b8ff; }
+.hp { display: inline-block; width: 60px; height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.hp i { display: block; height: 100%; background: var(--ok); }
+.tag { font-size: 11px; padding: 1px 6px; border-radius: 6px; background: #2b3a22; color: #b6e3a0; }
+.tag.dead { background: #3a1915; color: #ffb3aa; }
+
+.actions { display: grid; gap: 14px; }
+.actions .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.actions .row input { flex: 1; }
+.actions label { color: var(--dim); font-size: 12px; display: block; margin-bottom: 5px; }
+.sep { border-top: 1px solid var(--line); }
+
+.logs { max-height: 360px; overflow: auto; font: 12px/1.5 ui-monospace, Consolas, monospace; background: #0f0c09; border-radius: 8px; padding: 8px 10px; }
+.logs div { white-space: pre-wrap; word-break: break-word; }
+.logs .t { color: var(--dim); }
+.logs .warn { color: var(--warn); } .logs .error { color: var(--bad); }
+.filters { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.filters input { flex: 1; }
+
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--gold); border-radius: 10px; padding: 10px 16px; z-index: 9; max-width: calc(100% - 32px); }
+.toast.bad { border-color: var(--bad); }
+</style>
+</head>
+<body>
+
+<section class="login" id="login">
+  <form id="loginForm" autocomplete="off">
+    <h1>Panel de Valdoria</h1>
+    <p>Administración del servidor de Ecos de Valdoria.</p>
+    <input type="password" id="pass" placeholder="Contraseña de administrador" autocomplete="current-password" required>
+    <button class="gold" type="submit">Entrar</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header>
+    <h1>Panel de Valdoria</h1>
+    <span class="pill" id="status"><span class="dot"></span><span id="statusText">En línea</span></span>
+    <span class="pill" id="verPill">v–</span>
+    <span class="pill" id="regionPill">–</span>
+    <span class="sp"></span>
+    <span class="pill" id="updated">–</span>
+    <button id="logout">Salir</button>
+  </header>
+
+  <main>
+    <section class="tiles">
+      <div class="tile"><div class="k">Tiempo encendido</div><div class="v" id="tUptime">–</div><div class="s" id="tStarted">–</div></div>
+      <div class="tile"><div class="k">Jugadores en línea</div><div class="v" id="tPlayers">–</div><div class="s" id="tConn">–</div></div>
+      <div class="tile"><div class="k">Máximo de hoy</div><div class="v" id="tPeak">–</div><div class="s" id="tPeakAt">–</div></div>
+      <div class="tile"><div class="k">Cuentas · personajes</div><div class="v" id="tAcc">–</div><div class="s">registrados en total</div></div>
+      <div class="tile"><div class="k">Memoria</div><div class="v" id="tMem">–</div><div class="s" id="tMemS">–</div><div class="bar"><i id="bMem"></i></div></div>
+      <div class="tile"><div class="k">CPU del servidor</div><div class="v" id="tCpu">–</div><div class="s" id="tLoop">–</div><div class="bar"><i id="bCpu"></i></div></div>
+      <div class="tile"><div class="k">Monstruos vivos</div><div class="v" id="tMobs">–</div><div class="s" id="tMobsS">–</div></div>
+    </section>
+
+    <div class="grid2">
+      <section class="card chart">
+        <h2>Jugadores conectados <span class="n">últimas 24 horas</span></h2>
+        <svg id="chart" viewBox="0 0 600 150" preserveAspectRatio="none"></svg>
+      </section>
+      <section class="card actions">
+        <h2>Acciones</h2>
+        <div>
+          <label for="annText">Aviso para todos los jugadores (sale en el chat)</label>
+          <div class="row"><input id="annText" maxlength="160" placeholder="Ej.: Mantenimiento en 10 minutos"><button class="gold" id="annSend">Enviar</button></div>
+        </div>
+        <div class="sep"></div>
+        <div>
+          <label>Desconectar a todos (no podrán volver solos hasta que entren de nuevo)</label>
+          <div class="row"><button class="danger" id="kickAll">Desconectar a todos</button></div>
+        </div>
+        <div class="sep"></div>
+        <div>
+          <label for="rsDelay">Reiniciar el servidor (se guarda todo; los jugadores se reconectan solos)</label>
+          <div class="row">
+            <select id="rsDelay">
+              <option value="0">Ahora</option>
+              <option value="30">En 30 segundos</option>
+              <option value="60">En 1 minuto</option>
+              <option value="300">En 5 minutos</option>
+            </select>
+            <button class="danger" id="restart">Reiniciar</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Jugadores en línea <span class="n" id="plCount"></span></h2>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Personaje</th><th>Cuenta</th><th>Clase</th><th>Nivel</th><th>Vida</th><th>Zona</th><th>Conectado</th><th>Ping</th><th>IP</th><th></th></tr></thead>
+          <tbody id="plBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Cuentas <span class="n" id="accCount"></span></h2>
+      <div class="filters"><input id="accQ" placeholder="Buscar por ID, correo o personaje"><button id="accReload">Buscar</button></div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>ID</th><th>Correo</th><th>Personajes</th><th>Creada</th><th>Último acceso</th><th></th></tr></thead>
+          <tbody id="accBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Registro del servidor <span class="n">últimas 300 líneas</span></h2>
+      <div class="filters">
+        <input id="logQ" placeholder="Filtrar texto">
+        <select id="logLevel"><option value="">Todo</option><option value="warn">Avisos y errores</option><option value="error">Solo errores</option></select>
+      </div>
+      <div class="logs" id="logs"></div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/admin/app.js"></script>
+</body>
+</html>

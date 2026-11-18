@@ -68,7 +68,7 @@ async function enter(user, email, pass, charName, cls, sex) {
 
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'valdoria-'));
-  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir, ADMIN_PASSWORD: 'clave-de-prueba-admin' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((resolve) => srv.stdout.on('data', (d) => String(d).includes('servidor en el puerto') && resolve()));
   let checks = 0;
   const ok = (cond, msg) => {
@@ -196,13 +196,36 @@ async function main() {
     await wait(300);
     ok(b2.closed, 'al entrar en otro lugar, la sesión anterior se cierra');
     b3.ws.close();
-    a.ws.close();
+
+    // ---------- Panel de control ----------
+    const H = `http://127.0.0.1:${PORT}/admin`;
+    const post = (route, body, tok) => fetch(`${H}/api/${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify(body) });
+    const page = await fetch(H);
+    ok(page.status === 200 && (await page.text()).includes('Panel de Valdoria') && page.headers.get('x-frame-options') === 'DENY', 'la página del panel se sirve con cabeceras de seguridad');
+    ok((await fetch(`${H}/api/state`)).status === 401, 'sin contraseña no se ven datos del panel');
+    ok((await post('login', { pass: 'mala' })).status === 401, 'contraseña de admin incorrecta rechazada');
+    const tok = (await (await post('login', { pass: 'clave-de-prueba-admin' })).json()).token;
+    const st = await (await fetch(`${H}/api/state`, { headers: { Authorization: `Bearer ${tok}` } })).json();
+    ok(st.players === 1 && st.list[0].name === 'Selene' && st.list[0].account === 'ana_01' && st.list[0].zone, `el panel lista los jugadores en línea (${st.list.map((p) => `${p.name} en ${p.zone}`).join(', ')})`);
+    ok(st.uptime >= 0 && st.memory.rss > 0 && Array.isArray(st.history), 'el panel muestra uptime, memoria e historial');
+    await post('announce', { text: 'Hola desde el panel' }, tok);
+    await wait(200);
+    ok(a.chats.some((m) => m.kind === 'sys' && m.text === '[Aviso] Hola desde el panel'), 'el aviso del panel llega al chat');
+    const accs = await (await fetch(`${H}/api/accounts?q=cir`, { headers: { Authorization: `Bearer ${tok}` } })).json();
+    ok(accs.total === 1 && accs.accounts[0].user === 'ciro' && !JSON.stringify(accs).includes('salt'), 'búsqueda de cuentas sin datos de contraseña');
+    ok((await (await post('deleteAccount', { user: 'ciro' }, tok)).json()).ok, 'el panel elimina una cuenta');
+    const kres = await (await post('kick', { id: a.id }, tok)).json();
+    const kicked = await a.next('kicked');
+    await wait(300);
+    ok(kres.ok && kicked.msg && a.closed, 'el panel desconecta a un jugador');
+    for (let i = 0; i < 5; i++) await post('login', { pass: 'otra-mala' });
+    ok((await post('login', { pass: 'clave-de-prueba-admin' })).status === 429, 'tras 5 intentos fallidos se bloquea el acceso');
     await wait(400);
 
     const db = JSON.parse(fs.readFileSync(path.join(dataDir, 'db.json'), 'utf8'));
     const raw = JSON.stringify(db);
     ok(!raw.includes('secreto1') && !raw.includes(a.session), 'contraseñas y sesiones no se guardan en claro');
-    ok(Object.keys(db.accounts).length === 3 && Object.keys(db.chars).length === 2, 'cuentas y personajes guardados en disco');
+    ok(Object.keys(db.accounts).length === 2 && Object.keys(db.chars).length === 2 && !db.accounts.ciro, 'cuentas y personajes guardados en disco');
     console.log(`\nServidor OK: ${checks} comprobaciones superadas.`);
   } finally {
     srv.kill();

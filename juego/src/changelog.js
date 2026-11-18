@@ -8,6 +8,15 @@
 })(function () {
   return [
     {
+      version: '0.6.0',
+      date: '2026-11-18',
+      title: 'Panel de control del servidor',
+      items: [
+        'Nuevo panel para los administradores: estado del servidor, jugadores en línea, cuentas y registro de eventos.',
+        'Los administradores pueden enviar avisos al chat de todos (por ejemplo, antes de un mantenimiento).',
+      ],
+    },
+    {
       version: '0.5.6',
       date: '2026-11-18',
       title: 'El Guerrero de siempre',

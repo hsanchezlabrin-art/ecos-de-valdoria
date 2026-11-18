@@ -15,10 +15,12 @@ const http = require('http');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const DB = require('./db.js');
+const { createAdmin } = require('./admin.js');
 
 const SRC = process.env.GAME_SRC || path.join(__dirname, '..', 'juego', 'src');
 const Data = require(path.join(SRC, 'data.js'));
 const Sim = require(path.join(SRC, 'sim.js'));
+const Terrain = require(path.join(SRC, 'terrain.js'));
 const { VERSION } = require(path.join(SRC, 'version.js'));
 const C = Sim.cmd;
 
@@ -259,6 +261,7 @@ function onAccount(c, msg) {
       const ch = DB.getChar(c.acc, str(msg.id, 20));
       if (!ch) return send(c, { t: 'charError', msg: 'Ese personaje no existe.' });
       c.charId = ch.id;
+      c.joinedAt = Date.now();
       c.p = Sim.addPlayer(world, charData(ch));
       c.invDirty = true;
       send(c, { t: 'welcome', id: c.p.id, protocol: PROTOCOL, version: VERSION, players: world.players.size });
@@ -349,7 +352,10 @@ function onCommand(c, msg) {
 
 // ---------- Red ----------
 
+const admin = createAdmin({ world, clients, DB, Terrain, VERSION, started, send, broadcastChat, savePlayer });
+
 const server = http.createServer((req, res) => {
+  if (admin.handle(req, res)) return;
   const url = new URL(req.url, 'http://x');
   const json = (obj) => {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -374,11 +380,15 @@ function leave(c) {
   console.log(`[sale] ${name} · ${world.players.size} en línea`);
 }
 
-wss.on('connection', (ws) => {
-  const c = { ws, p: null, acc: null, msgs: 0, window: Date.now(), invDirty: false, chatAt: 0 };
+wss.on('connection', (ws, req) => {
+  const ip = String(req.headers['fly-client-ip'] || req.socket.remoteAddress || '?');
+  const c = { ws, p: null, acc: null, msgs: 0, window: Date.now(), invDirty: false, chatAt: 0, ip, rtt: null, pingAt: 0 };
   clients.add(c);
   ws.isAlive = true;
-  ws.on('pong', () => (ws.isAlive = true));
+  ws.on('pong', () => {
+    ws.isAlive = true;
+    if (c.pingAt) c.rtt = Date.now() - c.pingAt; // latencia medida con el ping del servidor
+  });
   ws.on('error', (e) => console.error('[ws]', e.message));
 
   ws.on('message', (raw) => {
@@ -423,6 +433,7 @@ setInterval(() => {
     }
     c.ws.isAlive = false;
     try {
+      c.pingAt = Date.now();
       c.ws.ping();
     } catch {
       /* nada */

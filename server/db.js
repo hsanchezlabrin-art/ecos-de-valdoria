@@ -187,4 +187,33 @@ const nameAvailable = (name) => {
 
 const counts = () => ({ accounts: Object.keys(db.accounts).length, characters: Object.keys(db.chars).length });
 
-module.exports = { register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, flush: () => persist(true), MAX_CHARS, DIR };
+// ---------- Administración ----------
+
+// Cuentas para el panel (sin datos de contraseña ni sesiones)
+function listAccounts(q = '', limit = 200) {
+  const s = String(q || '').toLowerCase().trim();
+  const out = [];
+  for (const [key, a] of Object.entries(db.accounts)) {
+    const chars = listChars(a);
+    if (s && !key.includes(s) && !(a.email || '').includes(s) && !chars.some((c) => c.name.toLowerCase().includes(s))) continue;
+    out.push({ user: a.user, email: a.email, created: a.created, lastLogin: a.lastLogin || null, chars: chars.map((c) => ({ name: c.name, cls: c.cls, level: c.level, last: c.last })) });
+  }
+  out.sort((x, y) => (y.lastLogin || y.created) - (x.lastLogin || x.created));
+  return { total: out.length, accounts: out.slice(0, limit) };
+}
+
+// Borra una cuenta con todos sus personajes (libera sus nombres)
+function deleteAccount(user) {
+  const key = String(user || '').toLowerCase();
+  if (!own(db.accounts, key)) return { ok: false, error: 'Esa cuenta no existe.' };
+  for (const id of db.accounts[key].chars) {
+    if (!own(db.chars, id)) continue;
+    delete db.names[db.chars[id].name.toLowerCase()];
+    delete db.chars[id];
+  }
+  delete db.accounts[key];
+  persist(true);
+  return { ok: true };
+}
+
+module.exports = { register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, listAccounts, deleteAccount, flush: () => persist(true), MAX_CHARS, DIR };
