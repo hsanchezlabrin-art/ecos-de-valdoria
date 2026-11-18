@@ -229,6 +229,13 @@ for (const cls of Data.CLASS_IDS) {
   const idx = p.inv.findIndex((s) => s.id === 'pocion_mana');
   C.sellItem(w, p, idx, 3);
   ok(Sim.countItem(p, 'pocion_mana') === 5, 'se venden varias unidades de una vez');
+  C.destroyItem(w, p, p.inv.findIndex((s) => s.id === 'pocion_mana'), 2);
+  ok(Sim.countItem(p, 'pocion_mana') === 3, 'se pueden destruir varias unidades de un objeto');
+  p.inv.push({ id: 'huevo_mascota', qty: 1 });
+  C.destroyItem(w, p, p.inv.findIndex((s) => s.id === 'huevo_mascota'), 1);
+  ok(Sim.countItem(p, 'huevo_mascota') === 1, 'el Huevo de Mascota no se puede destruir');
+  p.inv.splice(p.inv.findIndex((s) => s.id === 'huevo_mascota'), 1);
+  ok(Data.itemCategory(Data.ITEMS.pocion_vida) === 'consumable' && Data.itemCategory(Data.ITEMS.huevo_mascota) === 'quest' && Data.itemCategory(Data.ITEMS.piel) === 'other', 'cada objeto tiene su pestaña en el inventario');
   const save = Sim.serialize(p);
   ok(save.cls === 'gnomo' && save.v === 4 && save.stage === 0 && save.inv.length === p.inv.length, 'la partida se serializa');
 }

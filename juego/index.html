@@ -520,6 +520,21 @@
   .q-steps li.ok .nm { color: var(--muted); }
   .q-steps li .qbar { height: 12px; }
   .q-steps li .qbar span { font-size: 10px; }
+  /* Inventario: oro, espacios usados y pestañas por tipo */
+  .inv-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 0 6px; font-size: 14px; }
+  .inv-gold { font-weight: 700; color: #ffd27a; font-variant-numeric: tabular-nums; }
+  .inv-gold b { color: #e6b84a; }
+  .inv-count { font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; padding: 2px 8px; border: 1px solid var(--edge-soft); border-radius: 10px; }
+  .inv-count.full { color: #ff8b78; border-color: #ff8b78; }
+  /* Si no caben en una fila (celular), pasan a dos filas en vez de cortarse */
+  .inv-tabs { display: flex; flex-wrap: wrap; margin-bottom: 8px; }
+  .inv-tabs button { flex: 1 1 auto; padding: 7px 6px; font-size: 12px; letter-spacing: 0; white-space: nowrap; }
+  .inv-tabs button small { font: 700 10px var(--body); color: var(--muted); margin-left: 3px; }
+  .inv-wrap { position: relative; }
+  .inv-empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; padding: 8px 14px; color: var(--muted); font-size: 13px; text-align: center; background: rgba(11,13,16,.85); border: 1px solid var(--edge-soft); border-radius: 3px; pointer-events: none; }
+  .im-actions button.danger, #trOk.danger { color: #ffb3aa; border-color: #a0453a; }
+  #trOk.danger { background: linear-gradient(#7d2a22, #4e1812); }
+  .tr-total.warn { color: #ffb3aa; }
   .st-tabs { margin: 0 0 10px; }
   .st-tabs button { padding: 8px; font-size: 14px; }
   #skList { display: grid; gap: 8px; }
@@ -720,7 +735,21 @@
   <section class="panel" id="invPanel" hidden>
     <header><h2>Inventario</h2><button class="x" data-close="inv" aria-label="Cerrar">✕</button></header>
     <div id="invEquip"></div>
-    <div id="invGrid"></div>
+    <div class="inv-top">
+      <span class="inv-gold" title="Oro"><b>●</b> <span id="invGold">0</span> oro</span>
+      <span class="inv-count" id="invCount" title="Espacios usados en la mochila">0 / 30</span>
+    </div>
+    <div class="tabs inv-tabs" role="tablist" aria-label="Tipos de objeto">
+      <button type="button" role="tab" data-cat="all" class="on">Todo</button>
+      <button type="button" role="tab" data-cat="equip">Equipo</button>
+      <button type="button" role="tab" data-cat="consumable">Consumibles</button>
+      <button type="button" role="tab" data-cat="quest">Misión</button>
+      <button type="button" role="tab" data-cat="other">Otros</button>
+    </div>
+    <div class="inv-wrap">
+      <div id="invGrid"></div>
+      <p class="inv-empty" id="invEmpty" hidden>No tienes objetos de este tipo.</p>
+    </div>
     <p class="hint" id="invHint"></p>
   </section>
 

@@ -613,6 +613,7 @@
   const clickInventory = (i) => (UI.shopOpen() ? UI.openTrade('sell', i) : send({ t: 'use', i }));
   const useItem = (i) => send({ t: 'use', i });
   const sellItem = (i, q) => send({ t: 'sell', i, q });
+  const destroyItem = (i, q) => send({ t: 'destroy', i, q });
   const unequip = (k) => send({ t: 'unequip', k });
   const buyItem = (id, q) => send({ t: 'buy', id, q });
   const respawnPlayer = () => send({ t: 'respawn' });
@@ -1699,7 +1700,7 @@
   V.Game = {
     PROTOCOL, connect, register, login, resume, logout, exitWorld, createChar, deleteChar, play,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
-    clickInventory, useItem, sellItem, unequip, buyItem, respawnPlayer, update, sendChat, sendPhrase, report, classQuest, toggleGems, hatch, toggleMount,
+    clickInventory, useItem, sellItem, destroyItem, unequip, buyItem, respawnPlayer, update, sendChat, sendPhrase, report, classQuest, toggleGems, hatch, toggleMount,
     invite, inviteByName, answerInvite, leaveParty, kickFromParty,
     get online() {
       return true;

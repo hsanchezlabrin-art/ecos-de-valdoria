@@ -62,6 +62,7 @@ function initUI() {
   buildHotbar();
   bindMaster();
   bindStatTabs();
+  bindInvTabs();
   bindSafeChat();
   $('hatchClose').onclick = () => ($('hatchPanel').hidden = true);
   if ($('btnGuide')) {
@@ -528,19 +529,20 @@ function openTrade(mode, ref) {
   const entry = mode === 'buy' ? shopEntry(id) : null;
   if (mode === 'buy' && !entry) return;
   const currency = entry && entry.currency;
-  const unit = mode === 'buy' ? entry.price : sellPrice(it);
-  const have = mode === 'sell' ? p.inv[ref].qty : 0;
+  const unit = mode === 'buy' ? entry.price : mode === 'destroy' ? 0 : sellPrice(it);
+  const have = mode !== 'buy' ? p.inv[ref].qty : 0;
   const max = mode === 'buy' ? (it.stack ? Math.max(1, Math.min(99, Math.floor(wallet(currency) / unit))) : 1) : have;
   trade = { mode, ref, id, unit, max, qty: 1, currency };
 
   const box = $('tradePanel');
-  $('trTitle').textContent = mode === 'buy' ? 'Comprar' : 'Vender';
+  $('trTitle').textContent = mode === 'buy' ? 'Comprar' : mode === 'destroy' ? 'Destruir' : 'Vender';
+  $('trOk').classList.toggle('danger', mode === 'destroy');
   const icon = $('trIcon');
   icon.style.setProperty('--r', RARITY[it.rarity].color);
   icon.textContent = it.glyph;
   $('trName').textContent = it.name;
   $('trName').style.color = RARITY[it.rarity].color;
-  $('trDesc').textContent = mode === 'sell' && have > 1 ? `Tienes ${have}. ${it.desc}` : it.desc;
+  $('trDesc').textContent = mode !== 'buy' && have > 1 ? `Tienes ${have}. ${it.desc}` : it.desc;
   const range = $('trRange');
   range.max = max;
   $('trQtyRow').hidden = max <= 1;
@@ -556,10 +558,15 @@ function setTradeQty(q) {
   $('trNum').value = trade.qty;
   const total = trade.unit * trade.qty;
   const poor = trade.mode === 'buy' && wallet(trade.currency) < total;
-  $('trTotal').textContent = `${trade.mode === 'buy' ? 'Total' : 'Recibes'}: ${priceText(total, trade.currency)}`;
+  const destroy = trade.mode === 'destroy';
+  $('trTotal').textContent = destroy
+    ? '⚠ Se pierde para siempre: no se puede deshacer.'
+    : `${trade.mode === 'buy' ? 'Total' : 'Recibes'}: ${priceText(total, trade.currency)}`;
   $('trTotal').classList.toggle('poor', poor);
+  $('trTotal').classList.toggle('warn', destroy);
   $('trOk').disabled = poor;
-  $('trOk').textContent = trade.mode === 'buy' ? `Comprar ${trade.qty > 1 ? `×${trade.qty}` : ''}` : `Vender ${trade.qty > 1 ? `×${trade.qty}` : ''}`;
+  const n = trade.qty > 1 ? `×${trade.qty}` : '';
+  $('trOk').textContent = trade.mode === 'buy' ? `Comprar ${n}` : destroy ? `Destruir ${n}` : `Vender ${n}`;
 }
 
 function closeTrade() {
@@ -570,6 +577,7 @@ function closeTrade() {
 function confirmTrade() {
   if (!trade) return;
   if (trade.mode === 'buy') V.Game.buyItem(trade.id, trade.qty);
+  else if (trade.mode === 'destroy') V.Game.destroyItem(trade.ref, trade.qty);
   else V.Game.sellItem(trade.ref, trade.qty);
   closeTrade();
 }
@@ -646,6 +654,19 @@ function itemTitle(it) {
   }
   lines.push(it.desc);
   return lines.join('\n');
+}
+
+// Pestañas del inventario (la elegida se recuerda mientras dura la partida)
+const INV_SLOTS = 30;
+const INV_TABS = { all: 'Todo', equip: 'Equipo', consumable: 'Consumibles', quest: 'Misión', other: 'Otros' };
+let invCat = 'all';
+function bindInvTabs() {
+  document.querySelectorAll('#invPanel [data-cat]').forEach((b) => {
+    b.onclick = () => {
+      invCat = b.dataset.cat;
+      refreshPanels();
+    };
+  });
 }
 
 function slotEl(id, qty, onClick, extraCls = '', onQuick = null) {
@@ -746,6 +767,7 @@ function openItemMenu(anchor, source) {
       btn(p.gemsOn ? 'Desactivar gemas' : 'Activar gemas', () => V.Game.toggleGems(), { primary: true });
     }
     if (shopOpen()) btn(`Vender · ${sellPrice(it)} oro`, () => openTrade('sell', source.index));
+    if (!V.Data.isKeyItem(it)) btn('Destruir', () => openTrade('destroy', source.index)).classList.add('danger');
   }
   btn('Cerrar', () => {});
 
@@ -793,12 +815,43 @@ function refreshPanels() {
       wrap.append(t);
       eq.append(wrap);
     }
+    $('invGold').textContent = p.gold.toLocaleString('es');
+    const used = p.inv.length;
+    $('invCount').textContent = `${used} / ${INV_SLOTS}`;
+    $('invCount').classList.toggle('full', used >= INV_SLOTS);
+    // Cantidad de objetos por pestaña
+    const per = { all: used, equip: 0, consumable: 0, quest: 0, other: 0 };
+    for (const s of p.inv) per[V.Data.itemCategory(ITEMS[s.id])]++;
+    document.querySelectorAll('#invPanel [data-cat]').forEach((b) => {
+      b.classList.toggle('on', b.dataset.cat === invCat);
+      const label = INV_TABS[b.dataset.cat];
+      b.innerHTML = '';
+      b.append(label);
+      if (per[b.dataset.cat]) {
+        const n = document.createElement('small');
+        n.textContent = per[b.dataset.cat];
+        b.append(n);
+      }
+    });
     const grid = $('invGrid');
     grid.innerHTML = '';
-    for (let i = 0; i < 30; i++) {
-      const slot = p.inv[i];
-      grid.append(slotEl(slot && slot.id, slot && slot.qty, (e, b) => openItemMenu(b, { index: i }), '', () => clickInventory(i)));
+    if (invCat === 'all') {
+      for (let i = 0; i < INV_SLOTS; i++) {
+        const slot = p.inv[i];
+        grid.append(slotEl(slot && slot.id, slot && slot.qty, (e, b) => openItemMenu(b, { index: i }), '', () => clickInventory(i)));
+      }
+    } else {
+      // Solo los objetos de la pestaña (cada uno conserva su casilla real de la mochila)
+      let shown = 0;
+      p.inv.forEach((slot, i) => {
+        if (V.Data.itemCategory(ITEMS[slot.id]) !== invCat) return;
+        grid.append(slotEl(slot.id, slot.qty, (e, b) => openItemMenu(b, { index: i }), '', () => clickInventory(i)));
+        shown++;
+      });
+      // Casillas vacías hasta completar la mochila: el panel no cambia de tamaño entre pestañas
+      for (; shown < INV_SLOTS; shown++) grid.append(slotEl(null));
     }
+    $('invEmpty').hidden = invCat === 'all' || per[invCat] > 0;
     const touch = V.Mobile && V.Mobile.isTouch;
     $('invHint').textContent = shopOpen()
       ? 'Tienda abierta: toca un objeto para venderlo o equiparlo.'

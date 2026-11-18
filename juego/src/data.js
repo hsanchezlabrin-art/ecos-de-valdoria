@@ -97,6 +97,19 @@
   };
   const isPet = (t) => typeof t === 'string' && Object.prototype.hasOwnProperty.call(PETS, t);
   // 0: sin montura · 1: terrestre · 2: planeadora
+  // Categoría de un objeto para las pestañas del inventario: equipo, consumibles, misión u otros.
+  // Un objeto puede fijar la suya con `cat` (por ejemplo, objetos de misiones futuras).
+  function itemCategory(it) {
+    if (!it) return 'other';
+    if (it.cat) return it.cat;
+    if (it.type === 'weapon' || it.type === 'armor') return 'equip';
+    if (it.type === 'potion' || it.type === 'gem') return 'consumable';
+    if (it.type === 'egg' || it.type === 'quest') return 'quest';
+    return 'other';
+  }
+  // Objetos que no se pueden vender ni destruir
+  const isKeyItem = (it) => !!it && (it.type === 'egg' || it.type === 'quest' || it.cat === 'quest');
+
   const mountKind = (p) => (!p.pet ? 0 : p.level >= GLIDER_LVL && (p.stage || 0) >= 3 ? 2 : p.level >= MOUNT_LVL ? 1 : 0);
   const petName = (type, kind = 0) => (isPet(type) ? (kind === 2 ? PETS[type].glider : kind === 1 ? PETS[type].mount : PETS[type].name) : '');
 
@@ -900,7 +913,7 @@
     ITEMS, WEAPON_TIERS, ARMOR_TIERS, weaponFor, armorFor, startGear, equipProblem,
     ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT,
     ARENAS, SHOPS, shopItems, MOB_H, mobHeight, PHRASES,
-    PETS, isPet, PET_LVL, MOUNT_LVL, GLIDER_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName,
+    PETS, isPet, PET_LVL, MOUNT_LVL, GLIDER_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName, itemCategory, isKeyItem,
     OLD_CLASS_MAP, migrateCharacter,
   };
 });

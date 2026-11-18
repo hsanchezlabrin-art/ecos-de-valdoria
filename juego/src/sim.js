@@ -1736,6 +1736,18 @@
     emit(w, { type: 'inventory', to: p.id });
   }
 
+  // Destruir objetos del inventario (para hacer espacio). Los objetos de misión y el huevo no se pueden.
+  function destroyItem(w, p, index, qty = 1) {
+    const slot = p.inv[index];
+    if (!slot || p.dead) return;
+    const it = ITEMS[slot.id];
+    if (Data.isKeyItem(it)) return log(w, p, `${it.name} no se puede destruir.`, 'warn');
+    const n = tradeQty(qty, slot.qty);
+    removeAt(p, index, n);
+    log(w, p, `Destruyes ${it.name}${n > 1 ? ` ×${n}` : ''}.`, 'sys');
+    emit(w, { type: 'inventory', to: p.id });
+  }
+
   function buyItem(w, p, id, qty = 1) {
     const it = ITEMS[id];
     const npc = nearShop(p);
@@ -2358,7 +2370,7 @@
     liveStats,
     skillReady,
     cmd: {
-      setTarget, attack, targetNearest, moveTo, setMoveDir, talkTo, useSkill, usePotion, useItem, sellItem, buyItem, unequip, respawn,
+      setTarget, attack, targetNearest, moveTo, setMoveDir, talkTo, useSkill, usePotion, useItem, sellItem, destroyItem, buyItem, unequip, respawn,
       partyInvite, partyAnswer, partyLeave, partyKick, classQuest, setGems, hatchPet, toggleMount,
     },
   };

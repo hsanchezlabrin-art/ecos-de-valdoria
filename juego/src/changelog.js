@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.21.0',
+      date: '2026-11-18',
+      title: 'Inventario renovado',
+      items: [
+        'Pestañas en el inventario: Todo, Equipo, Consumibles, Misión y Otros.',
+        'Ves tu oro y cuántos espacios de la mochila usas (por ejemplo 12 / 30).',
+        'Nueva opción Destruir: elige la cantidad y confirma para hacer espacio. Los objetos de misión no se pueden destruir.',
+      ],
+    },
+    {
       version: '0.20.0',
       date: '2026-11-18',
       title: 'Panel de Misiones',
