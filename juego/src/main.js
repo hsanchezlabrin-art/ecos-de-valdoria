@@ -650,6 +650,7 @@
   document.getElementById('btnReconnect').addEventListener('click', () => location.reload());
   document.getElementById('btnFull').addEventListener('click', () => V.Mobile.toggleFullscreen());
   // Calidad gráfica: Baja → Media → Alta (se guarda en este equipo)
+  document.getElementById('hudVer').textContent = `v${V.VERSION}`;
   const btnGfx = document.getElementById('btnGfx');
   const syncGfx = () => (btnGfx.firstChild.textContent = `Gráficos: ${V.Gfx.preset().label} `);
   syncGfx();

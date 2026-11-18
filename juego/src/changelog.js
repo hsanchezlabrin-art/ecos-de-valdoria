@@ -8,6 +8,12 @@
 })(function () {
   return [
     {
+      version: '0.5.3',
+      date: '2026-11-17',
+      title: 'Versión a la vista',
+      items: ['La versión del juego se ve en el recuadro del minimapa, en PC y en celulares.'],
+    },
+    {
       version: '0.5.2',
       date: '2026-11-17',
       title: 'Menos destellos, más fluidez',
