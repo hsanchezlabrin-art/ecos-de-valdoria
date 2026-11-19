@@ -13,8 +13,10 @@ from mathutils import Vector
 
 C_NAME = globals().get("CHAR", "Gnomo_M")
 RENDER = globals().get("RENDER")
+PREFIJO = globals().get("PREFIJO", "tunica")  # objetos <CHAR>_<PREFIJO>_<grado> (el elfo usa "cuero")
 GRADOS = ["madera", "cobre", "azul", "morado", "dorado", "arcoiris"]
-SEP = 0.8
+SEP = globals().get("SEP", 0.8)          # separación entre personajes
+CAM = globals().get("CAM", (-7.4, 0.78))  # distancia y altura de la cámara
 D = bpy.data
 sc = bpy.context.scene
 cuerpo = D.objects[C_NAME + "_malla"]
@@ -29,7 +31,7 @@ else:
     sc.collection.children.link(col)
 base = Vector((cuerpo.location.x, 4.0 if C_NAME.endswith("_F") else 2.5, 0))
 for i, g in enumerate(GRADOS):
-    tun = D.objects.get(f"{C_NAME}_tunica_{g}")
+    tun = D.objects.get(f"{C_NAME}_{PREFIJO}_{g}")
     if not tun:
         continue
     pos = base + Vector(((i - 2.5) * SEP, 0, 0))
@@ -53,7 +55,7 @@ if RENDER:
     if not cam:
         cam = D.objects.new("camara_vitrina", D.cameras.new("camara_vitrina"))
         sc.collection.objects.link(cam)
-    cam.location = base + Vector((0, -7.4, 0.78))
+    cam.location = base + Vector((0, CAM[0], CAM[1]))
     cam.rotation_euler = (math.radians(88), 0, 0)
     cam.data.lens = 50
     # se ocultan los demás para el render

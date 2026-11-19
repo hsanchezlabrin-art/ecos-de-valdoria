@@ -32,7 +32,7 @@ C_NAME = globals().get("CHAR", "Gnomo_M")
 VOXEL = globals().get("VOXEL", 0.0045)
 TARGET_TRIS = globals().get("TARGET_TRIS", 24000)
 POSE_T = globals().get("POSE_T", True)
-ISLAND_KEYS = ("_ojo_", "_sonrisa", "_gafas_", "_cuello")
+ISLAND_KEYS = ("_ojo_", "_sonrisa", "_gafas_", "_cuello", "_flor")
 
 D = bpy.data
 scene = bpy.context.scene
@@ -63,7 +63,7 @@ def mat_index(name):
 # Cada grupo se mueve con su propio hueso o cadena (cabeza con pelo, barba y gorro; tronco; cada
 # brazo; cada pierna con su bota). Se funden por separado y quedan en la misma malla, encastrados:
 # así la barba no queda soldada al hombro ni una pierna a la otra (se estirarían al animar).
-TRONCO_P = ("camisa", "cinturon", "borde_camisa", "torso_camisa", "vestido")
+TRONCO_P = ("camisa", "cinturon", "borde_camisa", "torso_camisa", "vestido", "canesu", "cordon", "chaleco", "falda", "panel")
 
 
 def grupo(nombre):
@@ -73,7 +73,7 @@ def grupo(nombre):
         return "pierna" + nombre[-2:]
     if nombre.startswith(TRONCO_P):
         return "tronco"
-    if nombre.startswith("gorro"):  # aparte: algunas túnicas lo reemplazan (capucha, sombrero)
+    if nombre.startswith(GC.QUITABLES):  # aparte: algunas armaduras lo reemplazan (capucha, yelmo)
         return "gorro"
     return "cabeza"
 

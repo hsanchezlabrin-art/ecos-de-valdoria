@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.29.0',
+      date: '2026-11-19',
+      title: 'Elfos nuevos y sus armaduras',
+      items: [
+        'El Elfo y la Elfa tienen un modelo 3D nuevo, más parecido a su diseño: pelo de hojas, orejas en punta, túnica con canesú y cuerda; ella con melena, trenza y flores en el pelo.',
+        'Seis armaduras de cuero en 3D, una por grado: Chaleco de Hojas, Armadura de Cuero, Cuero de Cristal Azul, Cuero de Oro Encantado, Capa de Diamante del Explorador y Atuendo Celestial del Viento.',
+        'El yelmo alado del Oro Encantado y el tocado del Atuendo Celestial reemplazan el pelo de arriba del elfo.',
+      ],
+    },
+    {
       version: '0.28.0',
       date: '2026-11-19',
       title: 'Túnicas del Gnomo',

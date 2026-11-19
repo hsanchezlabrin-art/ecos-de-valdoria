@@ -1,13 +1,20 @@
-"""Datos compartidos por los scripts de los gnomos (malla única y esqueleto).
+"""Datos compartidos por los scripts de personajes hechos por piezas (gnomos, elfos): malla única,
+esqueleto y armaduras.
 
 Pose T: el esqueleto del juego (el de Meshy, copiado de elfo_f.glb) está en pose T y las
 animaciones compartidas solo giran los huesos. Por eso la malla que se exporta se arma con los
 brazos horizontales: las piezas del brazo giran alrededor del hombro hasta quedar en el eje X.
+
+Cada personaje es un objeto vacío (raíz) con sus piezas como hijos: <raíz>_<pieza>_<I|D>. La raíz
+puede traer la propiedad "hombro" (x, y, z) con el pivote del brazo izquierdo; si no, se usa el del
+gnomo.
 """
 from mathutils import Matrix, Vector
 
 ARM_KEYS = ("_manga_", "_brazo_", "_mano_", "_pulgar_")
-HOMBRO = (0.19, 0.0, 0.545)  # pivote del brazo (lado izquierdo; el derecho es el espejo en X)
+HOMBRO = (0.19, 0.0, 0.545)  # pivote del brazo del gnomo (lado izquierdo; el derecho es el espejo en X)
+# piezas que una armadura de cabeza (capucha, sombrero, yelmo) reemplaza: van en una cáscara aparte
+QUITABLES = ("gorro", "copete")
 
 
 def lado(nombre):
@@ -19,8 +26,14 @@ def es_brazo(nombre):
     return any(k in nombre for k in ARM_KEYS)
 
 
-def pivote(s):
-    return Vector((s * HOMBRO[0], HOMBRO[1], HOMBRO[2]))
+def hombro(root):
+    h = root.get("hombro") if root is not None else None
+    return Vector(tuple(h)) if h else Vector(HOMBRO)
+
+
+def pivote(s, root=None):
+    h = hombro(root)
+    return Vector((s * h.x, h.y, h.z))
 
 
 def matrices_pose_t(root):
@@ -30,7 +43,7 @@ def matrices_pose_t(root):
     out = {}
     for s, L in ((1, "I"), (-1, "D")):
         mano = bpy.data.objects[f"{root.name}_mano_{L}"]
-        p = pivote(s)
+        p = pivote(s, root)
         d = (rinv @ mano.matrix_world.translation) - p
         d.y = 0.0
         R = d.normalized().rotation_difference(Vector((s, 0.0, 0.0))).to_matrix().to_4x4()

@@ -13,7 +13,8 @@ const THREE = require('../juego/vendor/three.min.js');
 const G = require('./glb.js');
 
 const ROOT = path.join(__dirname, '..');
-const SRC = path.join(ROOT, 'juego/assets/models/elfo_f.glb');
+// esqueleto original de Meshy (el de elfo_f.glb antes del elfo hecho en Blender)
+const SRC = path.join(__dirname, 'esqueleto_meshy.glb');
 const OUT = process.argv[2] || path.join(ROOT, 'juego/assets/models');
 
 // ---------- Esqueleto ----------

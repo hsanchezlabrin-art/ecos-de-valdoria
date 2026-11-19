@@ -140,8 +140,8 @@
   // Colas con movimiento: por raza, qué vértices son la cola (en proporción a la altura del modelo):
   // detrás de la cadera más de `back`, y entre `down` por debajo y `up` por encima de ella.
   // Razas cuyo esqueleto tiene proporciones propias (se generan con tools/make_hada.js y
-  // tools/make_gnomo.js)
-  const OWN_BONES = new Set(['hada', 'gnomo']);
+  // tools/make_raza.js)
+  const OWN_BONES = new Set(['hada', 'gnomo', 'elfo']);
 
   const TAILS = {
     lagarto: { back: 0.16, up: 0.1, down: 0.12 },
@@ -682,9 +682,12 @@
   // o el tipo no tiene modelo, se dibujan las piezas de cajas de siempre.
   // Un tipo puede tener un modelo por grado (función del grado): la túnica del gnomo tiene seis diseños,
   // con sus propios colores (material.userData.colores) y partes que brillan (userData.brilla).
-  // Por ahora solo la armadura de tela tiene modelos, y solo para el gnomo (las demás razas no los
-  // piden: así no se descarga un archivo que no existe).
-  const ARMOR_MODEL = { CLOTH_ROBE: (g, race) => (race === 'gnomo' ? `tela_${g}` : null) };
+  // Por ahora tienen modelos la armadura de tela del gnomo y la de cuero del elfo (las demás razas no
+  // los piden: así no se descarga un archivo que no existe).
+  const ARMOR_MODEL = {
+    CLOTH_ROBE: (g, race) => (race === 'gnomo' ? `tela_${g}` : null),
+    LIGHT_LEATHER: (g, race) => (race === 'elfo' ? `cuero_${g}` : null),
+  };
   const armorModelName = (item, raceKey) => {
     const v = ARMOR_MODEL[item.armorType];
     return typeof v === 'function' ? v(item.grade, raceKey.split('_')[0]) : v;

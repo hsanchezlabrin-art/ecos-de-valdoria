@@ -76,7 +76,7 @@ for S, s in (("Left", 1), ("Right", -1)):
     J[S + "Foot"] = (s * xl, 0, z_tob)
     J[S + "ToeBase"] = (s * xl, bota[0].y + 0.06, 0.03)
     J[S + "Shoulder"] = (s * 0.06, 0, z_brazo)
-    J[S + "Arm"] = (s * GC.HOMBRO[0], 0, z_brazo)
+    J[S + "Arm"] = (s * GC.hombro(root).x, 0, z_brazo)
     J[S + "ForeArm"] = (s * (cen(puno).x + cen(brazo).x) / 2, 0, z_brazo)
     J[S + "Hand"] = (s * (cen(brazo).x + cen(mano).x) / 2, 0, z_brazo)
 J = {k: Vector(v) for k, v in J.items()}
@@ -95,9 +95,10 @@ def cadena(c, chain, b):
     return w
 
 
-CABEZA = ("oreja", "nariz", "ojo", "ceja", "bigote", "barba", "patilla", "pelo_nuca", "flequillo",
-          "mechon", "sonrisa", "gorro", "gafas")
-TRONCO = ("camisa", "cinturon", "borde_camisa", "torso_camisa", "cuello", "vestido")
+CABEZA = ("oreja", "nariz", "ojo", "ceja", "bigote", "barba", "patilla", "pelo", "flequillo",
+          "mechon", "sonrisa", "boca", "gorro", "gafas", "copete", "flor")
+TRONCO = ("camisa", "cinturon", "borde_camisa", "torso_camisa", "cuello", "vestido",
+          "canesu", "cordon", "chaleco", "falda", "panel")
 tronco = [("Hips", -INF), ("Spine02", J["Spine02"].z), ("Spine01", J["Spine01"].z), ("Spine", J["Spine"].z)]
 
 
@@ -105,8 +106,10 @@ def pesos(parte, p):
     S = "Left" if p.x > 0 else "Right"
     if parte.startswith("cabeza"):
         return cadena(p.z, [("Spine", -INF), ("Head", z_cab + 0.02)], 0.025)
-    if parte.startswith("trenza"):
-        return cadena(p.z, [("Spine", -INF), ("Head", 0.64)], 0.04)
+    if parte.startswith("trenza"):  # pelo largo: con la cabeza arriba y con el pecho abajo
+        return cadena(p.z, [("Spine", -INF), ("Head", z_cab + 0.065)], 0.04)
+    if parte.startswith("melena"):
+        return cadena(p.z, [("Spine", -INF), ("Head", z_cab + 0.065)], 0.06)
     if parte.startswith(CABEZA):
         return {"Head": 1.0}
     if parte.startswith(TRONCO):
@@ -179,7 +182,7 @@ for n in HUESOS:
         g.add([int(i)], float(W[i, HI[n]]), "REPLACE")
 # El gorro (con sus gafas) va aparte: las túnicas con capucha, sombrero o corona lo ocultan.
 # En Blender se oculta con un modificador Máscara sobre este grupo; en el .glb es otra primitiva.
-ES_GORRO = np.array([PARTES[i].startswith(("gorro", "gafas")) for i in pid])
+ES_GORRO = np.array([PARTES[i].startswith(GC.QUITABLES + ("gafas",)) for i in pid])
 ob.vertex_groups.new(name="GORRO").add(np.nonzero(ES_GORRO)[0].tolist(), 1.0, "REPLACE")
 for m in [m for m in ob.modifiers if m.type == "ARMATURE"]:
     ob.modifiers.remove(m)
@@ -222,7 +225,7 @@ tri = inv.reshape(-1, 3)
 gorro_t = ES_GORRO[cv.reshape(-1, 3)].all(1)
 idx = np.concatenate([tri[~gorro_t].ravel(), tri[gorro_t].ravel()]).astype(np.uint32)
 os.makedirs(SALIDA, exist_ok=True)
-base = os.path.join(SALIDA, "gnomo_%s_rig" % ("f" if C_NAME.endswith("_F") else "m"))
+base = os.path.join(SALIDA, "%s_%s_rig" % (root.get("raza", "gnomo"), "f" if C_NAME.endswith("_F") else "m"))
 with open(base + ".bin", "wb") as f:
     for a in (pos, nor, col, jn, wv, idx):
         f.write(np.ascontiguousarray(a).tobytes())
