@@ -141,7 +141,7 @@
   const ndc = new THREE.Vector2();
   let drag = null;
 
-  function pick(x, y, shift) {
+  function pick(x, y, shift, ctrl) {
     ndc.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
     ray.setFromCamera(ndc, camera);
     const mobRoots = G.mobs.filter((m) => !m.dead && !m.hidden && m.model.root.visible).map((m) => m.model.root);
@@ -157,7 +157,7 @@
     } else if (ud.npc) {
       Game.selectNpc(ud.npc);
     } else if (ud.player) {
-      Game.selectPlayer(ud.player);
+      Game.selectPlayer(ud.player, ctrl || G.ctrl); // Ctrl + clic: ataque forzado
     } else {
       Game.moveTo(hit.point);
     }
@@ -175,7 +175,7 @@
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
-      drag = { x: e.clientX, y: e.clientY, moved: false, button: e.button, shift: e.shiftKey };
+      drag = { x: e.clientX, y: e.clientY, moved: false, button: e.button, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
     });
     canvas.addEventListener('pointermove', (e) => {
       if (!drag) return;
@@ -189,7 +189,7 @@
       drag.y = e.clientY;
     });
     canvas.addEventListener('pointerup', (e) => {
-      if (drag && !drag.moved && drag.button === 0 && G.started && !G.pinching) pick(e.clientX, e.clientY, drag.shift || e.shiftKey);
+      if (drag && !drag.moved && drag.button === 0 && G.started && !G.pinching) pick(e.clientX, e.clientY, drag.shift || e.shiftKey, drag.ctrl || e.ctrlKey || e.metaKey);
       drag = null;
     });
     canvas.addEventListener(
@@ -227,6 +227,9 @@
           break;
         case 'KeyJ':
           UI.togglePanel('quests');
+          break;
+        case 'KeyG':
+          UI.togglePanel('guild');
           break;
         case 'KeyO':
           V.Settings.toggle();
@@ -269,7 +272,14 @@
       }
     });
     addEventListener('keyup', (e) => (G.keys[e.code] = false));
-    addEventListener('blur', () => (G.keys = {}));
+    addEventListener('blur', () => {
+      G.keys = {};
+      G.ctrl = false;
+    });
+    // Ctrl pulsado = ataque forzado (para atacar a otros jugadores)
+    const ctrlTrack = (e) => (G.ctrl = e.ctrlKey || e.metaKey);
+    addEventListener('keydown', ctrlTrack, true);
+    addEventListener('keyup', ctrlTrack, true);
     addEventListener('resize', () => {
       camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();

@@ -365,6 +365,8 @@
       q.gem = !!row[20];
       q.petType = row[21] || null;
       q.mounted = row[22] || 0;
+      q.pvpState = row[23] || 0; // 0 blanco · 1 morado (atacó hace poco) · 2 rojo (PK)
+      q.guildTag = row[24] || ''; // "emblema|color|nombre" del gremio
       if (q !== P) q.stage = row[18] || 0;
       q.riding = false;
       if (q.equip.weapon !== row[12] || q.equip.armor !== row[13]) {
@@ -493,6 +495,14 @@
       UI.classChanged();
     }
     if (!G.npcSel && !G.playerSel) P.target = d.target ? net.mobs.get(d.target) || null : null;
+    if (d.guild !== undefined) {
+      P.guild = d.guild || null;
+      UI.guildChanged();
+    }
+    P.karma = d.karma || 0;
+    P.pvp = d.pvp || 0;
+    P.pk = d.pk || 0;
+    P.flagT = d.flagT || 0;
     P.pet = d.pet || null;
     P.mountKind = d.mountKind || 0;
     syncLoot(d.loot || []);
@@ -579,11 +589,18 @@
     G.npcSel = npc;
     send({ t: 'talk', id });
   }
-  function selectPlayer(q) {
+  // Elegir a otro jugador. Para atacarlo hay que forzar el ataque (Ctrl + clic, o el botón «Forzar
+  // ataque»), así nadie ataca por equivocación. A los morados y rojos se les ataca con un clic normal.
+  const isAlly = (q) => !!(P.party && P.party.members.some((m) => m.id === q.id));
+  const hostile = (q) => !!q && q.pvpState > 0 && !isAlly(q);
+  function selectPlayer(q, force = false) {
     if (!q || q === P) return;
-    clearTarget();
+    if (P) P.target = null;
+    sync();
     G.npcSel = null;
     G.playerSel = q;
+    send({ t: 'target', id: q.id });
+    if ((force || hostile(q)) && !q.dead) send({ t: 'attack', force: !!force });
   }
 
   function setTarget(m) {
@@ -593,7 +610,7 @@
     send({ t: 'target', id: P.target ? P.target.id : null });
     sync();
   }
-  const attackTarget = () => send({ t: 'attack' });
+  const attackTarget = (force = false) => send({ t: 'attack', force: !!(force || G.ctrl) });
   function targetNearest() {
     const list = G.mobs.filter((m) => !m.dead && !m.hidden && d2(m.pos, P.pos) < 26).sort((a, b) => d2(a.pos, P.pos) - d2(b.pos, P.pos));
     if (!list.length) return;
@@ -606,7 +623,7 @@
     showMarker(point);
   }
   const talkTo = (id) => send({ t: 'talk', id });
-  const useSkill = (i) => send({ t: 'skill', i });
+  const useSkill = (i) => send({ t: 'skill', i, force: !!G.ctrl });
   const usePotion = (id) => send({ t: 'potion', id });
   const countItem = (id) => (P ? P.inv.filter((s) => s.id === id).reduce((a, s) => a + s.qty, 0) : 0);
   // Con la tienda abierta, el clic en el inventario abre el diálogo de venta
@@ -629,6 +646,19 @@
   const answerInvite = (accept) => send({ t: 'inviteAnswer', accept });
   const leaveParty = () => send({ t: 'partyLeave' });
   const kickFromParty = (id) => send({ t: 'partyKick', id });
+  // Gremio
+  const guild = {
+    create: (name, emblem, color) => send({ t: 'guildCreate', name, emblem, color }),
+    invite: (id) => send({ t: 'guildInvite', id }),
+    inviteByName: (name) => send({ t: 'guildInviteByName', name }),
+    answer: (accept) => send({ t: 'guildAnswer', accept }),
+    leave: () => send({ t: 'guildLeave' }),
+    kick: (key) => send({ t: 'guildKick', key }),
+    rank: (key, rank) => send({ t: 'guildRank', key, rank }),
+    leader: (key) => send({ t: 'guildLeader', key }),
+    disband: () => send({ t: 'guildDisband' }),
+    notice: (text) => send({ t: 'guildNotice', text }),
+  };
 
   // ---------- Eventos ----------
 
@@ -763,6 +793,12 @@
         break;
       case 'partyInvite':
         if (mine(ev)) UI.showInvite(ev.name);
+        break;
+      case 'guildInvite':
+        if (mine(ev)) UI.showGuildInvite(ev);
+        break;
+      case 'openGuild':
+        if (mine(ev)) UI.openGuild(true);
         break;
       case 'playerDeath':
         if (ev.ent.view) ev.ent.view.deathK = 0;
@@ -1489,8 +1525,9 @@
       targetRing.visible = !ply.dead;
       targetRing.position.set(ply.pos.x, ply.pos.y + 0.1, ply.pos.z);
       targetRing.scale.setScalar(1.35 + Math.sin(G.time * 4) * 0.05);
-      const ally = P.party && P.party.members.some((m) => m.id === ply.id);
-      targetRing.material.color.setHex(ally ? 0x7fe08a : 0x7fb6ff); // verde: de tu grupo · azul: otro jugador
+      const ally = isAlly(ply);
+      // verde: de tu grupo · rojo: PK · morado: atacó hace poco · azul: otro jugador
+      targetRing.material.color.setHex(ally ? 0x7fe08a : ply.pvpState === 2 ? 0xff4a3d : ply.pvpState === 1 ? 0xc77dff : 0x7fb6ff);
     } else {
       targetRing.visible = !!t && !t.dead && !t.hidden;
       if (targetRing.visible) {
@@ -1701,7 +1738,7 @@
     PROTOCOL, connect, register, login, resume, logout, exitWorld, createChar, deleteChar, play,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
     clickInventory, useItem, sellItem, destroyItem, unequip, buyItem, respawnPlayer, update, sendChat, sendPhrase, report, classQuest, toggleGems, hatch, toggleMount,
-    invite, inviteByName, answerInvite, leaveParty, kickFromParty,
+    invite, inviteByName, answerInvite, leaveParty, kickFromParty, guild,
     get online() {
       return true;
     },

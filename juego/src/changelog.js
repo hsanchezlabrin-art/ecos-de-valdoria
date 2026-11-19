@@ -8,6 +8,22 @@
 })(function () {
   return [
     {
+      version: '0.23.0',
+      date: '2026-11-18',
+      title: 'Gremios, PvP y habilidades con niveles',
+      items: [
+        'Gremios: fúndalo con el Maestro del Gremio en la Ciudadela (nivel 15 y 1.000 de oro), con nombre, emblema y color.',
+        'Ventana Gremio (tecla G): miembros conectados, rangos Líder, Oficial y Miembro, invitar, expulsar, pasar el mando y mensaje del gremio.',
+        'Chat del gremio: empieza el mensaje con @. El emblema y el nombre del gremio se ven bajo el nombre de cada miembro.',
+        'PvP y PK como en Lineage 2: para atacar a otro jugador usa Ctrl + clic o el botón «Forzar ataque» (en el celular pide confirmación).',
+        'Quien ataca queda con el nombre morado 30 segundos; derrotar a alguien que no peleaba te vuelve PK (nombre rojo y karma, que baja cazando monstruos).',
+        'Sin PvP en ciudades ni para menores de nivel 10, ni contra tu grupo o tu gremio. Al caer no se pierde nada.',
+        'Las habilidades suben de nivel cada 5 niveles del personaje (hasta Nv 8): más poder y algo más de maná.',
+        'Ventana Estado renovada: estadísticas en columnas a la izquierda y habilidades a la derecha (toca una para ver su detalle).',
+        'Los avisos importantes (subidas de nivel, misiones, falta de maná) aparecen en el centro de la pantalla.',
+      ],
+    },
+    {
       version: '0.22.1',
       date: '2026-11-18',
       title: 'App de escritorio siempre al día',

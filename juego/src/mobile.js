@@ -156,8 +156,10 @@
   function initButtons() {
     const Game = V.Game;
     // Atacar: si no hay objetivo, elige el monstruo más cercano y lo ataca
+    // Con un jugador elegido ataca a ese jugador (si es blanco, el servidor pide forzar el ataque)
     $('btnAttack').addEventListener('click', () => {
       const t = G.target;
+      if (G.playerSel && !G.playerSel.dead) return Game.attackTarget();
       if (!t || t.dead || t.hidden) Game.targetNearest();
       Game.attackTarget();
     });

@@ -99,6 +99,8 @@
   #log p.chat-sys { color: #7fb6ff; font-style: italic; }
   .online { font-size: 12px; color: #7fe08a; font-variant-numeric: tabular-nums; }
   .np.np-other { color: #a9cbff; }
+  .np.np-flag { color: #d6a2ff; }
+  .np.np-pk { color: #ff5a4a; text-shadow: 0 0 6px rgba(255, 60, 40, 0.55), 0 1px 2px #000; }
   .mode-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .mode-pick button { padding: 9px 8px; background: rgba(0,0,0,.45); border: 1px solid var(--edge-soft); border-radius: 3px; font: 700 14px var(--display); letter-spacing: .04em; color: var(--muted); }
   .mode-pick button b { color: #7fe08a; font-size: 11px; vertical-align: 2px; }
@@ -123,6 +125,18 @@
   #log p.warn { color: #ff8b78; }
   #log p.lvl { color: var(--gold); font-weight: 700; }
   #log p.npc { color: #c9b8e8; }
+  #log p.quest { color: #b8e08f; font-weight: 700; }
+  /* Avisos importantes en el centro de la pantalla (además del chat, que queda como historial) */
+  #toasts { position: fixed; z-index: 6; top: 32%; left: 50%; transform: translateX(-50%); width: min(560px, 90vw); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+  .toast { max-width: 100%; padding: 7px 16px; border-radius: 4px; background: rgba(11,13,16,.84); border: 1px solid var(--edge); color: var(--parch); font-weight: 700; font-size: 16px; line-height: 1.3; text-align: center; text-shadow: 0 1px 2px #000; box-shadow: 0 6px 18px rgba(0,0,0,.45); animation: toastIn .18s ease-out; transition: opacity .35s, transform .35s; overflow-wrap: anywhere; }
+  .toast.lvl { color: #ffd36b; border-color: var(--gold); }
+  .toast.quest { color: #c8ec9f; border-color: #6f9f4a; }
+  .toast.warn { color: #ffb3aa; border-color: #a0453a; font-size: 14px; padding: 5px 12px; }
+  .toast b { margin-left: 6px; font-size: 12px; color: var(--muted); }
+  .toast.out { opacity: 0; transform: translateY(-8px); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+  /* En el celular la ficha del objetivo ocupa la parte de arriba: los avisos van sobre la barra de acciones */
+  body.touch #toasts { zoom: var(--ui); top: auto; bottom: 30%; }
 
   /* Barra de acciones */
   /* Barra inferior: dos grupos separados — habilidades (1–6) y acciones (pociones, gemas, montura) */
@@ -463,6 +477,15 @@
   .tf-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .tf-actions button:not(.buy) { padding: 6px 8px; font-size: 12px; border: 1px solid var(--edge-soft); border-radius: 3px; background: #1a1d22; color: var(--parch); }
   .tf-actions button.on { border-color: #ff6b5a; color: #ffb3aa; }
+  .tf-actions button.pvp { border-color: #b8463c; color: #ffc2b8; background: #2a1715; }
+  .tf-actions button.pvp:hover { background: #3a1d1a; }
+  .tf-actions button.pvp.ask { flex-basis: 100%; background: #5a1f19; border-color: #ff6b5a; color: #fff; animation: pvpPulse 0.8s ease-in-out infinite alternate; }
+  /* En pantallas táctiles: botones de la ficha más grandes y «Forzar ataque» en su propia fila */
+  body.touch .tf-actions button { min-height: 46px; font-size: 14px; }
+  body.touch .tf-actions button.pvp { flex-basis: 100%; min-height: 56px; font-size: 16px; }
+  @keyframes pvpPulse { from { box-shadow: 0 0 0 rgba(255, 90, 74, 0); } to { box-shadow: 0 0 10px rgba(255, 90, 74, 0.7); } }
+  #tFrame[data-pvp="1"] #tName { color: #d6a2ff; }
+  #tFrame[data-pvp="2"] #tName { color: #ff6b5a; }
   .tf-report { display: grid; gap: 4px; margin-top: 6px; }
   .tf-report small { color: var(--muted); }
   .tf-report button { padding: 6px 8px; font-size: 12px; text-align: left; border: 1px solid var(--edge-soft); border-radius: 3px; background: #1a1d22; color: var(--parch); }
@@ -492,6 +515,57 @@
   .st-grid dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
   .st-grid dt.sep, .st-grid dd.sep { border-top: 1px solid #23211d; padding-top: 6px; margin-top: 2px; }
   .st-grid .up { color: #8fd37a; }
+  /* Gremio */
+  .np .np-guild { display: block; font: 600 11px var(--body); letter-spacing: 0; text-align: center; opacity: .95; }
+  #guildPanel { width: 420px; }
+  #guildBody { display: grid; gap: 12px; }
+  #guildBody p { margin: 0; font-size: 13px; line-height: 1.4; }
+  #guildBody .muted, #guildBody .hint { color: var(--muted); }
+  .gd-badge { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--gc) 70%, #fff), var(--gc)); border: 2px solid #0008; box-shadow: 0 0 0 1px var(--gc), 0 2px 6px #0008; flex: none; }
+  .gd-head { display: flex; gap: 12px; align-items: center; }
+  .gd-head strong { display: block; font: 700 19px var(--display); overflow-wrap: anywhere; }
+  .gd-head small { color: var(--muted); font-size: 12px; }
+  .gd-form { display: grid; gap: 8px; }
+  .gd-lab { display: grid; gap: 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .gd-form input, .gd-inv input, .gd-notice textarea { font: 14px var(--body); color: var(--parch); background: rgba(0,0,0,.5); border: 1px solid var(--edge-soft); border-radius: 3px; padding: 7px 9px; user-select: text; }
+  .gd-pick { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+  .gd-pick button { aspect-ratio: 1; padding: 0; font-size: 20px; border: 1px solid var(--edge-soft); border-radius: 4px; background: #15181d; }
+  .gd-pick button.on { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+  .gd-colors { grid-template-columns: repeat(10, 1fr); }
+  .gd-colors button { border-radius: 50%; }
+  .gd-prev { display: flex; gap: 10px; align-items: center; padding: 8px; border: 1px dashed var(--edge-soft); border-radius: 3px; }
+  .gd-prev strong { font: 700 17px var(--display); overflow-wrap: anywhere; }
+  .gd-req { display: flex; gap: 14px; }
+  .gd-req .ok { color: #8fd37a; }
+  .gd-req .no { color: #ff8a7a; }
+  .gd-notice { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-left: 3px solid var(--gold); background: rgba(0,0,0,.25); }
+  .gd-notice p { flex: 1; font-style: italic; overflow-wrap: anywhere; }
+  .gd-notice textarea { flex: 1; resize: none; }
+  .gd-mini { padding: 3px 8px; font-size: 12px; border: 1px solid var(--edge-soft); border-radius: 3px; background: #1a1d22; color: var(--parch); }
+  .gd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 300px; overflow: auto; }
+  .gd-m { border: 1px solid var(--edge-soft); border-radius: 3px; background: rgba(0,0,0,.22); }
+  .gd-m.open { border-color: var(--gold); }
+  .gd-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; width: 100%; padding: 7px 9px; border: 0; background: none; color: var(--parch); text-align: left; font: inherit; cursor: pointer; }
+  .gd-row.static { cursor: default; }
+  .gd-row small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .gd-nm { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gd-m:not(.on) .gd-nm { color: var(--muted); }
+  .gd-dot { width: 8px; height: 8px; border-radius: 50%; background: #4a4a4a; }
+  .gd-m.on .gd-dot { background: #6fdc6a; box-shadow: 0 0 6px #6fdc6a; }
+  .gd-rk { font-style: normal; font-size: 11px; padding: 2px 6px; border-radius: 10px; background: #23262c; color: var(--muted); }
+  .gd-rk.r1 { background: #24324a; color: #9fc8ff; }
+  .gd-rk.r2 { background: #4a3a18; color: var(--gold); }
+  .gd-acts { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 9px 9px; }
+  .gd-acts button, .gd-foot button { padding: 6px 10px; font-size: 13px; border: 1px solid var(--edge-soft); border-radius: 3px; background: #1a1d22; color: var(--parch); }
+  #guildBody button.warn { border-color: #8a3a32; color: #ffb3aa; }
+  #guildBody button.ask { background: #5a1f19; border-color: #ff6b5a; color: #fff; }
+  .gd-inv { display: flex; gap: 8px; }
+  .gd-inv input { flex: 1; min-width: 0; }
+  .gd-foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  #guildInvitePanel { left: 50%; top: 22%; transform: translateX(-50%); width: min(360px, calc(100% - 24px)); z-index: 7; text-align: center; }
+  #guildInvitePanel p { margin: 0 0 12px; font-size: 16px; }
+  body.touch #guildPanel { width: min(560px, calc(100vw / var(--ui) - 24px)); }
+  body.touch .gd-row, body.touch .gd-acts button, body.touch .gd-foot button { min-height: 44px; }
   /* Panel de misiones */
   #questPanel { width: 380px; }
   #questList { display: grid; gap: 12px; }
@@ -553,7 +627,37 @@
   .set-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--edge-soft); }
   .start-card { position: relative; }
   .set-open { position: absolute; top: 12px; right: 12px; padding: 6px 10px; font-size: 13px; }
-  .st-tabs { margin: 0 0 10px; }
+  /* Panel Estado: estadísticas a la izquierda (en columnas) y habilidades a la derecha */
+  #statPanel { width: min(880px, calc(100vw - 24px)); }
+  .st-cols { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .st-col h3 { margin: 0 0 8px; font: 700 13px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--gold); border-bottom: 1px solid var(--edge-soft); padding-bottom: 4px; }
+  #statList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+  .st-block h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .st-block .st-grid { font-size: 13px; gap: 3px 10px; }
+  .st-block .st-grid dd { overflow-wrap: anywhere; }
+  .st-block.wide { grid-column: 1 / -1; }
+  #skList { display: grid; gap: 6px; }
+  .skr { border: 1px solid var(--edge-soft); border-radius: 3px; background: rgba(0,0,0,.25); }
+  .skr.open { border-color: var(--gold); }
+  .skr.locked { opacity: .6; }
+  .skr > button { width: 100%; display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; padding: 5px 8px; background: none; border: 0; text-align: left; color: inherit; }
+  .skr .ic { width: 34px; height: 34px; display: grid; place-items: center; font-size: 18px; border: 1px solid var(--edge); border-radius: 3px; background: radial-gradient(circle at 50% 35%, #2a2f38, #101216); position: relative; }
+  .skr .ic b { position: absolute; top: 0; left: 2px; font-size: 9px; color: var(--muted); }
+  .skr .nm { font-weight: 700; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+  .skr.ult .nm { color: #ffd27a; }
+  .skr.passive { border-color: #8a7240; }
+  .sk-lv { font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 9px; background: #1f3a1d; color: #8fd37a; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sk-lv.max { background: #3a2f12; color: #ffd27a; }
+  .sk-lv.lock { background: #23211d; color: var(--muted); }
+  .sk-pips { display: flex; gap: 2px; margin-top: 3px; }
+  .sk-pips i { width: 8px; height: 4px; border-radius: 1px; background: #2c2a26; }
+  .sk-pips i.on { background: var(--gold); }
+  .sk-more { padding: 0 10px 9px 52px; display: grid; gap: 4px; font-size: 13px; line-height: 1.35; }
+  .sk-more p { margin: 0; overflow-wrap: anywhere; }
+  .sk-more .muted { color: var(--muted); font-size: 12px; }
+  @media (max-width: 820px) { .st-cols { grid-template-columns: 1fr; } }
+  body.touch .st-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  body.touch #statPanel { width: min(980px, calc(100vw / var(--ui) - 24px)); }
   .st-tabs button { padding: 8px; font-size: 14px; }
   #skList { display: grid; gap: 8px; }
   .sk { display: grid; grid-template-columns: 40px 1fr; gap: 4px 10px; padding: 8px; border: 1px solid var(--edge-soft); border-radius: 3px; background: rgba(0,0,0,.25); }
@@ -615,6 +719,8 @@
   .ft.lvlup { color: #ffd36b; font: 700 30px var(--display); text-shadow: 0 0 12px rgba(255,200,90,.8), 0 2px 3px #000; animation-duration: 2.2s; }
   #log p.chat-party { color: #8fe0a0; }
   #log p.chat-party b { color: #b9f0c4; }
+  #log p.chat-guild { color: #9fc8ff; }
+  #log p.chat-guild b { color: #c9e0ff; }
   body.touch .party-frame { top: calc(104px + env(safe-area-inset-top, 0px)); width: 180px; }
   body.touch #chatInput { display: none; }
   body.touch #chatInput.open { display: block; }
@@ -694,7 +800,7 @@
     <div class="tf-head"><span class="lvl" id="tLvl"></span><span id="tName"></span><button class="x tinfo" id="tInfo" title="Botín posible (Shift + clic)" aria-label="Ver botín posible">i</button><button class="x tclose" id="tClose" aria-label="Soltar objetivo">✕</button></div>
     <div class="tf-title" id="tTitle" hidden></div>
     <div class="bar hp"><i id="tHpFill"></i><span id="tHpTxt"></span></div>
-    <div class="tf-actions" id="tActions" hidden><button type="button" class="buy" id="btnInvite">Invitar al grupo</button><button type="button" id="btnMute" title="No ver sus mensajes">Silenciar</button><button type="button" id="btnReport" title="Avisar a un adulto">Reportar</button></div>
+    <div class="tf-actions" id="tActions" hidden><button type="button" class="buy" id="btnInvite">Invitar al grupo</button><button type="button" class="pvp" id="btnPvp">⚔ Forzar ataque</button><button type="button" id="btnGuildInv">Invitar al gremio</button><button type="button" id="btnMute" title="No ver sus mensajes">Silenciar</button><button type="button" id="btnReport" title="Avisar a un adulto">Reportar</button></div>
     <div class="tf-report" id="reportBox" hidden>
       <small>¿Qué pasó?</small>
       <button type="button" data-reason="insultos">Me insultó</button>
@@ -732,6 +838,7 @@
     <button id="btnInv" data-icon="▣">Inventario <kbd>I</kbd></button>
     <button id="btnStats" data-icon="♙">Estado <kbd>C</kbd></button>
     <button id="btnQuests" data-icon="❗">Misiones <kbd>J</kbd></button>
+    <button id="btnGuild" data-icon="⚑">Gremio <kbd>G</kbd></button>
     <button id="btnMap" data-icon="⌖">Mapa <kbd>M</kbd></button>
     <button id="btnHelp" data-icon="?">Controles <kbd>H</kbd></button>
     <button id="btnGfx" data-icon="⚙">Ajustes <kbd>O</kbd></button>
@@ -774,18 +881,27 @@
   <section class="panel" id="statPanel" hidden>
     <header><h2>Estado</h2><button class="x" data-close="stats" aria-label="Cerrar">✕</button></header>
     <div class="st-head"><span class="lvl" id="stLvl">1</span><div><strong id="stName"></strong><small id="stClass"></small></div></div>
-    <div class="tabs st-tabs" role="tablist">
-      <button type="button" role="tab" data-st="stats" class="on">Estadísticas</button>
-      <button type="button" role="tab" data-st="skills">Habilidades</button>
+    <div class="st-cols">
+      <div class="st-col">
+        <h3>Estadísticas</h3>
+        <div id="statList"></div>
+      </div>
+      <div class="st-col">
+        <h3>Habilidades</h3>
+        <div id="skList"></div>
+        <p class="hint">Toca una habilidad para ver qué hace. Suben de nivel solas cada 5 niveles de tu personaje: más poder y algo más de maná.</p>
+      </div>
     </div>
-    <div id="stView">
-      <dl class="st-grid" id="statList"></dl>
-      <p class="hint">Los golpes críticos hacen daño extra. Tu probabilidad de crítico depende de tu clase, de tu arma y de algunas habilidades.</p>
-    </div>
-    <div id="skView" hidden>
-      <div id="skList"></div>
-      <p class="hint">Las habilidades se usan con las teclas 1–6 (o con los botones redondos junto a «Atacar» en el celular). Las acciones —pociones, Gemas de Poder y montura— están en su propio grupo.</p>
-    </div>
+  </section>
+
+  <section class="panel" id="guildPanel" hidden>
+    <header><h2>Gremio</h2><button class="x" data-close="guild" aria-label="Cerrar">✕</button></header>
+    <div id="guildBody"></div>
+  </section>
+
+  <section class="panel" id="guildInvitePanel" hidden role="dialog" aria-labelledby="guildInviteText">
+    <p id="guildInviteText"></p>
+    <div class="tr-actions"><button type="button" class="buy" id="guildYes">Unirme</button><button type="button" class="btn" id="guildNo">Rechazar</button></div>
   </section>
 
   <section class="panel" id="questPanel" hidden>
@@ -857,6 +973,7 @@
     <dl class="keys">
       <dt>Clic izquierdo</dt><dd>Moverte, atacar a un monstruo, hablar con un NPC o seleccionar a un jugador</dd>
       <dt>Shift + clic</dt><dd>Ver el botín que puede soltar un monstruo</dd>
+      <dt>Ctrl + clic</dt><dd>Atacar a otro jugador (ataque forzado, desde el nivel 10 y fuera de las ciudades). Si derrotas a alguien que no quería pelear te vuelves PK: nombre rojo y karma</dd>
       <dt>Arrastrar</dt><dd>Girar la cámara (botón izquierdo o derecho)</dd>
       <dt>Rueda</dt><dd>Acercar o alejar la cámara</dd>
       <dt>W A S D</dt><dd>Caminar respecto a la cámara</dd>
@@ -864,7 +981,8 @@
       <dt>1 – 6</dt><dd>Habilidades (niveles 1, 3, 5, 8, 11 y 15)</dd>
       <dt>7 · 8</dt><dd>Poción de vida · Poción de maná</dd>
       <dt>I · C · J · M · H · O</dt><dd>Inventario · Estado · Misiones · Mapa · Esta ayuda · Configuración</dd>
-      <dt>Enter</dt><dd>Chat. Empieza con # para hablar solo con tu grupo, o escribe /invitar Nombre</dd>
+      <dt>Enter</dt><dd>Chat. Empieza con # para hablar solo con tu grupo, con @ para tu gremio, o escribe /invitar Nombre</dd>
+      <dt>G</dt><dd>Gremio: miembros, invitar y mensaje del gremio. Se funda con el Maestro del Gremio en la Ciudadela (nivel 15 y 1.000 de oro)</dd>
       <dt>Esc</dt><dd>Cerrar ventanas o soltar el objetivo</dd>
       <dt><span class="np-aggro-key">!</span></dt><dd>Monstruo agresivo: te ataca si te acercas. Los demás solo pelean si los golpeas</dd>
     </dl>
@@ -872,6 +990,7 @@
   </section>
 
   <div id="banner"></div>
+  <div id="toasts" aria-live="polite"></div>
   <div id="reconnecting" hidden role="status"><span class="spin" aria-hidden="true"></span> Se cortó la conexión. Reconectando…</div>
   <div id="death" hidden>
     <div>

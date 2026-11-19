@@ -1,6 +1,7 @@
 // Interfaz (HUD) en HTML sobre el canvas 3D. Los botones funcionan con ratón y con toque.
 (function () {
 const G = V.G;
+const { GUILD_EMBLEMS, GUILD_COLORS, GUILD_RANKS, GUILD_LVL, GUILD_COST } = V.Data;
 const { ITEMS, RARITY, CLASSES, MOBS, shopFor, MAX_LEVEL, xpToNext, sellPrice, className, raceName, resolveDrop, skillLock, passiveFor, STAGES, GRADES, ARMOR_TYPES, WEAPON_TYPES, questFor } = V.Data;
 const equipProblem = (it) => V.Data.equipProblem(G.player, it);
 const { zoneAt } = V.World;
@@ -55,13 +56,13 @@ function initUI() {
     drop: $('dropPanel'),
     master: $('masterPanel'),
     quests: $('questPanel'),
+    guild: $('guildPanel'),
   };
   E.hud.hidden = false;
   E.pName.textContent = G.player.name;
   $('pClass').textContent = className(G.player.cls, G.player.sex, G.player.stage, G.player.branch);
   buildHotbar();
   bindMaster();
-  bindStatTabs();
   bindInvTabs();
   bindSafeChat();
   $('hatchClose').onclick = () => ($('hatchPanel').hidden = true);
@@ -77,12 +78,30 @@ function initUI() {
   $('btnHelp').onclick = () => togglePanel('help');
   $('btnStats').onclick = () => togglePanel('stats');
   $('btnQuests').onclick = () => togglePanel('quests');
+  $('btnGuild').onclick = () => togglePanel('guild');
+  $('btnGuildInv').onclick = () => G.playerSel && V.Game.guild.invite(G.playerSel.id);
+  $('guildYes').onclick = () => answerGuild(true);
+  $('guildNo').onclick = () => answerGuild(false);
   $('btnMap').onclick = () => togglePanel('map');
   $('minimap').onclick = () => togglePanel('map', true);
   $('mmIn').onclick = () => (mmR = Math.max(30, mmR / 1.4));
   $('mmOut').onclick = () => (mmR = Math.min(200, mmR * 1.4));
   $('tInfo').onclick = () => G.target && openDrops(G.target);
   $('btnInvite').onclick = () => G.playerSel && V.Game.invite(G.playerSel.id);
+  // Forzar ataque a un jugador blanco: pide un segundo toque para confirmar (en 6 s), así nadie
+  // ataca por error. A morados y rojos se les ataca directo.
+  let pvpAsk = null; // { id, until }
+  $('btnPvp').onclick = () => {
+    const q = G.playerSel;
+    if (!q) return;
+    if (!q.pvpState && !(pvpAsk && pvpAsk.id === q.id && performance.now() < pvpAsk.until)) {
+      pvpAsk = { id: q.id, until: performance.now() + 6000 };
+      return;
+    }
+    pvpAsk = null;
+    V.Game.attackTarget(true);
+  };
+  G.pvpAsking = (q) => !!(pvpAsk && q && pvpAsk.id === q.id && performance.now() < pvpAsk.until);
   $('btnPartyLeave').onclick = () => V.Game.leaveParty();
   $('inviteYes').onclick = () => answerInvite(true);
   $('inviteNo').onclick = () => answerInvite(false);
@@ -104,7 +123,7 @@ function initUI() {
   // Chat: Enter abre, Enter envía, Esc cierra. "#texto" habla al grupo; "/invitar Nombre" invita.
   const input = $('chatInput');
   E.online.hidden = false;
-  if (V.Mobile && V.Mobile.isTouch) input.placeholder = 'Escribe aquí · #texto para el grupo';
+  if (V.Mobile && V.Mobile.isTouch) input.placeholder = 'Escribe aquí · # grupo · @ gremio';
   input.addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key === 'Enter') {
@@ -158,7 +177,10 @@ function buildHotbar() {
 function skillTitle(s) {
   if (s.locked) return `${s.name}\n${s.desc}`;
   const req = s.stage ? `${STAGES[s.stage].name} · nivel ${s.lvl}` : `nivel ${s.lvl}`;
-  return `${s.ultimate ? '★ ' : ''}${s.name} (${req}) · ${s.mp} MP · ${s.cd} s\n${s.desc}`;
+  const p = G.player;
+  const lvl = p ? V.Data.skillLevel(p, s) : 0;
+  const mp = V.Data.skillMp(s, Math.max(1, lvl));
+  return `${s.ultimate ? '★ ' : ''}${s.name}${lvl ? ` · Nv ${lvl}/${V.Data.skillMaxLevel(s)}` : ` (${req})`} · ${mp} MP · ${s.cd} s\n${s.desc}`;
 }
 
 // Tras un cambio de clase: barra, título y paneles
@@ -184,7 +206,13 @@ function updateHotbar() {
       total = sk.cd;
       const lock = skillLock(p, sk);
       locked = !!lock;
-      low = !p.freeNext && p.mp < sk.mp;
+      const slvl = V.Data.skillLevel(p, sk);
+      low = !p.freeNext && p.mp < V.Data.skillMp(sk, Math.max(1, slvl));
+      // Al subir de nivel la habilidad, su ficha (tooltip) se actualiza
+      if (s.lv !== slvl) {
+        s.lv = slvl;
+        s.b.title = skillTitle(sk);
+      }
       s.lock.textContent = lock === 'Cambio de clase' ? 'Clase' : lock;
     } else if (s.d.kind === 'mount') {
       const lock = !p.pet ? (countItem('huevo_mascota') ? 'Huevo' : 'Nv 5') : p.mountKind ? '' : 'Nv 20';
@@ -255,7 +283,7 @@ function addStatic(pos, height, text, cls, maxDist) {
   el.hidden = true;
   el.textContent = text;
   $('labels').append(el);
-  const s = { pos, height, el, maxDist };
+  const s = { pos, height, el, maxDist, name: text };
   statics.push(s);
   return s;
 }
@@ -307,6 +335,29 @@ function updateNameplates() {
   for (const s of statics) {
     const d = Math.hypot(s.pos.x - cam.x, s.pos.z - cam.z);
     if (s.npcId) s.el.classList.toggle('is-target', !!G.npcSel && G.npcSel.id === s.npcId);
+    // Nombre morado (atacó a alguien hace poco) o rojo (PK)
+    // Gremio: emblema y nombre bajo el nombre del jugador
+    if (s === myPlate || s.ent) {
+      const tag = s === myPlate ? (p.guild ? `${p.guild.emblem}|${p.guild.color}|${p.guild.name}` : '') : s.ent.guildTag || '';
+      if (tag !== (s.gtag || '')) {
+        s.gtag = tag;
+        s.el.textContent = s.name;
+        if (tag) {
+          const [e, c, n] = tag.split('|');
+          const t = document.createElement('small');
+          t.className = 'np-guild';
+          t.style.color = GUILD_COLORS[+c] || '';
+          t.textContent = `${GUILD_EMBLEMS[+e] || ''} ${n}`;
+          s.el.append(t);
+        }
+      }
+    }
+    const pv = s === myPlate ? (p.karma > 0 ? 2 : p.flagT > 0 ? 1 : 0) : s.ent ? s.ent.pvpState || 0 : 0;
+    if (pv !== (s.pvp || 0)) {
+      s.pvp = pv;
+      s.el.classList.toggle('np-flag', pv === 1);
+      s.el.classList.toggle('np-pk', pv === 2);
+    }
     const gone = (s.pos === p.pos && p.dead) || (s.ent && s.ent.dead);
     place(s.el, d < s.maxDist && !gone ? project(s.pos, s.height) : null);
   }
@@ -335,6 +386,40 @@ function log(text, cls = '') {
   line.className = cls;
   line.textContent = text;
   pushLog(line);
+  // Lo importante también se muestra en el centro (lo que ya anuncia el cartel grande, no)
+  if (TOAST_MS[cls] && !/^Has alcanzado el nivel|¡completada!/.test(text)) notify(text, cls);
+}
+
+// ---------- Avisos en el centro de la pantalla ----------
+// lvl: logros (dorado) · quest: progreso de misión (verde) · warn: algo no se pudo hacer (rojo)
+const TOAST_MS = { lvl: 4500, quest: 3200, warn: 2400 };
+function notify(text, kind = 'lvl') {
+  const box = $('toasts');
+  if (!box) return;
+  const ms = TOAST_MS[kind] || 3000;
+  // El mismo aviso repetido no se apila: se renueva y cuenta las veces
+  for (const t of box.children) {
+    if (t.dataset.text !== text || t.classList.contains('out')) continue;
+    t.dataset.n = String(Number(t.dataset.n || 1) + 1);
+    t.lastChild.textContent = `×${t.dataset.n}`;
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => dismissToast(t), ms);
+    return;
+  }
+  const t = document.createElement('div');
+  t.className = `toast ${kind}`;
+  t.dataset.text = text;
+  t.append(text, document.createElement('b'));
+  box.append(t);
+  // Como mucho 4 a la vez: se va el más antiguo
+  const live = [...box.children].filter((x) => !x.classList.contains('out'));
+  if (live.length > 4) dismissToast(live[0]);
+  t._timer = setTimeout(() => dismissToast(t), ms);
+}
+function dismissToast(t) {
+  clearTimeout(t._timer);
+  t.classList.add('out');
+  setTimeout(() => t.remove(), 400);
 }
 
 function logLoot(id, qty, verb = 'Obtienes') {
@@ -429,12 +514,18 @@ function chat(msg) {
   if (!E) return;
   // Mensajes de jugadores silenciados, y mensajes escritos en el modo solo frases
   const own = G.player && msg.id === G.player.id;
-  if ((msg.kind === 'player' || msg.kind === 'party') && !own) {
+  if ((msg.kind === 'player' || msg.kind === 'party' || msg.kind === 'guild') && !own) {
     if (mutedNames.has(msg.name)) return;
     if (safeChat && !msg.phrase) return;
   }
   const line = document.createElement('p');
-  if (msg.kind === 'party') {
+  if (msg.kind === 'guild') {
+    line.className = 'chat-guild';
+    const who = document.createElement('b');
+    who.textContent = `[Gremio] ${msg.name}: `;
+    line.append(who, msg.text);
+    showBubble(msg.id, msg.text);
+  } else if (msg.kind === 'party') {
     line.className = 'chat-party';
     const who = document.createElement('b');
     who.textContent = `[Grupo] ${msg.name}: `;
@@ -611,7 +702,11 @@ function closeAll() {
     answerInvite(false);
     return true;
   }
-  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help', 'quests']) {
+  if (!$('guildInvitePanel').hidden) {
+    answerGuild(false);
+    return true;
+  }
+  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help', 'quests', 'guild']) {
     if (!E[k].hidden) {
       E[k].hidden = true;
       closed = true;
@@ -861,6 +956,7 @@ function refreshPanels() {
   }
   if (!E.stats.hidden) renderStats();
   if (!E.quests.hidden) renderQuests();
+  if (!E.guild.hidden) renderGuild();
   if (!E.shop.hidden) {
     const list = $('shopList');
     list.innerHTML = '';
@@ -1025,11 +1121,24 @@ function updateUI() {
     E.tLvl.textContent = ply.level || '?';
     E.tName.textContent = ply.name;
     const inParty = p.party && p.party.members.some((m) => m.id === ply.id);
-    tTitle.textContent = `${className(ply.cls, ply.sex, ply.stage, ply.branch)}${inParty ? ' · De tu grupo' : ''}`;
+    const pv = ply.pvpState || 0;
+    const tag = inParty ? ' · De tu grupo' : pv === 2 ? ' · PK' : pv === 1 ? ' · En combate PvP' : '';
+    const title = `${className(ply.cls, ply.sex, ply.stage, ply.branch)}${tag}`;
+    if (tTitle.textContent !== title) tTitle.textContent = title;
+    E.tFrame.dataset.pvp = pv;
+    // Atacar: a morados y rojos directo; a los demás, ataque forzado (como Ctrl + clic)
+    const pvpBtn = $('btnPvp');
+    pvpBtn.hidden = !!inParty || ply.dead;
+    const asking = !pv && G.pvpAsking(ply);
+    const pvpTxt = pv ? '⚔ Atacar' : asking ? '¿Seguro? Si lo derrotas serás PK · Toca otra vez' : '⚔ Forzar ataque';
+    if (pvpBtn.textContent !== pvpTxt) pvpBtn.textContent = pvpTxt;
+    pvpBtn.classList.toggle('ask', asking);
+    pvpBtn.title = pv ? 'Es PK o está en combate: se le puede atacar' : 'Atacar a este jugador (igual que Ctrl + clic). Si lo derrotas te volverás PK.';
     tTitle.hidden = false;
     tBar.hidden = false;
     bar(E.tHp, E.tHpT, ply.hp, ply.stats.maxHp);
     $('btnInvite').hidden = !!inParty || !!(p.party && p.party.leader !== p.id);
+    $('btnGuildInv').hidden = !(p.guild && p.guild.rank >= 1) || !!ply.guildTag;
     $('tActions').hidden = false;
     const muted = mutedNames.has(ply.name);
     if ($('btnMute').textContent !== (muted ? 'Quitar silencio' : 'Silenciar')) $('btnMute').textContent = muted ? 'Quitar silencio' : 'Silenciar';
@@ -1074,6 +1183,7 @@ function updateUI() {
   if (frame % 6 === 0) renderParty();
   if (frame % 20 === 0 && !E.stats.hidden) renderStats();
   if (frame % 20 === 0 && !E.quests.hidden) renderQuests();
+  if (frame % 20 === 0 && !E.guild.hidden) renderGuild();
   if (!E.map.hidden && frame % 2 === 0) drawBigMap();
   if (frame % 15 === 0) {
     const z = zoneAt(p.pos);
@@ -1102,6 +1212,256 @@ function questBar(cur, max, label) {
   s.textContent = label;
   b.append(i, s);
   return b;
+}
+
+// ---------- Gremio (tecla G) ----------
+
+let guildFound = false; // abierto desde el Maestro del Gremio: muestra cómo fundarlo
+const guildForm = { name: '', emblem: 0, color: 0 };
+let guildOpenRow = null; // miembro con sus acciones a la vista
+let guildEditNotice = false;
+
+function openGuild(found) {
+  guildFound = !!found;
+  togglePanel('guild', true);
+}
+function guildChanged() {
+  guildOpenRow = null;
+  guildEditNotice = false;
+  if (!E.guild.hidden) renderGuild();
+}
+
+// Botón que pide un segundo toque para confirmar (5 s)
+function confirmBtn(b, ask, fn) {
+  b.onclick = () => {
+    if (b.dataset.ask && performance.now() < +b.dataset.ask) return fn();
+    b.dataset.ask = performance.now() + 5000;
+    b.dataset.label = b.dataset.label || b.textContent;
+    b.textContent = ask;
+    b.classList.add('ask');
+    setTimeout(() => {
+      if (!b.isConnected) return;
+      b.textContent = b.dataset.label;
+      b.classList.remove('ask');
+      delete b.dataset.ask;
+    }, 5000);
+  };
+}
+
+function renderGuild() {
+  const p = G.player;
+  const g = p.guild;
+  const box = $('guildBody');
+  const key = g
+    ? `${g.id}:${g.ver}:${guildOpenRow}:${guildEditNotice}`
+    : `none:${guildFound}:${p.level >= GUILD_LVL}:${p.gold >= GUILD_COST}:${guildForm.emblem}:${guildForm.color}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = '';
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const badge = (emblem, color) => {
+    const b = el('span', 'gd-badge', GUILD_EMBLEMS[emblem] || '?');
+    b.style.setProperty('--gc', GUILD_COLORS[color] || '#888');
+    return b;
+  };
+
+  if (!g) {
+    box.append(el('p', 'gd-intro', 'Un gremio reúne a tus amigos: tienen su propio chat (escribe @ antes del mensaje), su emblema bajo el nombre y no pueden atacarse entre ustedes.'));
+    if (!guildFound) {
+      box.append(el('p', 'muted', `Para fundar uno habla con el Maestro del Gremio en la Ciudadela de Gludio-Cubo (nivel ${GUILD_LVL} y ${GUILD_COST.toLocaleString('es')} de oro). También puedes unirte si un líder u oficial te invita.`));
+      return;
+    }
+    const form = el('div', 'gd-form');
+    const nameLab = el('label', 'gd-lab', 'Nombre del gremio');
+    const name = el('input');
+    name.id = 'guildName';
+    name.maxLength = 18;
+    name.placeholder = 'Ej.: Los Dragones';
+    name.value = guildForm.name;
+    name.autocomplete = 'off';
+    name.oninput = () => {
+      guildForm.name = name.value;
+      prevName.textContent = name.value.trim() || 'Tu gremio';
+    };
+    name.addEventListener('keydown', (e) => e.stopPropagation());
+    nameLab.append(name);
+    const emb = el('div', 'gd-pick');
+    GUILD_EMBLEMS.forEach((e, i) => {
+      const b = el('button', i === guildForm.emblem ? 'on' : '', e);
+      b.type = 'button';
+      b.setAttribute('aria-label', `Emblema ${i + 1}`);
+      b.onclick = () => {
+        guildForm.emblem = i;
+        renderGuild();
+      };
+      emb.append(b);
+    });
+    const col = el('div', 'gd-pick gd-colors');
+    GUILD_COLORS.forEach((c, i) => {
+      const b = el('button', i === guildForm.color ? 'on' : '');
+      b.type = 'button';
+      b.style.background = c;
+      b.setAttribute('aria-label', `Color ${i + 1}`);
+      b.onclick = () => {
+        guildForm.color = i;
+        renderGuild();
+      };
+      col.append(b);
+    });
+    const prev = el('div', 'gd-prev');
+    const prevName = el('strong', '', guildForm.name.trim() || 'Tu gremio');
+    prevName.style.color = GUILD_COLORS[guildForm.color];
+    prev.append(badge(guildForm.emblem, guildForm.color), prevName);
+    const okLvl = p.level >= GUILD_LVL;
+    const okGold = p.gold >= GUILD_COST;
+    const req = el('p', 'gd-req');
+    req.append(el('span', okLvl ? 'ok' : 'no', `${okLvl ? '✔' : '✘'} Nivel ${GUILD_LVL}`), el('span', okGold ? 'ok' : 'no', `${okGold ? '✔' : '✘'} ${GUILD_COST.toLocaleString('es')} oro`));
+    const go = el('button', 'buy', 'Fundar gremio');
+    go.type = 'button';
+    go.disabled = !okLvl || !okGold;
+    go.onclick = () => V.Game.guild.create(name.value, guildForm.emblem, guildForm.color);
+    form.append(nameLab, el('div', 'gd-lab', 'Emblema'), emb, el('div', 'gd-lab', 'Color'), col, prev, req, go);
+    box.append(form);
+    return;
+  }
+
+  // Con gremio: cabecera, mensaje, miembros, invitar y salir
+  const head = el('div', 'gd-head');
+  const t = el('div');
+  const nm = el('strong', '', g.name);
+  nm.style.color = GUILD_COLORS[g.color];
+  const online = g.members.filter((m) => m.online).length;
+  t.append(nm, el('small', '', `${g.members.length}/${g.max} miembros · ${online} conectados · Tu rango: ${GUILD_RANKS[g.rank]}`));
+  head.append(badge(g.emblem, g.color), t);
+  box.append(head);
+
+  const nb = el('div', 'gd-notice');
+  if (guildEditNotice) {
+    const ta = el('textarea');
+    ta.maxLength = 140;
+    ta.rows = 2;
+    ta.value = g.notice;
+    ta.addEventListener('keydown', (e) => e.stopPropagation());
+    const save = el('button', 'buy', 'Guardar');
+    save.type = 'button';
+    save.onclick = () => {
+      V.Game.guild.notice(ta.value);
+      guildEditNotice = false;
+      renderGuild();
+    };
+    nb.append(ta, save);
+  } else {
+    nb.append(el('p', g.notice ? '' : 'muted', g.notice || 'Sin mensaje del gremio.'));
+    if (g.rank >= 1) {
+      const ed = el('button', 'gd-mini', 'Editar');
+      ed.type = 'button';
+      ed.onclick = () => {
+        guildEditNotice = true;
+        renderGuild();
+      };
+      nb.append(ed);
+    }
+  }
+  box.append(nb);
+
+  const list = el('ul', 'gd-list');
+  const sorted = [...g.members].sort((a, b) => b.online - a.online || b.rank - a.rank || b.level - a.level || a.name.localeCompare(b.name));
+  const meKey = p.name.toLowerCase();
+  for (const m of sorted) {
+    const li = el('li', `gd-m${m.online ? ' on' : ''}${guildOpenRow === m.key ? ' open' : ''}`);
+    const row = el('button', 'gd-row');
+    row.type = 'button';
+    row.append(el('i', 'gd-dot'), el('span', 'gd-nm', m.name), el('small', '', `Nv ${m.level} · ${raceName(m.cls, m.sex)}`), el('em', `gd-rk r${m.rank}`, GUILD_RANKS[m.rank]));
+    li.append(row);
+    // Acciones posibles sobre este miembro
+    const acts = [];
+    if (m.key !== meKey) {
+      if (g.rank === 2) {
+        const r = el('button', '', m.rank === 1 ? 'Quitar oficial' : 'Nombrar oficial');
+        r.onclick = () => V.Game.guild.rank(m.key, m.rank === 1 ? 0 : 1);
+        acts.push(r);
+        const l = el('button', '', 'Hacer líder');
+        confirmBtn(l, '¿Seguro? Toca otra vez', () => V.Game.guild.leader(m.key));
+        acts.push(l);
+      }
+      if (g.rank >= 1 && m.rank < g.rank) {
+        const k = el('button', 'warn', 'Expulsar');
+        confirmBtn(k, '¿Expulsar? Toca otra vez', () => V.Game.guild.kick(m.key));
+        acts.push(k);
+      }
+    }
+    if (acts.length) {
+      row.onclick = () => {
+        guildOpenRow = guildOpenRow === m.key ? null : m.key;
+        renderGuild();
+      };
+      if (guildOpenRow === m.key) {
+        const a = el('div', 'gd-acts');
+        for (const b of acts) {
+          b.type = 'button';
+          a.append(b);
+        }
+        li.append(a);
+      }
+    } else row.classList.add('static');
+    list.append(li);
+  }
+  box.append(list);
+
+  if (g.rank >= 1) {
+    const inv = el('div', 'gd-inv');
+    const who = el('input');
+    who.placeholder = 'Nombre del jugador';
+    who.maxLength = 16;
+    who.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && who.value.trim()) {
+        V.Game.guild.inviteByName(who.value.trim());
+        who.value = '';
+      }
+    });
+    const b = el('button', 'buy', 'Invitar');
+    b.type = 'button';
+    b.onclick = () => {
+      if (!who.value.trim()) return;
+      V.Game.guild.inviteByName(who.value.trim());
+      who.value = '';
+    };
+    inv.append(who, b);
+    box.append(inv, el('p', 'hint', 'También puedes elegir a un jugador y tocar «Invitar al gremio» en su ficha. Escribe @ antes de un mensaje para hablar con el gremio.'));
+  } else box.append(el('p', 'hint', 'Escribe @ antes de un mensaje para hablar con el gremio.'));
+
+  const foot = el('div', 'gd-foot');
+  if (g.rank === 2) {
+    const d = el('button', 'warn', 'Disolver gremio');
+    d.type = 'button';
+    confirmBtn(d, '¿Disolver para siempre? Toca otra vez', () => V.Game.guild.disband());
+    foot.append(d);
+  }
+  if (g.rank < 2 || g.members.length === 1) {
+    const lv = el('button', 'warn', 'Salir del gremio');
+    lv.type = 'button';
+    confirmBtn(lv, '¿Salir? Toca otra vez', () => V.Game.guild.leave());
+    foot.append(lv);
+  }
+  box.append(foot);
+}
+
+function showGuildInvite(ev) {
+  $('guildInviteText').textContent = `${ev.name} te invita a su gremio ${ev.emblem} ${ev.guild}.`;
+  $('guildInviteText').style.setProperty('--gc', ev.color || '');
+  $('guildInvitePanel').hidden = false;
+  clearTimeout(showGuildInvite.t);
+  showGuildInvite.t = setTimeout(() => !$('guildInvitePanel').hidden && answerGuild(false), 28000);
+}
+function answerGuild(accept) {
+  $('guildInvitePanel').hidden = true;
+  V.Game.guild.answer(accept);
 }
 
 function renderQuests() {
@@ -1201,31 +1561,24 @@ function renderQuests() {
   }
 }
 
-// ---------- Panel Estado: pestaña Habilidades ----------
-let stTab = 'stats';
-function bindStatTabs() {
-  document.querySelectorAll('#statPanel [data-st]').forEach((b) => {
-    b.onclick = () => {
-      stTab = b.dataset.st;
-      document.querySelectorAll('#statPanel [data-st]').forEach((x) => x.classList.toggle('on', x === b));
-      $('stView').hidden = stTab !== 'stats';
-      $('skView').hidden = stTab !== 'skills';
-      renderStats();
-    };
-  });
-}
+// ---------- Panel Estado: habilidades (lista compacta; al tocar una se ven sus detalles) ----------
+const skOpen = new Set(); // habilidades desplegadas (se recuerdan mientras dura la partida)
 
 function renderSkills() {
   const p = G.player;
   const list = $('skList');
-  const key = `${p.cls}|${p.stage}|${p.branch}|${p.level}`;
-  if (list.dataset.key === key) return; // solo cambia al subir de nivel o de clase
+  const key = `${p.cls}|${p.stage}|${p.branch}|${p.level}|${[...skOpen].join(',')}`;
+  if (list.dataset.key === key) return; // solo cambia al subir de nivel, de clase o al desplegar
   list.dataset.key = key;
   list.innerHTML = '';
-  const card = (glyph, keyLabel, name, sub, desc, tag, cls) => {
-    const el = document.createElement('div');
-    el.className = `sk ${cls || ''}`;
-    const ic = document.createElement('div');
+  const D = V.Data;
+  const row = (id, glyph, keyLabel, name, badge, cls, details) => {
+    const box = document.createElement('div');
+    box.className = `skr ${cls || ''} ${skOpen.has(id) ? 'open' : ''}`;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-expanded', skOpen.has(id) ? 'true' : 'false');
+    const ic = document.createElement('span');
     ic.className = 'ic';
     ic.textContent = glyph;
     if (keyLabel) {
@@ -1233,39 +1586,65 @@ function renderSkills() {
       k.textContent = keyLabel;
       ic.append(k);
     }
-    const nm = document.createElement('div');
+    const nm = document.createElement('span');
     nm.className = 'nm';
-    nm.append(name);
-    if (sub) {
-      const sm = document.createElement('small');
-      sm.textContent = sub;
-      nm.append(sm);
+    nm.textContent = name;
+    if (badge.pips) {
+      const pips = document.createElement('span');
+      pips.className = 'sk-pips';
+      for (let i = 1; i <= badge.pips.max; i++) {
+        const pip = document.createElement('i');
+        if (i <= badge.pips.lvl) pip.className = 'on';
+        pips.append(pip);
+      }
+      nm.append(pips);
     }
-    if (tag) {
-      const t = document.createElement('span');
-      t.className = `tag ${tag.ok ? 'ok' : ''}`;
-      t.textContent = tag.text;
-      nm.append(t);
+    const lv = document.createElement('span');
+    lv.className = `sk-lv ${badge.cls || ''}`;
+    lv.textContent = badge.text;
+    b.append(ic, nm, lv);
+    b.onclick = () => {
+      if (skOpen.has(id)) skOpen.delete(id);
+      else skOpen.add(id);
+      renderSkills();
+    };
+    box.append(b);
+    if (skOpen.has(id)) {
+      const more = document.createElement('div');
+      more.className = 'sk-more';
+      for (const [text, muted] of details) {
+        const pEl = document.createElement('p');
+        if (muted) pEl.className = 'muted';
+        pEl.textContent = text;
+        more.append(pEl);
+      }
+      box.append(more);
     }
-    const ds = document.createElement('div');
-    ds.className = 'ds';
-    ds.textContent = desc;
-    el.append(ic, nm, ds);
-    list.append(el);
+    list.append(box);
   };
   const pas = passiveFor(p.cls, p.stage, p.branch);
-  if (pas) card('✧', '', pas.name, 'Pasiva · siempre activa', pas.desc || '', { ok: true, text: 'Activa' }, 'passive');
+  if (pas) row('pasiva', '✧', '', pas.name, { text: 'Pasiva', cls: 'max' }, 'passive', [[pas.desc || ''], ['Siempre activa.', true]]);
   p.skills.forEach((s, i) => {
     const lock = skillLock(p, s);
-    const req = s.stage ? `${STAGES[s.stage].name} · nivel ${s.lvl}` : `Nivel ${s.lvl}`;
-    const sub = s.locked ? '' : `${req} · ${s.mp} MP · recarga ${s.cd} s`;
-    const tag = lock ? { ok: false, text: lock === 'Cambio de clase' ? 'Requiere cambio de clase' : `Se desbloquea en ${lock}` } : { ok: true, text: 'Disponible' };
-    card(s.glyph, String(i + 1), `${s.ultimate ? '★ ' : ''}${s.name}`, sub, s.desc || '', tag, `${lock ? 'locked' : ''} ${s.ultimate ? 'ult' : ''}`);
+    const lvl = D.skillLevel(p, s);
+    const max = D.skillMaxLevel(s);
+    const next = D.skillNextAt(p, s);
+    const req = s.stage ? `${STAGES[s.stage].name} · nivel ${s.lvl}` : `nivel ${s.lvl}`;
+    const details = [[s.desc || '']];
+    if (!s.locked) {
+      const shown = Math.max(1, lvl);
+      const bonus = Math.round((D.skillPower(shown) - 1) * 100);
+      details.push([`Maná ${D.skillMp(s, shown)} · recarga ${s.cd} s${bonus ? ` · poder +${bonus}%` : ''}`]);
+      if (lock) details.push([lock === 'Cambio de clase' ? `Se desbloquea con el ${STAGES[s.stage].name} (Maestro Aldric).` : `Se desbloquea en el ${req}.`, true]);
+      else details.push([next ? `Sube a Nv ${lvl + 1} al llegar a nivel ${next}.` : 'Nivel máximo alcanzado.', true]);
+    }
+    const badge = lock ? { text: lock === 'Cambio de clase' ? 'Clase' : lock, cls: 'lock' } : { text: `Nv ${lvl}/${max}`, cls: lvl >= max ? 'max' : '', pips: { lvl, max } };
+    row(s.id, s.glyph, String(i + 1), `${s.ultimate ? '★ ' : ''}${s.name}`, badge, `${lock ? 'locked' : ''} ${s.ultimate ? 'ult' : ''}`, details);
   });
 }
 
 function renderStats() {
-  if (stTab === 'skills') return renderSkills();
+  renderSkills();
   const p = G.player;
   const s = p.stats;
   $('stLvl').textContent = p.level;
@@ -1274,41 +1653,60 @@ function renderStats() {
   const need = p.level >= MAX_LEVEL ? 0 : xpToNext(p.level);
   const buffed = (p.buffs || []).length > 0;
   const pas = passiveFor(p.cls, p.stage, p.branch);
-  const rows = [
-    ['Raza', raceName(p.cls, p.sex)],
-    ['Etapa de clase', `${STAGES[p.stage].name}${p.branch ? ` · Rama ${p.branch.toUpperCase()}` : ''}`],
-    ['Pasiva', pas ? pas.name : 'Nivel 25 (Especialización)'],
-    ['Vida', `${Math.round(p.hp)} / ${s.maxHp}`, false, 'sep'],
-    ['Maná', `${Math.round(p.mp)} / ${s.maxMp}`],
-    ['Experiencia', need ? `${p.xp.toLocaleString('es')} / ${need.toLocaleString('es')}` : 'Nivel máximo'],
-    ['Ataque', Math.round(s.atk), buffed, 'sep'],
-    ['Defensa', Math.round(s.def)],
-    ['Prob. de crítico', `${(s.crit * 100).toFixed(1)}%`],
-    ['Daño crítico', `×${(s.critMult || 1.8).toFixed(1)}`],
-    ['Vel. de ataque', `${(1 / s.atkSpeed).toFixed(2)} golpes/s`, buffed],
-    ['Vel. de movimiento', `${(s.speed || 7.2).toFixed(1)} m/s${p.swimming ? ' (nadando: 60%)' : ''}`, buffed],
-    ['Alcance', s.range > 3 ? `${s.range} m` : 'Cuerpo a cuerpo'],
-    ['Esquivar', `${Math.round((s.evade || 0) * 100)}%`],
-    ['Daño recibido', s.dr ? `−${Math.round(s.dr * 100)}%` : 'Normal', !!s.dr],
-    ['Bloqueo', s.block ? `${Math.round(s.block * 100)}%` : '—'],
-    ['Curación', `${Math.round((s.heal || 1) * 100)}%`],
-    ['Arma', p.equip.weapon ? ITEMS[p.equip.weapon].name : 'Ninguna', false, 'sep'],
-    ['Armadura', p.equip.armor ? ITEMS[p.equip.armor].name : 'Ninguna'],
-    ['Oro', p.gold.toLocaleString('es')],
+  // Bloques de estadísticas: se ordenan en dos columnas para que la lista no sea tan larga
+  const blocks = [
+    ['Personaje', [
+      ['Raza', raceName(p.cls, p.sex)],
+      ['Etapa', `${STAGES[p.stage].name}${p.branch ? ` · Rama ${p.branch.toUpperCase()}` : ''}`],
+      ['Pasiva', pas ? pas.name : 'Nivel 25'],
+      ['PvP / PK', `${p.pvp || 0} / ${p.pk || 0}`],
+      ['Karma', p.karma ? `${p.karma} (nombre rojo)` : p.flagT ? `0 · morado ${p.flagT} s` : '0'],
+    ]],
+    ['Vida y maná', [
+      ['Vida', `${Math.round(p.hp)} / ${s.maxHp}`],
+      ['Maná', `${Math.round(p.mp)} / ${s.maxMp}`],
+      ['Experiencia', need ? `${Math.floor((p.xp / need) * 100)}%` : 'Máx.'],
+    ]],
+    ['Ataque', [
+      ['Ataque', Math.round(s.atk), buffed],
+      ['Crítico', `${(s.crit * 100).toFixed(1)}%`],
+      ['Daño crítico', `×${(s.critMult || 1.8).toFixed(1)}`],
+      ['Vel. ataque', `${(1 / s.atkSpeed).toFixed(2)}/s`, buffed],
+      ['Alcance', s.range > 3 ? `${s.range} m` : 'Cuerpo a cuerpo'],
+    ]],
+    ['Defensa', [
+      ['Defensa', Math.round(s.def)],
+      ['Esquivar', `${Math.round((s.evade || 0) * 100)}%`],
+      ['Bloqueo', s.block ? `${Math.round(s.block * 100)}%` : '—'],
+      ['Daño recibido', s.dr ? `−${Math.round(s.dr * 100)}%` : 'Normal', !!s.dr],
+      ['Curación', `${Math.round((s.heal || 1) * 100)}%`],
+    ]],
+    ['Equipo y movimiento', [
+      ['Arma', p.equip.weapon ? ITEMS[p.equip.weapon].name : 'Ninguna'],
+      ['Armadura', p.equip.armor ? ITEMS[p.equip.armor].name : 'Ninguna'],
+      ['Velocidad', `${(s.speed || 7.2).toFixed(1)} m/s${p.swimming ? ' (nadando)' : ''}`, buffed],
+      ['Oro', p.gold.toLocaleString('es')],
+    ], 'wide'],
   ];
-  const dl = $('statList');
-  dl.innerHTML = '';
-  for (const [k, val, up, cls] of rows) {
-    const dt = document.createElement('dt');
-    dt.textContent = k;
-    const dd = document.createElement('dd');
-    dd.textContent = val;
-    if (up) dd.classList.add('up');
-    if (cls) {
-      dt.classList.add(cls);
-      dd.classList.add(cls);
+  const box = $('statList');
+  box.innerHTML = '';
+  for (const [title, rows, cls] of blocks) {
+    const b = document.createElement('section');
+    b.className = `st-block ${cls || ''}`;
+    const h = document.createElement('h4');
+    h.textContent = title;
+    const dl = document.createElement('dl');
+    dl.className = 'st-grid';
+    for (const [k, val, up] of rows) {
+      const dt = document.createElement('dt');
+      dt.textContent = k;
+      const dd = document.createElement('dd');
+      dd.textContent = val;
+      if (up) dd.classList.add('up');
+      dl.append(dt, dd);
     }
-    dl.append(dt, dd);
+    b.append(h, dl);
+    box.append(b);
   }
 }
 
@@ -1672,8 +2070,8 @@ function drawBigMap() {
 }
 
 V.UI = {
-  initUI, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
-  floatText, log, logLoot, banner, showDeath, showInvite, openDrops,
+  initUI, notify, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
+  floatText, log, logLoot, banner, showDeath, showInvite, openDrops, openGuild, guildChanged, showGuildInvite,
   togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI, openTrade,
   classChanged, openMaster, refreshMaster, openHatch,
 };

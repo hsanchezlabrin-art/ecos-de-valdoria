@@ -208,6 +208,225 @@ for (const cls of Data.CLASS_IDS) {
   ok(!g.cds.corte_cruzado, 'Corte Cruzado está bloqueado hasta el Despertar');
 }
 
+// 2c) Niveles de habilidad (estilo Lineage 2): suben con el nivel del personaje
+{
+  const w = Sim.createWorld();
+  Sim.spawnMobs(w);
+  const p = Sim.addPlayer(w, Sim.newCharacter('Aprendiz', 'lagarto', 'm'));
+  const sk = p.skills[0];
+  ok(Data.skillLevel(p, sk) === 1, 'una habilidad recién aprendida está en Nv 1');
+  p.level = sk.lvl + Data.SKILL_LVL_EVERY;
+  ok(Data.skillLevel(p, sk) === 2, `sube a Nv 2 a los ${Data.SKILL_LVL_EVERY} niveles`);
+  p.level = 50;
+  ok(Data.skillLevel(p, sk) === Data.skillMaxLevel(sk) && Data.skillMaxLevel(sk) === 8, 'llega como máximo a Nv 8');
+  const ult = p.skills.find((s) => s.ultimate);
+  p.level = 1;
+  ok(!ult || Data.skillLevel(p, ult) === 0, 'una habilidad bloqueada no tiene nivel');
+  ok(Data.skillPower(3) > Data.skillPower(1) && Data.skillMp(sk, 3) > Data.skillMp(sk, 1), 'cada nivel da más poder y cuesta algo más de maná');
+  // El servidor cobra el maná del nivel actual
+  const m = w.mobs.find((x) => x.key === 'duende');
+  m.maxHp = m.hp = 1e6;
+  const spend = (lvl) => {
+    p.level = lvl;
+    p.cds = {};
+    p.mp = 5000;
+    p.pos.x = m.pos.x - 1.5;
+    p.pos.z = m.pos.z;
+    C.setTarget(w, p, m);
+    C.useSkill(w, p, 0);
+    return 5000 - p.mp;
+  };
+  const low = spend(sk.lvl);
+  const high = spend(sk.lvl + Data.SKILL_LVL_EVERY * 4);
+  ok(low === Data.skillMp(sk, 1) && high === Data.skillMp(sk, 5) && high > low, `a Nv 5 la habilidad cuesta más maná (${low} → ${high})`);
+}
+
+// 2d) PvP y PK (estilo Lineage 2): Ctrl para forzar, nombre morado, karma y nombre rojo
+{
+  const w = Sim.createWorld();
+  const run = (s) => {
+    for (let t = 0; t < s; t += 0.1) Sim.step(w, 0.1);
+  };
+  const mk = (name, x, lvl = 20) => Sim.addPlayer(w, { ...Sim.newCharacter(name, 'lagarto'), level: lvl, pos: { x, z: 14 } });
+  const logs = (p) => Sim.drainEvents(w).filter((e) => e.type === 'log' && e.to === p.id).map((e) => e.text);
+  const a = mk('Ataca', 50);
+  const b = mk('Blanco', 51.2);
+  Sim.drainEvents(w);
+
+  // Sin Ctrl no se ataca a un jugador blanco
+  C.setTarget(w, a, b);
+  C.attack(w, a);
+  run(1.5);
+  ok(!a.autoAttack && b.hp === b.stats.maxHp, 'sin forzar (Ctrl) no se ataca a un jugador blanco');
+  ok(logs(a).some((t) => /Ctrl/.test(t)), 'avisa que hay que mantener Ctrl');
+
+  // Con Ctrl sí, y el atacante queda morado
+  C.attack(w, a, true);
+  run(2);
+  ok(b.hp < b.stats.maxHp, 'con ataque forzado sí se le hace daño');
+  ok(Sim.pvpState(a) === 1 && Sim.pvpState(b) === 0, 'el atacante queda morado; la víctima sigue blanca');
+  // La víctima se defiende sin Ctrl (el atacante es morado)
+  C.setTarget(w, b, a);
+  C.attack(w, b);
+  ok(b.autoAttack, 'la víctima puede defenderse sin Ctrl');
+  C.setTarget(w, b, null);
+  C.setTarget(w, a, null);
+  run(31);
+  ok(Sim.pvpState(a) === 0, 'el nombre morado se apaga a los 30 segundos');
+
+  // Zonas seguras y protección de novatos
+  const n = mk('Novato', 52.4, 5);
+  C.setTarget(w, a, n);
+  C.attack(w, a, true);
+  ok(!a.autoAttack, `los menores de nivel ${Sim.PVP_MIN_LEVEL} no pueden ser atacados`);
+  a.pos.x = 0;
+  a.pos.z = 3;
+  b.pos.x = 1;
+  b.pos.z = 3;
+  C.setTarget(w, a, b);
+  C.attack(w, a, true);
+  ok(!a.autoAttack, 'en la aldea (zona segura) no hay PvP');
+  a.pos.x = 50;
+  a.pos.z = 14;
+  b.pos.x = 51.2;
+  b.pos.z = 14;
+
+  // Derrotar a un jugador blanco = PK: karma y nombre rojo
+  b.hp = 1;
+  b.stats.evade = 0;
+  C.setTarget(w, a, b);
+  C.attack(w, a, true);
+  run(2);
+  ok(b.dead && a.pk === 1 && a.karma > 0 && Sim.pvpState(a) === 2, `derrotar a un jugador blanco te hace PK (karma ${a.karma})`);
+  ok(Sim.serialize(a).karma === a.karma && Sim.serialize(a).pk === 1, 'el karma y los PK se guardan');
+
+  // A un PK se le ataca sin Ctrl y sin quedar morado
+  const h = mk('Cazador', 51.2);
+  C.setTarget(w, h, a);
+  C.attack(w, h);
+  run(1.5);
+  ok(h.autoAttack && a.hp < a.stats.maxHp && Sim.pvpState(h) === 0, 'a un PK se le ataca sin Ctrl y sin quedar morado');
+  C.setTarget(w, h, null);
+
+  // Derrotar a alguien morado cuenta como PvP (sin karma)
+  const x = mk('Morado', 49);
+  const y = mk('Defensor', 47.8);
+  C.setTarget(w, x, y);
+  C.attack(w, x, true);
+  run(0.8);
+  C.setTarget(w, x, null);
+  x.hp = 1;
+  x.stats.evade = 0;
+  C.setTarget(w, y, x);
+  C.attack(w, y);
+  run(2);
+  ok(x.dead && y.pvp === 1 && y.karma === 0, 'derrotar a un jugador morado suma PvP, sin karma');
+
+  // Mismo grupo: no se pueden atacar
+  const g1 = mk('Uno', 60);
+  const g2 = mk('Dos', 61);
+  C.partyInvite(w, g1, g2.id);
+  C.partyAnswer(w, g2, true);
+  C.setTarget(w, g1, g2);
+  C.attack(w, g1, true);
+  ok(g1.party && !g1.autoAttack, 'no se puede atacar a alguien de tu grupo');
+
+  // El karma baja cazando monstruos (y mientras tanto no se gana experiencia)
+  Sim.spawnMobs(w);
+  const m = w.mobs.find((q) => !q.dead && q.lvl >= 15) || w.mobs[0];
+  a.pos.x = m.pos.x - 1.2;
+  a.pos.z = m.pos.z;
+  const karma0 = a.karma;
+  const xp0 = a.xp;
+  m.hp = 1;
+  C.setTarget(w, a, m);
+  C.attack(w, a);
+  run(2);
+  ok(m.dead && a.karma < karma0 && a.xp === xp0, `cazar monstruos baja el karma (${karma0} → ${a.karma}) en vez de dar experiencia`);
+}
+
+// 2e) Gremios: fundar, invitar, rangos, expulsar, salir, disolver y guardar
+{
+  const w = Sim.createWorld();
+  const master = Data.NPCS.find((n) => n.id === 'gremio');
+  const at = (x) => ({ x: master.x + x, z: master.z + 2 });
+  const mk = (name, lvl = 20, x = 0) => Sim.addPlayer(w, { ...Sim.newCharacter(name, 'elfo'), level: lvl, gold: 5000, pos: at(x) });
+  const logs = (p) => Sim.drainEvents(w).filter((e) => e.type === 'log' && e.to === p.id).map((e) => e.text);
+  const L = mk('Lider');
+  const low = mk('Bajito', 10, 1);
+  Sim.drainEvents(w);
+
+  C.guildCreate(w, low, 'Los Chicos', 0, 0);
+  ok(!low.guild && logs(low).some((t) => /nivel 15/.test(t)), `hace falta nivel ${Data.GUILD_LVL} para fundar`);
+  L.pos.x += 40;
+  C.guildCreate(w, L, 'Los Dragones', 2, 3);
+  ok(!L.guild, 'solo se funda junto al Maestro del Gremio');
+  L.pos.x -= 40;
+  C.guildCreate(w, L, 'Ma', 2, 3);
+  ok(!L.guild, 'el nombre necesita al menos 3 letras');
+  C.guildCreate(w, L, 'Feo', 2, 3, () => 'Ese nombre de gremio no está permitido.');
+  ok(!L.guild, 'el filtro de palabras puede rechazar el nombre');
+  C.guildCreate(w, L, 'Los Dragones', 2, 3);
+  const g = w.guilds.get(L.guild);
+  ok(g && g.name === 'Los Dragones' && L.gold === 5000 - Data.GUILD_COST, `se funda el gremio por ${Data.GUILD_COST} de oro`);
+  ok(Sim.guildTag(w, L) === '2|3|Los Dragones', 'la etiqueta del gremio va sobre el nombre');
+  const L2 = mk('Otro', 20, -1);
+  C.guildCreate(w, L2, 'los dragones', 0, 0);
+  ok(!L2.guild, 'no puede haber dos gremios con el mismo nombre');
+
+  // Invitar y aceptar
+  const a = mk('Amigo', 12, 2);
+  C.guildInvite(w, L, a.id);
+  ok(Sim.drainEvents(w).some((e) => e.type === 'guildInvite' && e.to === a.id), 'el invitado recibe la invitación');
+  C.guildAnswer(w, a, true);
+  ok(a.guild === L.guild && Sim.guildView(w, L).members.length === 2, 'al aceptar entra al gremio');
+  const b = mk('Bea', 12, 3);
+  C.guildInvite(w, a, b.id);
+  ok(!b.guildInvite, 'un miembro común no puede invitar');
+  C.guildRank(w, L, 'amigo', 1);
+  ok(Sim.guildView(w, a).rank === 1, 'el líder nombra oficiales');
+  C.guildInvite(w, a, b.id);
+  C.guildAnswer(w, b, true);
+  ok(b.guild === L.guild, 'un oficial sí puede invitar');
+
+  // Expulsar: solo a alguien de rango menor
+  C.guildKick(w, b, 'amigo');
+  ok(a.guild === L.guild, 'un miembro no puede expulsar a un oficial');
+  C.guildKick(w, a, 'bea');
+  ok(!b.guild && Sim.guildView(w, L).members.length === 2, 'un oficial expulsa a un miembro');
+
+  // PvP: no se atacan entre ellos
+  L.pos.x = a.pos.x = 50;
+  L.pos.z = a.pos.z = 14;
+  a.pos.x = 51;
+  C.setTarget(w, L, a);
+  C.attack(w, L, true);
+  ok(!L.autoAttack, 'no se puede atacar a alguien de tu gremio');
+
+  // El líder no sale sin nombrar a otro; al pasar el mando sí puede salir
+  C.guildLeave(w, L);
+  ok(L.guild, 'el líder no puede salir dejando el gremio sin líder');
+  C.guildLeader(w, L, 'amigo');
+  ok(Sim.guildView(w, a).rank === 2 && Sim.guildView(w, L).rank === 1, 'el líder pasa el mando');
+  C.guildLeave(w, L);
+  ok(!L.guild && Sim.guildView(w, a).members.length === 1, 'un miembro sale del gremio');
+
+  // Guardar y cargar; reconectar recupera el gremio
+  C.guildNotice(w, a, 'Cacería a las 5');
+  const saved = JSON.parse(JSON.stringify(Sim.exportGuilds(w)));
+  const w2 = Sim.createWorld();
+  Sim.loadGuilds(w2, saved);
+  const a2 = Sim.addPlayer(w2, { ...Sim.newCharacter('Amigo', 'elfo'), level: 13, pos: at(0) });
+  const v = Sim.guildView(w2, a2);
+  ok(v && v.name === 'Los Dragones' && v.rank === 2 && v.notice === 'Cacería a las 5' && v.members[0].level === 13, 'el gremio se guarda y se recupera al volver a entrar');
+  Sim.forgetMember(w2, 'Amigo');
+  ok(!w2.guilds.size, 'si se borra el último personaje, el gremio desaparece');
+
+  // Disolver
+  C.guildDisband(w, a);
+  ok(!a.guild && !w.guilds.size && w.guildsDirty, 'el líder disuelve el gremio');
+}
+
 // 7) Tienda: hay que estar junto al mercader y se puede comprar y vender en cantidad
 {
   const w = Sim.createWorld();

@@ -17,7 +17,7 @@ const RESERVED = ['orlen', 'ilwen', 'brisa', 'tharmok', 'admin', 'gm', 'sistema'
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 const now = () => Date.now();
 
-let db = { accounts: {}, chars: {}, names: {}, nextChar: 1 };
+let db = { accounts: {}, chars: {}, names: {}, nextChar: 1, guilds: [] };
 try {
   db = { ...db, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) };
 } catch {
@@ -239,4 +239,12 @@ function deleteAccount(user) {
   return { ok: true };
 }
 
-module.exports = { register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, listAccounts, deleteAccount, migrateChars, setMute, flush: () => persist(true), MAX_CHARS, DIR };
+// Gremios: lista completa (la simulación es la fuente de verdad mientras el servidor corre)
+const loadGuilds = () => (Array.isArray(db.guilds) ? db.guilds : []);
+function saveGuilds(list) {
+  db.guilds = list;
+  persist();
+}
+const hasName = (name) => own(db.names, String(name || '').toLowerCase());
+
+module.exports = { loadGuilds, saveGuilds, hasName, register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, listAccounts, deleteAccount, migrateChars, setMute, flush: () => persist(true), MAX_CHARS, DIR };

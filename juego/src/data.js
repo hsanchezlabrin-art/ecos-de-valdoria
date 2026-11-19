@@ -400,6 +400,24 @@
     return [...list, ult];
   }
   const passiveFor = (cls, stage, branch) => (stage >= 2 && branch && arch(cls).branches[branch] ? arch(cls).branches[branch].passive : null);
+  // Niveles de habilidad (estilo Lineage 2): cada habilidad sube de nivel solo, cada 5 niveles del
+  // personaje desde que se desbloquea, hasta Nv 8 (o lo que alcance antes del nivel máximo). Cada
+  // nivel: +6% de poder (daño, curación y escudos) y +5% de maná.
+  const SKILL_LVL_EVERY = 5;
+  const SKILL_MAX_LVL = 8;
+  const SKILL_POWER_PER = 0.06;
+  const SKILL_MP_PER = 0.05;
+  const skillMaxLevel = (s) => (s.locked ? 0 : Math.min(SKILL_MAX_LVL, 1 + Math.floor((MAX_LEVEL - s.lvl) / SKILL_LVL_EVERY)));
+  // Nivel actual de una habilidad para ese personaje (0 = aún bloqueada)
+  const skillLevel = (p, s) => (!s || skillLock(p, s) ? 0 : Math.min(skillMaxLevel(s), 1 + Math.floor((p.level - s.lvl) / SKILL_LVL_EVERY)));
+  const skillPower = (lvl) => 1 + SKILL_POWER_PER * Math.max(0, lvl - 1);
+  const skillMp = (s, lvl) => Math.round(s.mp * (1 + SKILL_MP_PER * Math.max(0, lvl - 1)));
+  // Nivel del personaje en que la habilidad sube al siguiente nivel (null si ya está al máximo)
+  const skillNextAt = (p, s) => {
+    const lvl = Math.max(1, skillLevel(p, s));
+    return lvl < skillMaxLevel(s) ? s.lvl + lvl * SKILL_LVL_EVERY : null;
+  };
+
   const skillLock = (p, s) => (s.locked || p.level < s.lvl || (p.stage || 0) < s.stage ? (s.stage > (p.stage || 0) && p.level >= s.lvl ? 'Cambio de clase' : `Nv ${s.lvl}`) : '');
 
   // ---------- Objetos ----------
@@ -742,6 +760,15 @@
   };
 
   // Frases rápidas del chat seguro: siempre se pueden enviar, sin escribir
+  // ---------- Gremios ----------
+  const GUILD_LVL = 15; // nivel para fundar un gremio
+  const GUILD_COST = 1000; // oro para fundarlo
+  const GUILD_MAX = 30; // miembros como máximo
+  const GUILD_RANKS = ['Miembro', 'Oficial', 'Líder'];
+  // Emblemas y colores fijos (sin imágenes subidas: siempre apropiados para niños)
+  const GUILD_EMBLEMS = ['⚔', '🛡', '🐉', '🦉', '🐻', '⭐', '🍄', '🌙', '🔥', '🌊', '🍀', '👑', '🦊', '🐢', '🌈', '💎'];
+  const GUILD_COLORS = ['#e05a4a', '#e8963a', '#e6cf4a', '#6cc46a', '#3fbfa8', '#4aa8e0', '#6a7ae6', '#a46ae0', '#e06ab0', '#d9d4c7'];
+
   const PHRASES = [
     { id: 'hola', text: '¡Hola! 👋' },
     { id: 'grupo', text: '¿Hacemos grupo?' },
@@ -835,10 +862,10 @@
       desc: 'Restaura tu vida y tu maná, gratis, fuera de combate.',
     },
     {
-      id: 'gremio', role: 'info', name: 'Maestro del Gremio', title: 'Gremios', x: -100, z: -50,
+      id: 'gremio', role: 'guild', name: 'Maestro del Gremio', title: 'Gremios', x: -100, z: -50,
       look: { skin: 0xc99a74, body: 0x7a2630, legs: 0x2a1f1a, hair: 0x5a3a1c, cape: 0x7a2630, weaponType: 'sword' },
-      desc: 'Aquí se fundarán los gremios de jugadores.',
-      text: 'Los gremios llegarán pronto: podrás fundar el tuyo con tus amigos, elegir un emblema y participar en los Asedios.',
+      desc: 'Funda tu gremio (nivel 15 y 1.000 de oro): nombre, emblema y color para ti y tus amigos.',
+      text: 'Funda tu gremio con tus amigos: elige un nombre, un emblema y un color.',
     },
     {
       id: 'establo', role: 'info', name: 'Cuidadora Mabel', title: 'Establo de Monturas', x: -110, z: -60,
@@ -909,10 +936,11 @@
     MAX_LEVEL, xpToNext, CRIT_MULT, MOVE_SPEED, SEXES,
     EquipmentGrade, GRADES, GRADE_ORDER, gradeIndex, RARITY, ARMOR_TYPES, WEAPON_TYPES,
     ARCHETYPES, ARCHETYPE_IDS, CLASSES, CLASS_IDS, isArchetype, STAGES, PROGRESSION,
-    raceName, className, skillsFor, passiveFor, skillLock, lookFor, playerBaseStats, mobStats,
+    raceName, className, skillsFor, passiveFor, skillLock, skillLevel, skillMaxLevel, skillPower, skillMp, skillNextAt, SKILL_LVL_EVERY, SKILL_POWER_PER, SKILL_MP_PER, lookFor, playerBaseStats, mobStats,
     ITEMS, WEAPON_TIERS, ARMOR_TIERS, weaponFor, armorFor, startGear, equipProblem,
     ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT,
     ARENAS, SHOPS, shopItems, MOB_H, mobHeight, PHRASES,
+    GUILD_LVL, GUILD_COST, GUILD_MAX, GUILD_RANKS, GUILD_EMBLEMS, GUILD_COLORS,
     PETS, isPet, PET_LVL, MOUNT_LVL, GLIDER_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName, itemCategory, isKeyItem,
     OLD_CLASS_MAP, migrateCharacter,
   };

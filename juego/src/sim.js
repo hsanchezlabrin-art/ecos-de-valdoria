@@ -18,6 +18,7 @@
   const { heightAt, inVillage, inSafe, zoneAt, WORLD_LIMIT, collide, waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y, WATER_Y, layout } = Terrain;
   const { ARENAS, shopItems, SHOPS, mobHeight } = Data;
   const { PETS, isPet, PET_LVL, MOUNT_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName } = Data;
+  const { GUILD_LVL, GUILD_COST, GUILD_MAX, GUILD_RANKS, GUILD_EMBLEMS, GUILD_COLORS } = Data;
   const LOOT_LIFE = 30; // segundos: luego el botín llega solo a la mochila (nunca se pierde)
   const PICK_R = 1.8;
 
@@ -37,6 +38,12 @@
   const PLAYER_R = 0.45;
   const SPAWN = { x: 0, z: 5 };
   const PROJ_SPEED = { arrow: 38, fire: 24, arcane: 26 };
+  // PvP y PK (como en Lineage 2): atacar a un jugador "blanco" exige forzar el ataque (Ctrl) y deja
+  // tu nombre morado un rato; derrotar a un jugador blanco te hace PK (karma y nombre rojo).
+  const PVP_MIN_LEVEL = 10; // los aventureros por debajo de este nivel no pueden pelear ni ser atacados
+  const FLAG_T = 30; // segundos con el nombre morado tras atacar a un jugador
+  const PVP_DMG = 0.6; // el daño entre jugadores se reduce para que las peleas duren más
+  const KARMA_PCT = 0.2; // karma por PK: parte de la experiencia de un nivel (crece con cada PK, hasta x3)
 
   const rand = (a, b) => a + Math.random() * (b - a);
   const randInt = (a, b) => Math.floor(rand(a, b + 1));
@@ -48,7 +55,7 @@
   // ---------- Mundo y eventos ----------
 
   function createWorld() {
-    return { time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map(), summons: [], loot: [] };
+    return { time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map(), summons: [], loot: [], guilds: new Map(), guildsDirty: false };
   }
   const emit = (w, ev) => w.events.push(ev);
   function drainEvents(w) {
@@ -144,6 +151,11 @@
       gemsOn: !!data.gemsOn,
       pet: data.pet && isPet(data.pet.type) ? { type: data.pet.type } : null,
       mounted: 0,
+      karma: Math.max(0, Math.floor(+data.karma) || 0),
+      pvp: Math.max(0, Math.floor(+data.pvp) || 0),
+      pk: Math.max(0, Math.floor(+data.pk) || 0),
+      flagT: 0,
+      force: false,
       hp: 0,
       mp: 0,
     };
@@ -161,6 +173,7 @@
     collide(p.pos, PLAYER_R);
     p.pos.y = groundY(p.pos.x, p.pos.z);
     w.players.set(id, p);
+    attachGuild(w, p);
     recalcStats(w, p);
     p.hp = Math.min(data.hp ?? p.stats.maxHp, p.stats.maxHp);
     p.mp = Math.min(data.mp ?? p.stats.maxMp, p.stats.maxMp);
@@ -187,6 +200,8 @@
     if (!p) return;
     partyLeave(w, p, true);
     w.players.delete(id);
+    forgetTarget(w, p);
+    if (guildOf(w, p)) guildOf(w, p).ver++; // cambia quién está conectado
     for (const m of w.mobs) if (m.aggro === p) dropAggro(m);
     for (const su of w.summons) if (su.owner === p) su.dead = true;
   }
@@ -206,6 +221,9 @@
       quest: p.quest ? { ...p.quest } : null,
       gemsOn: !!p.gemsOn,
       pet: p.pet ? { ...p.pet } : null,
+      karma: p.karma,
+      pvp: p.pvp,
+      pk: p.pk,
       inv: p.inv.map((s) => ({ ...s })),
       equip: { ...p.equip },
       pos: alive ? { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2) } : { ...SPAWN },
@@ -460,8 +478,113 @@
     return { dmg: Math.max(1, Math.round(dmg)), crit };
   }
 
+  // ---------- PvP y PK ----------
+
+  // 0 = blanco, 1 = morado (atacó a alguien hace poco), 2 = rojo (PK con karma)
+  const pvpState = (q) => (q.karma > 0 ? 2 : q.flagT > 0 ? 1 : 0);
+  const sameParty = (a, b) => !!a.party && a.party === b.party;
+
+  // ¿Puede p atacar a q? Devuelve el motivo si no puede, o null. Sin forzar (Ctrl) solo se puede
+  // atacar a jugadores morados o rojos.
+  function pvpBlock(p, q, force) {
+    if (!q || q === p || q.dead) return 'nada';
+    if (inSafe(p.pos) || inSafe(q.pos)) return 'No se puede pelear contra otros jugadores en una zona segura.';
+    if (p.level < PVP_MIN_LEVEL) return `Podrás pelear contra otros jugadores desde el nivel ${PVP_MIN_LEVEL}.`;
+    if (q.level < PVP_MIN_LEVEL) return `${q.name} está protegido: los aventureros de nivel menor a ${PVP_MIN_LEVEL} no pueden ser atacados.`;
+    if (sameParty(p, q)) return 'No puedes atacar a alguien de tu grupo.';
+    if (p.guild && p.guild === q.guild) return 'No puedes atacar a alguien de tu gremio.';
+    if (!force && pvpState(q) === 0) return `Para atacar a ${q.name} usa «Forzar ataque» en su ficha (o Ctrl + clic). Si lo derrotas te volverás PK.`;
+    return null;
+  }
+  const canHit = (p, q) => !pvpBlock(p, q, p.force && p.target === q);
+
+  // Deja de apuntar a un jugador que cayó o se fue
+  function forgetTarget(w, q) {
+    for (const o of w.players.values()) {
+      if (o.target !== q) continue;
+      o.target = null;
+      o.autoAttack = false;
+      o.queued = null;
+      o.force = false;
+    }
+  }
+
+  // Daño de un jugador a otro (ataques básicos, habilidades y proyectiles)
+  function damagePlayer(w, p, q, mult, opts = {}) {
+    if (!q || q.dead || q.leap) return;
+    const why = pvpBlock(p, q, p.force && p.target === q);
+    if (why) {
+      if (p.target === q) {
+        p.autoAttack = false;
+        p.queued = null;
+        if ((p.pvpMsgT || 0) <= w.time) {
+          p.pvpMsgT = w.time + 2;
+          log(w, p, why, 'warn');
+        }
+      }
+      return;
+    }
+    // Atacar a un jugador que no es PK deja tu nombre morado
+    if (q.karma <= 0) {
+      if (p.flagT <= 0 && p.karma <= 0) log(w, p, 'Atacaste a otro jugador: tu nombre queda morado durante 30 segundos y cualquiera puede atacarte.', 'warn');
+      p.flagT = FLAG_T;
+    }
+    p.combatT = 6;
+    q.combatT = 6;
+    if (Math.random() < Math.min(0.6, q.stats.evade + buffSum(q, 'evade'))) return float(w, q, 'Esquiva', 'mana');
+    if (q.bubble > 0) {
+      q.bubble = 0;
+      return float(w, q, 'Burbuja', 'mana');
+    }
+    const chance = opts.noCrit ? 0 : opts.forceCrit ? 1 : playerCrit(p);
+    const r = calcDamage(playerAtk(p), q.stats.def, mult * PVP_DMG, chance, p.stats.critMult);
+    let dmg = r.dmg * (1 - Math.min(0.7, buffSum(q, 'dr')));
+    if (q.stats.block && Math.random() < q.stats.block) dmg *= 0.5;
+    dmg = Math.max(1, Math.round(dmg));
+    if (q.shield > 0) {
+      const ab = Math.min(q.shield, dmg);
+      q.shield -= ab;
+      dmg -= ab;
+      if (q.shield <= 0) q.shieldT = 0;
+      if (ab) float(w, q, `(${ab})`, 'mana');
+    }
+    if (dmg <= 0) return;
+    q.hp -= dmg;
+    float(w, q, r.crit ? `¡${dmg}!` : `-${dmg}`, 'hurt');
+    if (!q.target) q.target = p; // quien recibe el golpe apunta a su atacante (puede defenderse sin Ctrl)
+    if (q.hp <= 0) pvpKill(w, p, q);
+  }
+
+  function pvpKill(w, p, q) {
+    const state = pvpState(q);
+    if (state === 2) {
+      log(w, p, `Derrotaste a ${q.name}, que era PK. No ganas karma.`, 'sys');
+    } else if (state === 1) {
+      p.pvp++;
+      log(w, p, `¡Ganaste un combate PvP contra ${q.name}! (PvP: ${p.pvp})`, 'lvl');
+    } else {
+      p.pk++;
+      const add = Math.round(xpToNext(p.level) * KARMA_PCT * Math.min(3, p.pk));
+      p.karma += add;
+      p.flagT = 0;
+      emit(w, { type: 'banner', to: p.id, title: '¡Ahora eres PK!', sub: `Derrotaste a ${q.name}, que no quería pelear. Karma +${add}: tu nombre es rojo.` });
+      log(w, p, `Tu nombre es rojo: cualquiera puede atacarte sin Ctrl. Mientras tengas karma, la experiencia de los monstruos solo lo irá bajando.`, 'warn');
+    }
+    q.flagT = 0;
+    killPlayer(w, q, p.name, p);
+  }
+
+  // El karma baja con la experiencia de los monstruos (que no se gana mientras se es PK)
+  function burnKarma(w, p, xp) {
+    const was = p.karma;
+    p.karma = Math.max(0, p.karma - xp);
+    if (p.karma > 0) log(w, p, `Karma -${was - p.karma} (te quedan ${p.karma}).`, 'sys');
+    else log(w, p, 'Tu karma llegó a cero: tu nombre vuelve a ser blanco.', 'lvl');
+  }
+
   function damageMob(w, p, m, mult, opts = {}) {
     if (!m || m.dead) return;
+    if (m.kind === 'player') return damagePlayer(w, p, m, mult, opts);
     if (m.def.mech && m.def.mech.type === 'plates' && !(m.shieldDownT > 0)) {
       if (!m.aggro || m.aggro.dead) m.aggro = p;
       if ((m.shieldMsgT || 0) <= w.time) {
@@ -515,7 +638,10 @@
       else if (diff >= 3) share *= 1.2;
       share = Math.max(1, Math.round(share));
       q.lastXp = share;
-      gainXp(w, q, share);
+      if (q.karma > 0) {
+        q.lastXp = 0;
+        burnKarma(w, q, share);
+      } else gainXp(w, q, share);
     }
   }
 
@@ -830,7 +956,7 @@
         su.facing = p.facing;
         su.moving = p.moving;
         if (su.atkT <= 0) {
-          const t = p.target && !p.target.dead && d2(p.target.pos, p.pos) <= su.reach ? p.target : nearestMob(w, p.pos, su.reach);
+          const t = p.target && p.target.kind === 'mob' && !p.target.dead && d2(p.target.pos, p.pos) <= su.reach ? p.target : nearestMob(w, p.pos, su.reach);
           if (t) {
             su.atkT = su.every;
             laser(w, p, su.pos, t, su.reach, su.mult);
@@ -861,8 +987,10 @@
     }
   }
 
-  function killPlayer(w, p, cause) {
+  function killPlayer(w, p, cause, by = null) {
     p.hp = 0;
+    p.flagT = 0;
+    p.force = false;
     p.dead = true;
     p.mounted = 0;
     p.autoAttack = false;
@@ -876,7 +1004,8 @@
     p.leap = null;
     p.diedAt = { x: p.pos.x, z: p.pos.z };
     for (const mob of w.mobs) if (mob.aggro === p) dropAggro(mob);
-    log(w, p, cause === 'agua' ? 'Te has mareado en el agua.' : `Te has mareado ante ${cause}. No pierdes nada: descansa y vuelve.`, 'warn');
+    forgetTarget(w, p);
+    log(w, p, cause === 'agua' ? 'Te has mareado en el agua.' : by ? `${cause} te ha derrotado. No pierdes nada: descansa y vuelve.` : `Te has mareado ante ${cause}. No pierdes nada: descansa y vuelve.`, 'warn');
     emit(w, { type: 'playerDeath', to: p.id, ent: p });
   }
 
@@ -917,7 +1046,13 @@
     let up = false;
     while (p.level < MAX_LEVEL && p.xp >= xpToNext(p.level)) {
       p.xp -= xpToNext(p.level);
+      const before = p.skills.map((sk) => Data.skillLevel(p, sk));
       p.level++;
+      // Habilidades que subieron de nivel con este nivel del personaje
+      p.skills.forEach((sk, i) => {
+        const now = Data.skillLevel(p, sk);
+        if (now > before[i] && before[i] > 0) log(w, p, `¡${sk.name} sube a Nv ${now}! Ahora es más fuerte.`, 'lvl');
+      });
       up = true;
       recalcStats(w, p);
       p.hp = p.stats.maxHp;
@@ -935,6 +1070,7 @@
       if (p.level === MOUNT_LVL && p.pet) log(w, p, `¡Tu ${PETS[p.pet.type].name} creció y ahora es un ${PETS[p.pet.type].mount}! Pulsa 0 para montarlo.`, 'lvl');
     }
     if (up) {
+      syncMember(w, p);
       emit(w, { type: 'levelUp', ent: p, level: p.level }); // columna de luz visible para todos
       emit(w, { type: 'inventory', to: p.id });
     }
@@ -955,7 +1091,7 @@
       emit(w, { type: 'banner', to: p.id, title: '¡Misión cumplida!', sub: 'Vuelve con el Maestro Aldric en la aldea' });
       log(w, p, `${def.title}: ¡completada! Vuelve con el Maestro Aldric.`, 'lvl');
     } else if (q.kills % 3 === 0 || def.need - q.kills <= 2) {
-      log(w, p, `${def.title}: ${q.kills}/${def.need}`, 'sys');
+      log(w, p, `${def.title}: ${q.kills}/${def.need}`, 'quest');
     }
     emit(w, { type: 'quest', to: p.id });
   }
@@ -1039,6 +1175,8 @@
   // ---------- Comandos del jugador ----------
 
   function setTarget(w, p, m) {
+    if (m === p) m = null;
+    if (p.target !== m) p.force = false;
     p.target = m && !m.dead ? m : null;
     if (!p.target) {
       p.autoAttack = false;
@@ -1046,8 +1184,24 @@
     }
   }
 
-  function attack(w, p) {
+  // Revisa si se puede atacar al jugador elegido; "force" = Ctrl pulsado (ataque forzado)
+  function pvpReady(w, p, force) {
+    const t = p.target;
+    if (!t || t.kind !== 'player') return true;
+    if (force) p.force = true;
+    const why = pvpBlock(p, t, p.force);
+    if (why) {
+      p.autoAttack = false;
+      p.queued = null;
+      log(w, p, why, 'warn');
+      return false;
+    }
+    return true;
+  }
+
+  function attack(w, p, force = false) {
     if (p.dead || !p.target || p.target.dead) return;
+    if (!pvpReady(w, p, force)) return;
     dismount(w, p);
     p.autoAttack = true;
     p.moveTarget = null;
@@ -1163,7 +1317,252 @@
       emit(w, { type: 'teleport', to: p.id, ent: p, title: zoneAt(p.pos) ? zoneAt(p.pos).name : to.name });
       return log(w, p, npc.prop === 'cart' ? '¡La vagoneta corre por las vías!' : 'Cruzas el portal entre destellos.', 'sys');
     }
+    if (npc.role === 'guild') {
+      emit(w, { type: 'openGuild', to: p.id, found: true });
+      if (p.guild) return log(w, p, `${first}: «Larga vida a ${guildOf(w, p).name}. Invita a tus amigos con la tecla G.»`, 'npc');
+      return log(w, p, `${first}: «¿Quieres fundar un gremio? Necesitas nivel ${GUILD_LVL} y ${GUILD_COST.toLocaleString('es')} de oro.»`, 'npc');
+    }
     if (npc.role === 'info') return log(w, p, `${npc.name}: «${npc.text}»`, 'npc');
+  }
+
+  // ---------- Gremios ----------
+  // Se guardan aparte de los personajes (el servidor los escribe en disco cuando w.guildsDirty).
+  // Cada miembro se identifica por su nombre (único en el servidor), así se ven también los
+  // desconectados. Rangos: 0 Miembro · 1 Oficial (puede invitar y expulsar) · 2 Líder.
+
+  const keyOf = (name) => String(name || '').toLowerCase();
+  const guildOf = (w, p) => (p && p.guild ? w.guilds.get(p.guild) || null : null);
+  const memberIn = (g, p) => (g ? g.members.find((m) => m.key === keyOf(p.name)) || null : null);
+  const onlineByKey = (w, key) => [...w.players.values()].find((q) => keyOf(q.name) === key) || null;
+  const guildName = (s) =>
+    String(s || '')
+      .replace(/[\u0000-\u001f<>"'`\\]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 18);
+
+  function guildChanged(w, g) {
+    g.ver = (g.ver || 0) + 1;
+    w.guildsDirty = true;
+  }
+  const guildLog = (w, g, text, cls = 'sys', except = null) => {
+    for (const m of g.members) {
+      const q = onlineByKey(w, m.key);
+      if (q && q !== except) log(w, q, text, cls);
+    }
+  };
+
+  // Al entrar: busca su gremio por nombre y actualiza su ficha (nivel, raza)
+  function attachGuild(w, p) {
+    p.guild = null;
+    p.guildInvite = null;
+    for (const g of w.guilds.values()) {
+      const m = memberIn(g, p);
+      if (!m) continue;
+      p.guild = g.id;
+      m.name = p.name;
+      m.cls = p.cls;
+      m.sex = p.sex;
+      m.level = p.level;
+      g.ver = (g.ver || 0) + 1;
+      return;
+    }
+  }
+  function syncMember(w, p) {
+    const g = guildOf(w, p);
+    const m = memberIn(g, p);
+    if (!m) return;
+    m.level = p.level;
+    guildChanged(w, g);
+  }
+
+  // Fundar un gremio junto al Maestro del Gremio. check(name) = filtro de palabras del servidor
+  function guildCreate(w, p, rawName, emblem, color, check = null) {
+    if (p.dead) return;
+    if (p.guild) return log(w, p, 'Ya perteneces a un gremio.', 'warn');
+    const master = npcById('gremio');
+    if (!master || d2(p.pos, master) > TALK_R + 3) return log(w, p, 'Los gremios se fundan con el Maestro del Gremio, en la Ciudadela.', 'warn');
+    if (p.level < GUILD_LVL) return log(w, p, `Necesitas nivel ${GUILD_LVL} para fundar un gremio.`, 'warn');
+    if (p.gold < GUILD_COST) return log(w, p, `Fundar un gremio cuesta ${GUILD_COST.toLocaleString('es')} de oro.`, 'warn');
+    const name = guildName(rawName);
+    if (name.length < 3) return log(w, p, 'El nombre del gremio debe tener al menos 3 letras.', 'warn');
+    if (!/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ]*$/.test(name)) return log(w, p, 'El nombre del gremio solo puede tener letras, números y espacios.', 'warn');
+    const bad = check ? check(name) : null;
+    if (bad) return log(w, p, bad, 'warn');
+    if ([...w.guilds.values()].some((g) => keyOf(g.name) === keyOf(name))) return log(w, p, `Ya existe un gremio llamado «${name}».`, 'warn');
+    const e = Math.floor(+emblem);
+    const c = Math.floor(+color);
+    if (!(e >= 0 && e < GUILD_EMBLEMS.length) || !(c >= 0 && c < GUILD_COLORS.length)) return;
+    p.gold -= GUILD_COST;
+    const g = { id: `G${Date.now().toString(36)}${w.nextId++}`, name, emblem: e, color: c, notice: '', created: Date.now(), members: [], ver: 1 };
+    g.members.push({ key: keyOf(p.name), name: p.name, cls: p.cls, sex: p.sex, level: p.level, rank: 2 });
+    w.guilds.set(g.id, g);
+    p.guild = g.id;
+    guildChanged(w, g);
+    emit(w, { type: 'inventory', to: p.id });
+    emit(w, { type: 'banner', to: p.id, title: `${GUILD_EMBLEMS[e]} ${name}`, sub: '¡Fundaste tu gremio! Invita a tus amigos con la tecla G.' });
+    log(w, p, `Fundaste el gremio ${name} (-${GUILD_COST.toLocaleString('es')} oro). Escribe @ antes de un mensaje para hablar con tu gremio.`, 'sys');
+  }
+
+  function guildInvite(w, p, targetId) {
+    const g = guildOf(w, p);
+    const me = memberIn(g, p);
+    const t = w.players.get(targetId);
+    if (!g || !me) return log(w, p, 'No perteneces a ningún gremio.', 'warn');
+    if (me.rank < 1) return log(w, p, 'Solo el líder y los oficiales pueden invitar.', 'warn');
+    if (!t || t === p) return;
+    if (t.guild) return log(w, p, `${t.name} ya pertenece a un gremio.`, 'warn');
+    if (g.members.length >= GUILD_MAX) return log(w, p, `El gremio está completo (${GUILD_MAX} miembros).`, 'warn');
+    if (t.guildInvite && t.guildInvite.t > 0) return log(w, p, `${t.name} ya tiene una invitación pendiente.`, 'warn');
+    t.guildInvite = { gid: g.id, from: p.id, t: 30 };
+    emit(w, { type: 'guildInvite', to: t.id, name: p.name, guild: g.name, emblem: GUILD_EMBLEMS[g.emblem], color: GUILD_COLORS[g.color] });
+    log(w, p, `Invitaste a ${t.name} a ${g.name}.`, 'sys');
+  }
+
+  function guildAnswer(w, p, accept) {
+    const inv = p.guildInvite;
+    p.guildInvite = null;
+    if (!inv) return;
+    const g = w.guilds.get(inv.gid);
+    const from = w.players.get(inv.from);
+    if (!g) return log(w, p, 'Ese gremio ya no existe.', 'warn');
+    if (!accept) {
+      if (from) log(w, from, `${p.name} rechazó la invitación al gremio.`, 'sys');
+      return;
+    }
+    if (p.guild) return;
+    if (g.members.length >= GUILD_MAX) return log(w, p, 'El gremio ya está completo.', 'warn');
+    g.members.push({ key: keyOf(p.name), name: p.name, cls: p.cls, sex: p.sex, level: p.level, rank: 0 });
+    p.guild = g.id;
+    guildChanged(w, g);
+    guildLog(w, g, `${p.name} se unió al gremio.`, 'sys', p);
+    emit(w, { type: 'banner', to: p.id, title: `${GUILD_EMBLEMS[g.emblem]} ${g.name}`, sub: 'Te uniste al gremio. Escribe @ antes de un mensaje para hablar con ellos.' });
+  }
+
+  // Quita a un miembro (también desconectado). Si era el líder, pasa al de más rango.
+  function dropMember(w, g, key) {
+    const i = g.members.findIndex((m) => m.key === key);
+    if (i < 0) return;
+    const [m] = g.members.splice(i, 1);
+    const q = onlineByKey(w, key);
+    if (q && q.guild === g.id) q.guild = null;
+    if (!g.members.length) {
+      w.guilds.delete(g.id);
+      w.guildsDirty = true;
+      return;
+    }
+    if (m.rank === 2) {
+      const next = [...g.members].sort((a, b) => b.rank - a.rank || b.level - a.level)[0];
+      next.rank = 2;
+      guildLog(w, g, `${next.name} es el nuevo líder del gremio.`, 'sys');
+    }
+    guildChanged(w, g);
+  }
+
+  function guildLeave(w, p) {
+    const g = guildOf(w, p);
+    const me = memberIn(g, p);
+    if (!me) return;
+    if (me.rank === 2 && g.members.length > 1) return log(w, p, 'Eres el líder: antes de salir nombra a otro líder, o disuelve el gremio.', 'warn');
+    dropMember(w, g, me.key);
+    log(w, p, `Saliste de ${g.name}.`, 'sys');
+    if (w.guilds.has(g.id)) guildLog(w, g, `${p.name} salió del gremio.`);
+  }
+
+  function guildKick(w, p, key) {
+    const g = guildOf(w, p);
+    const me = memberIn(g, p);
+    const m = g && g.members.find((x) => x.key === keyOf(key));
+    if (!me || !m || m === me) return;
+    if (me.rank < 1 || m.rank >= me.rank) return log(w, p, 'No puedes expulsar a alguien de tu mismo rango o mayor.', 'warn');
+    const q = onlineByKey(w, m.key);
+    dropMember(w, g, m.key);
+    if (q) log(w, q, `Te expulsaron de ${g.name}.`, 'warn');
+    guildLog(w, g, `${m.name} fue expulsado del gremio por ${p.name}.`);
+  }
+
+  // Líder: nombrar oficial (1) o volver a miembro (0)
+  function guildRank(w, p, key, rank) {
+    const g = guildOf(w, p);
+    const me = memberIn(g, p);
+    const m = g && g.members.find((x) => x.key === keyOf(key));
+    if (!me || !m || m === me || me.rank !== 2) return;
+    const r = rank ? 1 : 0;
+    if (m.rank === r) return;
+    m.rank = r;
+    guildChanged(w, g);
+    guildLog(w, g, r ? `${m.name} ahora es Oficial del gremio.` : `${m.name} vuelve a ser Miembro del gremio.`);
+  }
+
+  function guildLeader(w, p, key) {
+    const g = guildOf(w, p);
+    const me = memberIn(g, p);
+    const m = g && g.members.find((x) => x.key === keyOf(key));
+    if (!me || !m || m === me || me.rank !== 2) return;
+    m.rank = 2;
+    me.rank = 1;
+    guildChanged(w, g);
+    guildLog(w, g, `${m.name} es el nuevo líder de ${g.name}.`, 'lvl');
+  }
+
+  function guildDisband(w, p) {
+    const g = guildOf(w, p);
+    const me = memberIn(g, p);
+    if (!me || me.rank !== 2) return;
+    guildLog(w, g, `${p.name} disolvió el gremio ${g.name}.`, 'warn');
+    for (const m of g.members) {
+      const q = onlineByKey(w, m.key);
+      if (q) q.guild = null;
+    }
+    w.guilds.delete(g.id);
+    w.guildsDirty = true;
+  }
+
+  // Mensaje del gremio (ya filtrado por el servidor)
+  function guildNotice(w, p, text) {
+    const g = guildOf(w, p);
+    const me = memberIn(g, p);
+    if (!me || me.rank < 1) return;
+    g.notice = String(text || '').slice(0, 140);
+    guildChanged(w, g);
+  }
+
+  // Lo que ve un miembro en su panel
+  function guildView(w, p) {
+    const g = guildOf(w, p);
+    const me = memberIn(g, p);
+    if (!g || !me) return null;
+    return {
+      id: g.id,
+      ver: g.ver || 0,
+      name: g.name,
+      emblem: g.emblem,
+      color: g.color,
+      notice: g.notice || '',
+      rank: me.rank,
+      max: GUILD_MAX,
+      members: g.members.map((m) => ({ key: m.key, name: m.name, cls: m.cls, sex: m.sex, level: m.level, rank: m.rank, online: !!onlineByKey(w, m.key) })),
+    };
+  }
+
+  // Etiqueta sobre la cabeza: "emblema|color|nombre"
+  const guildTag = (w, p) => {
+    const g = guildOf(w, p);
+    return g ? `${g.emblem}|${g.color}|${g.name}` : '';
+  };
+
+  // Guardar y cargar (el servidor los escribe en su archivo)
+  const exportGuilds = (w) => [...w.guilds.values()].map((g) => ({ id: g.id, name: g.name, emblem: g.emblem, color: g.color, notice: g.notice || '', created: g.created, members: g.members.map((m) => ({ ...m })) }));
+  function loadGuilds(w, list) {
+    w.guilds.clear();
+    for (const g of Array.isArray(list) ? list : []) {
+      if (!g || typeof g.id !== 'string' || !Array.isArray(g.members) || !g.members.length) continue;
+      w.guilds.set(g.id, { ...g, ver: 1, members: g.members.map((m) => ({ ...m, key: keyOf(m.name) })) });
+    }
+  }
+  // Un personaje borrado sale de su gremio
+  function forgetMember(w, name) {
+    for (const g of [...w.guilds.values()]) if (g.members.some((m) => m.key === keyOf(name))) dropMember(w, g, keyOf(name));
   }
 
   // Tienda junto a la que está el jugador (o null)
@@ -1174,7 +1573,7 @@
   const NEEDS_TARGET = ['dmg', 'area', 'leap', 'charge', 'chain', 'mark', 'poly', 'dance'];
   const skillReady = (p, s) => !s.locked && p.level >= s.lvl && p.stage >= s.stage;
 
-  function useSkill(w, p, i) {
+  function useSkill(w, p, i, force = false) {
     const s = p.skills[i];
     if (p.dead || !s || p.leap || p.dancing) return;
     if (!skillReady(p, s)) {
@@ -1184,12 +1583,13 @@
     }
     if ((p.cds[s.id] || 0) > 0) return;
     dismount(w, p);
-    const cost = p.freeNext ? 0 : s.mp;
+    const cost = p.freeNext ? 0 : Data.skillMp(s, Data.skillLevel(p, s));
     if (p.mp < cost) return log(w, p, 'No tienes suficiente maná.', 'warn');
     if (NEEDS_TARGET.includes(s.type)) {
       const t = p.target;
       if (!t || t.dead) return log(w, p, 'Primero elige un objetivo.', 'warn');
-      if (s.type === 'poly' && t.def.boss) return log(w, p, 'Los jefes son demasiado fuertes para la polimorfia.', 'warn');
+      if (!pvpReady(w, p, force)) return;
+      if (s.type === 'poly' && t.def && t.def.boss) return log(w, p, 'Los jefes son demasiado fuertes para la polimorfia.', 'warn');
       if (s.range && d2(p.pos, t.pos) > s.range + bodyR(t)) {
         p.queued = i;
         p.autoAttack = true;
@@ -1214,7 +1614,10 @@
 
   function castSkill(w, p, i) {
     const base = p.skills[i];
-    const cost = p.freeNext ? 0 : base.mp;
+    // Nivel de la habilidad (sube con el nivel del personaje): más poder y algo más de maná
+    const slvl = Data.skillLevel(p, base);
+    const pw = Data.skillPower(slvl);
+    const cost = p.freeNext ? 0 : Data.skillMp(base, slvl);
     if (p.mp < cost || !skillReady(p, base)) return;
     // Resonancia Prismática: cada 3 hechizos, el siguiente gratis y con daño doble
     const boost = p.freeNext ? 2 : 1;
@@ -1229,8 +1632,21 @@
       }
     }
     // Gemas de Poder: solo en habilidades que hacen daño
-    const k = boost * (base.mult || base.tick || base.shot ? useGem(w, p) : 1);
-    const s = k === 1 ? base : { ...base, mult: (base.mult || 0) * k, tick: base.tick && base.tick * k, shot: base.shot && base.shot * k, lightning: base.lightning && base.lightning * k };
+    const k = boost * pw * (base.mult || base.tick || base.shot ? useGem(w, p) : 1);
+    const s =
+      k === 1
+        ? base
+        : {
+            ...base,
+            mult: (base.mult || 0) * k,
+            tick: base.tick && base.tick * k,
+            shot: base.shot && base.shot * k,
+            lightning: base.lightning && base.lightning * k,
+            // El nivel también mejora curaciones y escudos (las gemas no)
+            amount: base.amount && base.amount * pw,
+            heal: base.heal && base.heal * pw,
+            selfShield: base.selfShield && base.selfShield * pw,
+          };
     p.mp -= cost;
     p.cds[s.id] = s.cd * (1 - Math.min(0.5, buffSum(p, 'cdr')));
     if (pas.cdRefund) for (const k in p.cds) if (k !== s.id && k !== 'pot') p.cds[k] = Math.max(0, p.cds[k] - pas.cdRefund);
@@ -1243,8 +1659,35 @@
     }
     if (s.selfBuff) addBuff(w, p, `${s.id}_self`, s.name, s.selfBuff);
     if (s.aura) emit(w, { type: 'aura', ent: p, kind: s.aura, dur: s.auraDur || (s.type === 'pulse' ? s.count * s.every : s.dur) || 4 });
-    CAST[s.type](w, p, s, t);
+    if (t && t.kind === 'player') {
+      if (NEEDS_TARGET.includes(s.type)) castOnPlayer(w, p, s, t);
+      else CAST[s.type](w, p, s, null);
+    } else CAST[s.type](w, p, s, t);
     if (NEEDS_TARGET.includes(s.type) && p.target && s.type !== 'poly') p.autoAttack = true;
+  }
+
+  // Habilidad de ataque contra otro jugador: el daño de la habilidad en un solo golpe, y los efectos
+  // de control se vuelven lentitud o enraizado cortos (nada de aturdir a otros jugadores)
+  function castOnPlayer(w, p, s, q) {
+    if (s.type === 'poly' || s.type === 'mark') {
+      if (!canHit(p, q)) return damagePlayer(w, p, q, 0); // muestra el motivo
+      if (s.type === 'poly' && !Object.values(q.buffs).some((b) => b.ccImmune)) {
+        q.debuffs.slow = { t: 3 };
+        float(w, q, 'Lento', 'stun', 0.5);
+      }
+      return;
+    }
+    const mult = Math.max(1, (s.mult || 1) * (s.hits || 1));
+    ring(w, q.pos, 0xff7a6a, 1.6, 0.4);
+    damagePlayer(w, p, q, mult);
+    if (q.dead || !canHit(p, q) || Object.values(q.buffs).some((b) => b.ccImmune)) return;
+    if (s.stun || s.root) {
+      q.debuffs.root = { t: Math.min(1.5, s.stun || s.root) };
+      float(w, q, 'Enraizado', 'stun', 0.5);
+    } else if (s.slow) {
+      q.debuffs.slow = { t: Math.min(3, s.slow) };
+      float(w, q, 'Lento', 'stun', 0.5);
+    }
   }
 
   // Daño en un círculo (a monstruos vivos)
@@ -1622,7 +2065,7 @@
         const p = pr.owner;
         if (pr.kind === 'fire') ring(w, t.pos, 0xff7a2a, 1.6, 0.4);
         damageMob(w, p, t, pr.mult);
-        if (!t.dead) {
+        if (!t.dead && t.kind !== 'player') {
           if (o.dot) addDot(w, p, t, o.dot, 'poison');
           if (o.root) {
             t.rootT = Math.max(t.rootT, o.root);
@@ -1914,6 +2357,7 @@
   function updatePlayer(w, p, dt) {
     p.moving = false;
     if (p.invite && (p.invite.t -= dt) <= 0) p.invite = null;
+    if (p.guildInvite && (p.guildInvite.t -= dt) <= 0) p.guildInvite = null;
     if (p.dead) return;
     for (const k in p.cds) p.cds[k] = Math.max(0, p.cds[k] - dt);
     for (const k in p.buffs) if ((p.buffs[k].t -= dt) <= 0) delete p.buffs[k];
@@ -1923,6 +2367,10 @@
     if (p.frenzy && (p.frenzyT -= dt) <= 0) p.frenzy = 0;
     p.combatT = Math.max(0, p.combatT - dt);
     p.atkTimer = Math.max(0, p.atkTimer - dt);
+    if (p.flagT > 0 && (p.flagT -= dt) <= 0) {
+      p.flagT = 0;
+      if (p.karma <= 0) log(w, p, 'Tu nombre vuelve a ser blanco.', 'sys');
+    }
     updateDebuffs(w, p, dt);
     if (p.dead) return;
 
@@ -2369,9 +2817,17 @@
     collectAllLoot,
     liveStats,
     skillReady,
+    pvpState,
+    PVP_MIN_LEVEL,
+    guildView,
+    guildTag,
+    exportGuilds,
+    loadGuilds,
+    forgetMember,
     cmd: {
       setTarget, attack, targetNearest, moveTo, setMoveDir, talkTo, useSkill, usePotion, useItem, sellItem, destroyItem, buyItem, unequip, respawn,
       partyInvite, partyAnswer, partyLeave, partyKick, classQuest, setGems, hatchPet, toggleMount,
+      guildCreate, guildInvite, guildAnswer, guildLeave, guildKick, guildRank, guildLeader, guildDisband, guildNotice,
     },
   };
 });

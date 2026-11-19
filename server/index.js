@@ -49,6 +49,11 @@ if (migrated) console.log(`[migración] ${migrated} personajes convertidos a las
 
 const world = Sim.createWorld();
 Sim.spawnMobs(world);
+// Gremios guardados; los miembros cuyo personaje ya no existe salen del gremio
+Sim.loadGuilds(world, DB.loadGuilds());
+for (const g of [...world.guilds.values()]) for (const m of [...g.members]) if (!DB.hasName(m.name)) Sim.forgetMember(world, m.name);
+if (world.guildsDirty) DB.saveGuilds(Sim.exportGuilds(world));
+world.guildsDirty = false;
 Sim.drainEvents(world);
 const mobsById = new Map(world.mobs.map((m) => [m.id, m]));
 const clients = new Set();
@@ -98,6 +103,9 @@ function charData(ch) {
     quest: d.quest || null,
     gemsOn: !!d.gemsOn,
     pet: d.pet && Data.isPet(d.pet.type) ? { type: d.pet.type } : null,
+    karma: int(d.karma, 0, 1e9, 0),
+    pvp: int(d.pvp, 0, 1e6, 0),
+    pk: int(d.pk, 0, 1e6, 0),
     pos,
     hp: Number.isFinite(+d.hp) ? +d.hp : null,
     mp: Number.isFinite(+d.mp) ? +d.mp : null,
@@ -111,7 +119,7 @@ function savePlayer(c) {
 // ---------- Estado que se envía a cada jugador ----------
 
 function playerRow(q) {
-  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0, q.gemsOn && Sim.countItem(q, 'gema_poder') > 0 ? 1 : 0, q.pet ? q.pet.type : 0, q.mounted || 0];
+  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0, q.gemsOn && Sim.countItem(q, 'gema_poder') > 0 ? 1 : 0, q.pet ? q.pet.type : 0, q.mounted || 0, Sim.pvpState(q), Sim.guildTag(world, q)];
 }
 
 function mobRow(m) {
@@ -151,7 +159,17 @@ function meData(c) {
     swimming: p.swimming,
     deep: p.deep,
     party: Sim.partyView(world, p),
+    karma: p.karma,
+    pvp: p.pvp,
+    pk: p.pk,
+    flagT: Math.ceil(p.flagT),
   };
+  const g = p.guild ? world.guilds.get(p.guild) : null;
+  const gKey = g ? `${g.id}:${g.ver}` : '';
+  if (gKey !== c.guildKey) {
+    c.guildKey = gKey;
+    d.guild = Sim.guildView(world, p) || 0;
+  }
   if (c.invDirty) {
     d.inv = p.inv;
     d.equip = p.equip;
@@ -274,7 +292,9 @@ function onAccount(c, msg) {
     }
     case 'deleteChar': {
       if (c.p) return;
+      const gone = DB.getChar(c.acc, str(msg.id, 20));
       const r = DB.deleteChar(c.acc, str(msg.id, 20));
+      if (r.ok && gone) Sim.forgetMember(world, gone.name);
       if (!r.ok) return send(c, { t: 'charError', msg: r.error });
       return send(c, { t: 'chars', chars: DB.listChars(c.acc) });
     }
@@ -309,6 +329,7 @@ function onChat(c, p, msg) {
   let text;
   let phrase = false;
   let toParty = false;
+  let toGuild = false;
   if (typeof msg.phrase === 'string') {
     // Frase rápida: texto fijo, siempre seguro
     const ph = Data.PHRASES.find((x) => x.id === msg.phrase);
@@ -316,12 +337,18 @@ function onChat(c, p, msg) {
     text = ph.text;
     phrase = true;
     toParty = !!msg.party && !!p.party;
+    toGuild = !toParty && !!msg.guild && !!p.guild;
   } else {
     let raw = cleanText(msg.text);
     if (!raw) return;
     if (raw.startsWith('#') && p.party) {
       toParty = true;
       raw = raw.slice(1).trim();
+    } else if (raw.startsWith('@')) {
+      if (!p.guild) return warn(c, p, 'No perteneces a ningún gremio. Los mensajes con @ son para tu gremio.');
+      toGuild = true;
+      raw = raw.slice(1).trim();
+      if (!raw) return;
     }
     // Mismo mensaje repetido: no se reenvía
     if (raw === c.lastChat && nowMs - (c.lastChatAt || 0) < 20000) return warn(c, p, 'No repitas el mismo mensaje.');
@@ -340,7 +367,11 @@ function onChat(c, p, msg) {
   }
   // Historial corto de cada jugador (para los reportes)
   c.history = [...(c.history || []), { at: nowMs, text }].slice(-12);
-  const out = { t: 'chat', kind: toParty ? 'party' : 'player', id: p.id, name: p.name, cls: p.cls, text, phrase };
+  const out = { t: 'chat', kind: toParty ? 'party' : toGuild ? 'guild' : 'player', id: p.id, name: p.name, cls: p.cls, text, phrase };
+  if (toGuild) {
+    for (const o of clients) if (o.p && o.p.guild === p.guild) send(o, out);
+    return;
+  }
   if (toParty) {
     const party = world.parties.get(p.party);
     for (const o of clients) if (o.p && party && party.members.includes(o.p.id)) send(o, out);
@@ -401,15 +432,16 @@ function onCommand(c, msg) {
       if (Number.isFinite(+msg.x) && Number.isFinite(+msg.z)) C.moveTo(world, p, { x: +msg.x, z: +msg.z });
       return;
     case 'target': {
-      // Los refuerzos de los jefes aparecen después: se buscan también en la lista viva
-      const m = typeof msg.id === 'string' ? mobsById.get(msg.id) || world.mobs.find((x) => x.id === msg.id) : null;
+      // Los refuerzos de los jefes aparecen después: se buscan también en la lista viva. También
+      // se puede elegir a otro jugador (para atacarlo hay que forzar con Ctrl, salvo morados o rojos)
+      const m = typeof msg.id === 'string' ? mobsById.get(msg.id) || world.mobs.find((x) => x.id === msg.id) || world.players.get(msg.id) || null : null;
       if (m && !near(m.pos, p.pos, 40)) return;
       return C.setTarget(world, p, m);
     }
     case 'attack':
-      return C.attack(world, p);
+      return C.attack(world, p, msg.force === true);
     case 'skill':
-      return C.useSkill(world, p, int(msg.i, 0, p.skills.length - 1, 0));
+      return C.useSkill(world, p, int(msg.i, 0, p.skills.length - 1, 0), msg.force === true);
     case 'potion':
       if (msg.id === 'pocion_vida' || msg.id === 'pocion_mana') C.usePotion(world, p, msg.id);
       return;
@@ -456,6 +488,39 @@ function onCommand(c, msg) {
       return;
     case 'chat':
       return onChat(c, p, msg);
+    case 'guildCreate':
+      return C.guildCreate(world, p, str(msg.name, 30), int(msg.emblem, 0, 99, 0), int(msg.color, 0, 99, 0), (name) => {
+        const f = filterChat(name);
+        return !f.ok || f.censored ? 'Ese nombre de gremio no está permitido. Elige otro.' : null;
+      });
+    case 'guildInvite':
+      if (typeof msg.id === 'string') C.guildInvite(world, p, msg.id);
+      return;
+    case 'guildInviteByName': {
+      const name = str(msg.name, 20).toLowerCase();
+      const t = [...world.players.values()].find((q) => q.name.toLowerCase() === name);
+      if (!t) return send(c, { t: 'e', e: [{ type: 'log', to: p.id, text: `No hay ningún jugador conectado llamado «${str(msg.name, 20)}».`, cls: 'warn' }] });
+      return C.guildInvite(world, p, t.id);
+    }
+    case 'guildAnswer':
+      return C.guildAnswer(world, p, !!msg.accept);
+    case 'guildLeave':
+      return C.guildLeave(world, p);
+    case 'guildKick':
+      return C.guildKick(world, p, str(msg.key, 20));
+    case 'guildRank':
+      return C.guildRank(world, p, str(msg.key, 20), msg.rank ? 1 : 0);
+    case 'guildLeader':
+      return C.guildLeader(world, p, str(msg.key, 20));
+    case 'guildDisband':
+      return C.guildDisband(world, p);
+    case 'guildNotice': {
+      const raw = cleanText(msg.text || '').slice(0, 140);
+      if (!raw) return C.guildNotice(world, p, '');
+      const f = filterChat(raw);
+      if (!f.ok) return warn(c, p, f.reason === 'personal' ? 'Por tu seguridad, no pongas datos personales en el mensaje del gremio.' : 'Ese mensaje no está permitido.');
+      return C.guildNotice(world, p, f.text);
+    }
     case 'report':
       return onReport(c, p, msg);
   }
@@ -573,6 +638,10 @@ setInterval(() => {
       routeEvents(Sim.drainEvents(world));
     }
     frame++;
+    if (world.guildsDirty) {
+      world.guildsDirty = false;
+      DB.saveGuilds(Sim.exportGuilds(world));
+    }
     if (frame % SNAP_EVERY === 0) for (const c of clients) if (c.p) snapshot(c);
     if (frame % SAVE_EVERY === 0) for (const c of clients) savePlayer(c);
   } catch (e) {
