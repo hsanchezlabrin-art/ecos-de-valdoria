@@ -8,6 +8,14 @@
 })(function () {
   return [
     {
+      version: '0.25.1',
+      date: '2026-11-19',
+      title: 'Pantalla del iPhone',
+      items: [
+        'La interfaz respeta la muesca, la isla y la barra de inicio del iPhone: las ventanas (Álbum, Amistad, Gremio, Misiones, Mapa, Ajustes…) y las pantallas de inicio ya no quedan tapadas.',
+      ],
+    },
+    {
       version: '0.25.0',
       date: '2026-11-19',
       title: 'Combos y Tienda de Amistad',

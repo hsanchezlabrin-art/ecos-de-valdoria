@@ -827,6 +827,30 @@
   body.touch #logLines { font-size: 14px; }
   body.touch #log #chatInput, body.touch #log #chatInput:not(.open) { display: block; position: static; width: 100%; z-index: auto; font-size: 16px; padding: 7px 10px; background: rgba(0,0,0,.55); border: 1px solid var(--edge-soft); border-radius: 3px; }
   body.touch #joystick { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
+
+  /* ---------- Muesca (notch), isla y barra de inicio de iPhone: nada queda bajo ellos ---------- */
+  :root { --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px); --st: env(safe-area-inset-top, 0px); --sb: env(safe-area-inset-bottom, 0px); }
+  /* Los elementos táctiles se reducen con zoom: sus márgenes seguros se compensan */
+  body.touch { --sl: calc(env(safe-area-inset-left, 0px) / var(--ui)); --sr: calc(env(safe-area-inset-right, 0px) / var(--ui)); --st: calc(env(safe-area-inset-top, 0px) / var(--ui)); --sb: calc(env(safe-area-inset-bottom, 0px) / var(--ui)); }
+  /* Ventanas: nunca más anchas ni más altas que la zona segura, y centradas en ella */
+  .panel { max-width: calc(100vw - var(--sl) - var(--sr) - 24px); max-height: calc(100% - 24px - var(--st) - var(--sb)); margin-top: calc((var(--st) - var(--sb)) / 2); }
+  body.touch .panel { max-width: calc(100vw / var(--ui) - var(--sl) - var(--sr) - 24px); }
+  /* Ventanas que antes quedaban pegadas al borde izquierdo */
+  #albumPanel, #friendPanel, #guildPanel, #questPanel { left: calc(12px + var(--sl)); }
+  /* Ventanas centradas: se desplazan hacia el lado donde no hay muesca */
+  #helpPanel, #tradePanel, #dropPanel, #hatchPanel, #masterPanel, #mapPanel, #setPanel, #invitePanel, #guildInvitePanel { margin-left: calc((var(--sl) - var(--sr)) / 2); }
+  #invPanel { right: calc(12px + var(--sr)); }
+  #shopPanel { right: calc(354px + var(--sr)); }
+  #statPanel { left: calc(12px + var(--sl)); }
+  @media (max-width: 900px) { #shopPanel { right: auto; left: calc(12px + var(--sl)); } }
+  @media (max-width: 560px) { #invPanel, #shopPanel { left: calc(12px + var(--sl)); right: calc(12px + var(--sr)); width: auto; } }
+  .target-frame, #toasts, #banner, #updateStatus { margin-left: calc((var(--sl) - var(--sr)) / 2); }
+  body.touch .player-frame { left: calc(12px + var(--sl)); }
+  body.touch .party-frame { left: calc(12px + var(--sl)); }
+  /* Pantallas a todo el ancho */
+  #netLost, #death { padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+  #start { padding-left: max(16px, 6vw, calc(env(safe-area-inset-left, 0px) + 16px)); padding-right: max(16px, 4vw, calc(env(safe-area-inset-right, 0px) + 16px)); padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .start-card { max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 </style>
 </head>
 <body>
