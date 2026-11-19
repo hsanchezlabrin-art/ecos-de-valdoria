@@ -8,6 +8,17 @@
 })(function () {
   return [
     {
+      version: '0.30.0',
+      date: '2026-11-19',
+      title: 'Lagartos nuevos y sus armaduras',
+      items: [
+        'El Lagarto y la Lagarta tienen un modelo 3D nuevo, más parecido a su diseño: cabeza de cubo con hocico, cuernos, espinas, panza clara y alitas; ella con flores en los cuernos y un jumper con tirantes.',
+        'La cola se balancea y las alitas aletean, al estar quietos y más rápido al correr.',
+        'Seis armaduras de escamas en 3D, una por grado: Escamas de Corteza, Cota de Escamas de Cobre, Escamas de Cristal Azul, Escamas de Oro Encantado, Escamas de Diamante con Capa y Escamas Celestiales del Dragón (con alas de dragón arcoíris).',
+        'Los cascos de cobre y de cristal y la corona de oro reemplazan los cuernos.',
+      ],
+    },
+    {
       version: '0.29.0',
       date: '2026-11-19',
       title: 'Elfos nuevos y sus armaduras',

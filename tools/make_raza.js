@@ -28,7 +28,10 @@ const NAME = src.json.nodes.map((n) => n.name);
 const SCALE_ARM = new THREE.Matrix4().makeScale(0.01, 0.01, 0.01); // el nodo Armature
 const joints = skin0.joints.slice();
 
-function skeleton(pos) {
+// pos: posición de cada hueso; extras: huesos propios de la raza ({nombre, padre}), por ejemplo la
+// cola (TailA, TailB) y las alas (WingL, WingR) del lagarto: se agregan como en make_hada.js, con la
+// orientación del mundo en reposo (así el juego los gira con ejes simples).
+function skeleton(pos, extras = []) {
   // Pose de reposo de cada hueso: rotación y escala del original, posición del personaje
   const bind = {};
   const q0 = new THREE.Quaternion();
@@ -41,15 +44,36 @@ function skeleton(pos) {
     bind[j] = new THREE.Matrix4().compose(new THREE.Vector3(...p), q0.clone(), s0.clone());
   });
   const nodes = JSON.parse(JSON.stringify(src.json.nodes));
-  for (const j of joints) {
-    const pw = parentOf[j] in bind ? bind[parentOf[j]] : SCALE_ARM;
-    const t = new THREE.Vector3();
-    pw.clone().invert().multiply(bind[j]).decompose(t, new THREE.Quaternion(), new THREE.Vector3());
-    nodes[j].translation = t.toArray(); // en cm, como el original
+  const names = NAME.slice();
+  const parent = { ...parentOf };
+  const jts = joints.slice();
+  const IDX = Object.fromEntries(names.map((n, i) => [n, i]));
+  for (const e of extras) {
+    const idx = nodes.length;
+    nodes.push({ name: e.nombre });
+    names[idx] = e.nombre;
+    IDX[e.nombre] = idx;
+    const pi = IDX[e.padre];
+    if (pi === undefined) throw new Error('hueso padre desconocido: ' + e.padre);
+    parent[idx] = pi;
+    (nodes[pi].children = nodes[pi].children || []).push(idx);
+    bind[idx] = new THREE.Matrix4().compose(new THREE.Vector3(...pos[e.nombre]), new THREE.Quaternion(), new THREE.Vector3(0.01, 0.01, 0.01));
+    jts.push(idx);
   }
-  const ibm = new Float32Array(joints.length * 16);
-  joints.forEach((j, k) => bind[j].clone().invert().toArray(ibm, k * 16));
-  return { nodes, ibm };
+  for (const j of jts) {
+    const pw = parent[j] in bind ? bind[parent[j]] : SCALE_ARM;
+    const t = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    pw.clone().invert().multiply(bind[j]).decompose(t, q, new THREE.Vector3());
+    nodes[j].translation = t.toArray(); // en cm, como el original
+    if (j >= src.json.nodes.length) {
+      nodes[j].rotation = q.toArray();
+      nodes[j].scale = [1, 1, 1];
+    }
+  }
+  const ibm = new Float32Array(jts.length * 16);
+  jts.forEach((j, k) => bind[j].clone().invert().toArray(ibm, k * 16));
+  return { nodes, ibm, joints: jts, names };
 }
 
 // data: nombre base en blender/salida (sin .json/.bin); mesh: nombre de la malla en el glTF;
@@ -71,15 +95,16 @@ function writeGlb(file, data, mesh, material) {
   const jntBlender = take(Uint16Array, n * 4);
   const wgt = take(Float32Array, n * 4);
   const idx = take(Uint32Array, info.indices);
+  const sk = skeleton(info.posiciones, info.extras || []);
+  const { nodes, ibm } = sk;
   // Índices de hueso: del orden de Blender al orden de la piel del glTF
-  const JI = Object.fromEntries(joints.map((j, k) => [NAME[j], k]));
+  const JI = Object.fromEntries(sk.joints.map((j, k) => [sk.names[j], k]));
   const jnt = new Uint16Array(n * 4);
   for (let i = 0; i < jnt.length; i++) {
     const name = info.huesos[jntBlender[i]];
     if (JI[name] === undefined) throw new Error('hueso desconocido: ' + name);
     jnt[i] = wgt[i] > 0 ? JI[name] : 0;
   }
-  const { nodes, ibm } = skeleton(info.posiciones);
 
   const chunks = [];
   const views = [];
@@ -117,13 +142,13 @@ function writeGlb(file, data, mesh, material) {
     materials.push(material(p, info));
     prims.push({ attributes, indices: addAcc(parte, 'SCALAR', 5125, parte.length), material: materials.length - 1, mode: 4 });
   }
-  const ibmAcc = addAcc(ibm, 'MAT4', 5126, joints.length);
+  const ibmAcc = addAcc(ibm, 'MAT4', 5126, sk.joints.length);
   const json = {
     asset: { version: '2.0', generator: 'tools/make_raza.js (malla de blender/proyectos)' },
     scene: 0,
     scenes: [{ nodes: src.json.scenes[0].nodes }],
     nodes,
-    skins: [{ inverseBindMatrices: ibmAcc, joints, ...(skin0.skeleton !== undefined ? { skeleton: skin0.skeleton } : {}) }],
+    skins: [{ inverseBindMatrices: ibmAcc, joints: sk.joints, ...(skin0.skeleton !== undefined ? { skeleton: skin0.skeleton } : {}) }],
     meshes: [{ name: mesh, primitives: prims }],
     materials,
     accessors,

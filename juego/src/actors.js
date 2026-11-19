@@ -141,11 +141,11 @@
   // detrás de la cadera más de `back`, y entre `down` por debajo y `up` por encima de ella.
   // Razas cuyo esqueleto tiene proporciones propias (se generan con tools/make_hada.js y
   // tools/make_raza.js)
-  const OWN_BONES = new Set(['hada', 'gnomo', 'elfo']);
+  const OWN_BONES = new Set(['hada', 'gnomo', 'elfo', 'lagarto']);
 
-  const TAILS = {
-    lagarto: { back: 0.16, up: 0.1, down: 0.12 },
-  };
+  // Razas cuyo modelo no trae huesos de cola: se le agregan al cargarlo. Hoy ninguna: la hada y el
+  // lagarto traen los suyos (TailA, TailB) desde Blender. Ejemplo: lagarto: { back: 0.16, up: 0.1, down: 0.12 }
+  const TAILS = {};
 
   // Le agrega a la malla dos huesos de cola (hijos de la cadera) y le pasa esos vértices: así la cola
   // se mueve sola por código y deja de seguir a la pierna. Se hace una vez por modelo (la geometría y
@@ -687,6 +687,7 @@
   const ARMOR_MODEL = {
     CLOTH_ROBE: (g, race) => (race === 'gnomo' ? `tela_${g}` : null),
     LIGHT_LEATHER: (g, race) => (race === 'elfo' ? `cuero_${g}` : null),
+    MEDIUM_SCALE: (g, race) => (race === 'lagarto' ? `escamas_${g}` : null),
   };
   const armorModelName = (item, raceKey) => {
     const v = ARMOR_MODEL[item.armorType];

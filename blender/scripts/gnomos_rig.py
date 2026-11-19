@@ -55,6 +55,35 @@ def caja(*nombres):
 
 pierna = caja("pierna_I"); bota = caja("bota_I", "bota_borde_I"); cab = caja("cabeza")
 manga = caja("manga_I"); puno = caja("manga_puno_I"); brazo = caja("brazo_I"); mano = caja("mano_I")
+
+
+def puntos(*prefijos):
+    """Vértices (en el espacio de la raíz, con los brazos en pose T) de las piezas con esos prefijos."""
+    pts = []
+    for o in root.children:
+        n = o.name[len(C_NAME) + 1:]
+        if o.type == "MESH" and n.startswith(prefijos):
+            ev = o.evaluated_get(dg); m = ev.to_mesh(); M = GC.matriz_pieza(o, root, pose_t)
+            pts += [M @ v.co for v in m.vertices]
+            ev.to_mesh_clear()
+    return pts
+
+
+# Huesos propios de la raza (como la hada): cola (TailA, TailB) y alas (WingL, WingR). El juego los
+# mueve por código (balanceo de la cola, aleteo). Con orientación del mundo en reposo.
+EXTRA = {}
+cola_pts = puntos("cola_tubo")
+if cola_pts:
+    y0, y1 = min(p.y for p in cola_pts), max(p.y for p in cola_pts)
+    z_en = lambda yv: sum(p.z for p in cola_pts if abs(p.y - yv) < 0.035) / max(1, sum(1 for p in cola_pts if abs(p.y - yv) < 0.035))
+    EXTRA["TailA"] = (Vector((0, y0 + 0.03, z_en(y0 + 0.03))), "Hips")
+    EXTRA["TailB"] = (Vector((0, (y0 + y1) / 2, z_en((y0 + y1) / 2))), "TailA")
+for s, L in ((1, "I"), (-1, "D")):
+    pts = puntos("ala_" + L)
+    if pts:
+        xm = min(abs(p.x) for p in pts)
+        base = [p for p in pts if abs(p.x) < xm + 0.03]
+        EXTRA["Wing" + ("L" if s > 0 else "R")] = (sum(base, Vector()) / len(base), "Spine")
 lc.exclude = True
 cen = lambda b: (b[0] + b[1]) / 2
 
@@ -80,6 +109,7 @@ for S, s in (("Left", 1), ("Right", -1)):
     J[S + "ForeArm"] = (s * (cen(puno).x + cen(brazo).x) / 2, 0, z_brazo)
     J[S + "Hand"] = (s * (cen(brazo).x + cen(mano).x) / 2, 0, z_brazo)
 J = {k: Vector(v) for k, v in J.items()}
+J.update({k: v[0] for k, v in EXTRA.items()})
 
 # 2. pesos ----------------------------------------------------------------------
 def cadena(c, chain, b):
@@ -96,9 +126,9 @@ def cadena(c, chain, b):
 
 
 CABEZA = ("oreja", "nariz", "ojo", "ceja", "bigote", "barba", "patilla", "pelo", "flequillo",
-          "mechon", "sonrisa", "boca", "gorro", "gafas", "copete", "flor")
+          "mechon", "sonrisa", "boca", "gorro", "gafas", "copete", "flor", "hocico", "espina", "fosa", "pestana")
 TRONCO = ("camisa", "cinturon", "borde_camisa", "torso_camisa", "cuello", "vestido",
-          "canesu", "cordon", "chaleco", "falda", "panel")
+          "canesu", "cordon", "chaleco", "falda", "panel", "panza")
 tronco = [("Hips", -INF), ("Spine02", J["Spine02"].z), ("Spine01", J["Spine01"].z), ("Spine", J["Spine"].z)]
 
 
@@ -110,6 +140,12 @@ def pesos(parte, p):
         return cadena(p.z, [("Spine", -INF), ("Head", z_cab + 0.065)], 0.04)
     if parte.startswith("melena"):
         return cadena(p.z, [("Spine", -INF), ("Head", z_cab + 0.065)], 0.06)
+    if parte.startswith("cola"):  # de la cadera a la punta: Hips → TailA → TailB
+        if "TailA" not in J:
+            return {"Hips": 1.0}
+        return cadena(p.y, [("Hips", -INF), ("TailA", J["TailA"].y + 0.02), ("TailB", J["TailB"].y)], 0.04)
+    if parte.startswith("ala"):
+        return {("WingL" if p.x > 0 else "WingR"): 1.0} if "WingL" in J else {"Spine": 1.0}
     if parte.startswith(CABEZA):
         return {"Head": 1.0}
     if parte.startswith(TRONCO):
@@ -145,6 +181,9 @@ HIJO = {"Hips": "Spine02", "Spine02": "Spine01", "Spine01": "Spine", "Spine": "n
         "RightUpLeg": "RightLeg", "RightLeg": "RightFoot", "RightFoot": "RightToeBase"}
 PADRE = {h: p for p, h in HIJO.items()}
 PADRE.update({"headfront": "Head", "LeftShoulder": "Spine", "RightShoulder": "Spine", "LeftUpLeg": "Hips", "RightUpLeg": "Hips"})
+PADRE.update({k: v[1] for k, v in EXTRA.items()})
+if "TailA" in EXTRA:
+    HIJO["TailA"] = "TailB"
 viejo = D.objects.get(C_NAME + "_esqueleto")
 if viejo:
     ad = viejo.data; D.objects.remove(viejo); D.armatures.remove(ad)
@@ -233,6 +272,7 @@ info = {"huesos": HUESOS, "posiciones": {n: [J[n].x, J[n].z, -J[n].y] for n in H
         "vertices": int(len(uniq)), "indices": int(len(idx)),
         "primitivas": [{"nombre": "cuerpo", "indices": int((~gorro_t).sum() * 3)},
                        {"nombre": "gorro", "indices": int(gorro_t.sum() * 3)}],
+        "extras": [{"nombre": k, "padre": v[1]} for k, v in EXTRA.items()],
         "orden": ["pos f32x3", "nor f32x3", "col f32x3", "joints u16x4", "weights f32x4", "indices u32"]}
 with open(base + ".json", "w", encoding="utf-8") as f:
     json.dump(info, f, indent=1)

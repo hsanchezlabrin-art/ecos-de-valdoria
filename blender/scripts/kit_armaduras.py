@@ -39,7 +39,7 @@ nv = len(me.vertices)
 co = np.empty(nv * 3, dtype=np.float32); me.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
 pid = np.empty(nv, dtype=np.int32); me.attributes["parte"].data.foreach_get("value", pid)
 NOMBRE = np.array(PARTES, dtype=object)[pid]
-TRONCO = ("camisa", "cinturon", "borde_camisa", "torso_camisa", "vestido", "cuello", "canesu", "cordon", "chaleco", "falda", "panel")
+TRONCO = ("camisa", "cinturon", "borde_camisa", "torso_camisa", "vestido", "cuello", "canesu", "cordon", "chaleco", "falda", "panel", "panza")
 CABEZA = ("cabeza", "oreja", "pelo", "flequillo", "mechon", "patilla", "ceja", "nariz", "ojo")
 CABEZA_YELMO = ("cabeza", "pelo", "flequillo", "mechon", "ceja", "nariz")
 
@@ -90,7 +90,26 @@ BOTA_MIN, BOTA_MAX = Vector(co[sbo].min(0)), Vector(co[sbo].max(0))
 ESC = X_HOMBRO / 0.19  # tamaño relativo al gnomo (para medidas de adornos)
 NA = 48
 ANG = [TAU * i / NA for i in range(NA)]
-TR, BR, HO, CA, CU, CP, PI, BO, MA = range(9)
+TR, BR, HO, CA, CU, CP, PI, BO, MA, CO, AL = range(11)  # CO cola, AL alas (huesos propios)
+
+
+def cola_anillos(n=10):
+    """Secciones de la cola del cuerpo (de la raíz a la punta): [(centro, radio)]. La cola va hacia +y."""
+    sel = seleccion(("cola_tubo",))
+    if not sel.any():
+        return []
+    pts = co[sel]
+    y0, y1 = float(pts[:, 1].min()), float(pts[:, 1].max())
+    out = []
+    for k in range(n):
+        a, b = y0 + (y1 - y0) * k / n, y0 + (y1 - y0) * (k + 1) / n
+        m = (pts[:, 1] >= a) & (pts[:, 1] <= b)
+        if m.sum() < 3:
+            continue
+        c = pts[m].mean(0)
+        r = float(np.sqrt(((pts[m][:, [0, 2]] - c[[0, 2]]) ** 2).sum(1)).mean())
+        out.append((Vector(c), r))
+    return out
 
 
 def horiz(a):
@@ -567,6 +586,12 @@ class Armadura:
             return cadena(abs(p.x), [("Spine", -INF), (S + "Arm", X_HOMBRO), (S + "ForeArm", X_CODO), (S + "Hand", X_MUNECA)], 0.03 * ESC)
         if t == CP:
             return cadena(p.z, TORSO, 0.05)
+        if t == CO:
+            if "TailA" not in J:
+                return {"Hips": 1.0}
+            return cadena(p.y, [("Hips", -INF), ("TailA", J["TailA"].y + 0.02), ("TailB", J["TailB"].y)], 0.04)
+        if t == AL:
+            return {("WingL" if p.x > 0 else "WingR"): 1.0} if "WingL" in J else {"Spine": 1.0}
         if t == PI:
             return cadena(-p.z, [("Hips", -INF), (S + "UpLeg", -Z_CAD), (S + "Leg", -J[S + "Leg"].z), (S + "Foot", -J[S + "Foot"].z)], 0.03 * ESC)
         if t == BO:
@@ -650,6 +675,7 @@ class Armadura:
                 f.write(np.ascontiguousarray(a).tobytes())
         info = {"huesos": HUESOS, "posiciones": {n: [J[n].x, J[n].z, -J[n].y] for n in HUESOS},
                 "vertices": int(len(uniq)), "indices": int(len(idx)), "cubre_cabeza": self.cubre_cabeza,
+                "extras": [{"nombre": b.name, "padre": b.parent.name} for b in arm.data.bones if b.name in ("TailA", "TailB", "WingL", "WingR")],
                 "primitivas": [{"nombre": "tela", "indices": int((~bt).sum() * 3)},
                                {"nombre": "brillo", "indices": int(bt.sum() * 3), "brilla": True}]}
         with open(base + ".json", "w", encoding="utf-8") as f:
