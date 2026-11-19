@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.28.0',
+      date: '2026-11-19',
+      title: 'Túnicas del Gnomo',
+      items: [
+        'El Gnomo y la Gnoma estrenan seis túnicas en 3D, una por grado de su armadura de tela: Ropa de Tela Simple, Túnica de Cobre, Túnica de Cristal Azul, Túnica de Oro Encantado, Túnica de Diamante con Capa y Túnica Prismática Celestial.',
+        'Cada una con su diseño: capucha de lino, cuero con bolsas, sombrero de mago con gafas, cuello alto con runas, capa negra y dorada, y una corona de cristales arcoíris con estrellas que brillan.',
+        'La capucha, el sombrero de mago y la corona reemplazan al gorro del gnomo.',
+      ],
+    },
+    {
       version: '0.27.0',
       date: '2026-11-19',
       title: 'Gnomos nuevos',

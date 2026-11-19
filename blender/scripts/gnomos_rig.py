@@ -177,6 +177,10 @@ for n in HUESOS:
     idx = np.nonzero(W[:, HI[n]] > 1e-4)[0]
     for i in idx:
         g.add([int(i)], float(W[i, HI[n]]), "REPLACE")
+# El gorro (con sus gafas) va aparte: las túnicas con capucha, sombrero o corona lo ocultan.
+# En Blender se oculta con un modificador Máscara sobre este grupo; en el .glb es otra primitiva.
+ES_GORRO = np.array([PARTES[i].startswith(("gorro", "gafas")) for i in pid])
+ob.vertex_groups.new(name="GORRO").add(np.nonzero(ES_GORRO)[0].tolist(), 1.0, "REPLACE")
 for m in [m for m in ob.modifiers if m.type == "ARMATURE"]:
     ob.modifiers.remove(m)
 mod = ob.modifiers.new("esqueleto", "ARMATURE"); mod.object = arm
@@ -213,7 +217,10 @@ pos = to_gl(co[uv]); nor = to_gl(un); col = colmat[um]
 order = np.argsort(-W, axis=1)[:, :4]
 wt = np.take_along_axis(W, order, 1); wt /= wt.sum(1, keepdims=True)
 jn = order[uv].astype(np.uint16); wv = wt[uv].astype(np.float32)
-idx = inv.astype(np.uint32)
+# triángulos del cuerpo primero y después los del gorro (dos primitivas con los mismos vértices)
+tri = inv.reshape(-1, 3)
+gorro_t = ES_GORRO[cv.reshape(-1, 3)].all(1)
+idx = np.concatenate([tri[~gorro_t].ravel(), tri[gorro_t].ravel()]).astype(np.uint32)
 os.makedirs(SALIDA, exist_ok=True)
 base = os.path.join(SALIDA, "gnomo_%s_rig" % ("f" if C_NAME.endswith("_F") else "m"))
 with open(base + ".bin", "wb") as f:
@@ -221,6 +228,8 @@ with open(base + ".bin", "wb") as f:
         f.write(np.ascontiguousarray(a).tobytes())
 info = {"huesos": HUESOS, "posiciones": {n: [J[n].x, J[n].z, -J[n].y] for n in HUESOS},
         "vertices": int(len(uniq)), "indices": int(len(idx)),
+        "primitivas": [{"nombre": "cuerpo", "indices": int((~gorro_t).sum() * 3)},
+                       {"nombre": "gorro", "indices": int(gorro_t.sum() * 3)}],
         "orden": ["pos f32x3", "nor f32x3", "col f32x3", "joints u16x4", "weights f32x4", "indices u32"]}
 with open(base + ".json", "w", encoding="utf-8") as f:
     json.dump(info, f, indent=1)

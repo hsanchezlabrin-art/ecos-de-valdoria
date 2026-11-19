@@ -596,6 +596,7 @@
     const m = {
       kind: 'hum',
       skinned: true,
+      raceKey: `${cls}_${sex}`,
       root,
       rig,
       scene,
@@ -675,6 +676,85 @@
   };
 
   // ---------- Armadura en los modelos 3D: las mismas piezas por grado que las figuras de bloques ----------
+  // ---------- Armaduras 3D (glTF hechas en Blender) ----------
+  // Cada modelo de armadura existe por raza y sexo (assets/models/armaduras/<nombre>_<raza>_<sexo>.glb) y
+  // comparte los huesos del personaje: se pega a su esqueleto y se mueve con él. Si no existe el archivo,
+  // o el tipo no tiene modelo, se dibujan las piezas de cajas de siempre.
+  // Un tipo puede tener un modelo por grado (función del grado): la túnica del gnomo tiene seis diseños,
+  // con sus propios colores (material.userData.colores) y partes que brillan (userData.brilla).
+  // Por ahora solo la armadura de tela tiene modelos, y solo para el gnomo (las demás razas no los
+  // piden: así no se descarga un archivo que no existe).
+  const ARMOR_MODEL = { CLOTH_ROBE: (g, race) => (race === 'gnomo' ? `tela_${g}` : null) };
+  const armorModelName = (item, raceKey) => {
+    const v = ARMOR_MODEL[item.armorType];
+    return typeof v === 'function' ? v(item.grade, raceKey.split('_')[0]) : v;
+  };
+  const armorAssets = {}; // 'nombre_raza_sexo' -> { meshes, cubre } | null (no existe) ; ausente = sin pedir aún
+  const armorLoading = {};
+  function requestArmor(name, raceKey) {
+    const k = `${name}_${raceKey}`;
+    if (!THREE.GLTFLoader) return Promise.resolve(null);
+    if (!armorLoading[k]) {
+      armorLoading[k] = load(`assets/models/armaduras/${k}.glb`)
+        .then((g) => {
+          const meshes = [];
+          g.scene.traverse((o) => {
+            if (o.isSkinnedMesh) meshes.push(o);
+          });
+          // cubre: trae capucha, sombrero o corona (se oculta el gorro del personaje)
+          const cubre = meshes.some((o) => o.material && o.material.userData && o.material.userData.cubre_cabeza);
+          armorAssets[k] = meshes.length ? { meshes, cubre } : null;
+        })
+        .catch(() => {
+          armorAssets[k] = null;
+        });
+    }
+    return armorLoading[k];
+  }
+
+  // Gorro propio del personaje (gnomo): se oculta cuando la armadura trae capucha, sombrero o corona
+  function setHat(m, visible) {
+    m.scene.traverse((o) => {
+      if (o.isSkinnedMesh && o.material && o.material.userData && o.material.userData.gorro) o.visible = visible;
+    });
+  }
+
+  // Pega la armadura al esqueleto del personaje. Si trae sus propios colores los usa; si no, la pinta
+  // con el color del grado.
+  function attachArmorModel(m, asset, item) {
+    const { GRADE_IDX, TRIM } = M.ARMOR_STYLE;
+    let body = null;
+    m.scene.traverse((o) => {
+      if (o.isSkinnedMesh && (!body || o.geometry.attributes.position.count > body.geometry.attributes.position.count)) body = o;
+    });
+    if (!body) return false;
+    // Los índices de hueso de la armadura siguen SU lista de huesos: se reordenan por nombre a los del
+    // personaje (con la pose de reposo del propio personaje)
+    const idx = new Map(body.skeleton.bones.map((b, i) => [b.name, i]));
+    if (asset.meshes.some((src) => src.skeleton.bones.some((b) => !idx.has(b.name)))) return false;
+    const gi = GRADE_IDX[item.grade] || 0;
+    const metal = gi >= 2 && item.armorType !== 'CLOTH_ROBE' && item.armorType !== 'SACRED_ROBE';
+    for (const src of asset.meshes) {
+      const ud = (src.material && src.material.userData) || {};
+      let mat;
+      if (ud.colores && ud.brilla) mat = new THREE.MeshBasicMaterial({ vertexColors: true });
+      else if (ud.colores) mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.05 });
+      else mat = M.mat(TRIM[item.grade], { metalness: metal ? 0.3 : 0.05, roughness: metal ? 0.5 : 0.8 });
+      // Los vértices de la armadura están en el mismo espacio que los del cuerpo: se usa su esqueleto
+      const sm = new THREE.SkinnedMesh(src.geometry.clone(), mat);
+      sm.frustumCulled = false;
+      sm.castShadow = !ud.brilla;
+      sm.raycast = () => {};
+      body.parent.add(sm); // bajo el mismo nodo que el cuerpo: así comparten la escala del esqueleto
+      const names = src.skeleton.bones.map((b) => b.name);
+      sm.bind(new THREE.Skeleton(names.map((nm) => body.skeleton.bones[idx.get(nm)]), names.map((nm) => body.skeleton.boneInverses[idx.get(nm)].clone())), body.bindMatrix);
+      m.armorParts.push(sm);
+      if (item.grade === 'arcoiris' && !ud.colores) m.armorRainbow.push(mat);
+    }
+    if (asset.cubre) setHat(m, false);
+    return true;
+  }
+
   function setArmorSkinned(m, item) {
     // Las piezas anteriores se quitan y se libera su memoria de video (geometría y material propios)
     for (const g of m.armorParts) {
@@ -687,6 +767,20 @@
     m.armorParts = [];
     m.armorRainbow = [];
     m.armorGrade = item ? item.grade || null : null;
+    m.armorItem = item || null;
+    setHat(m, true);
+    // Armadura 3D si existe para esta raza y sexo (si aún no llegó el archivo, se ven las cajas y luego se cambia)
+    const model = item && item.grade && m.raceKey ? armorModelName(item, m.raceKey) : null;
+    if (model) {
+      const a = armorAssets[`${model}_${m.raceKey}`];
+      if (a) {
+        if (attachArmorModel(m, a, item)) return M.syncRainbow(m);
+      } else if (a === undefined) {
+        requestArmor(model, m.raceKey).then(() => {
+          if (m.armorItem === item) setArmorSkinned(m, item);
+        });
+      }
+    }
     const d = m.body;
     const A = m.anchors;
     if (!item || !item.grade || !d || !A.hips || !A.chest || !A.head) return M.syncRainbow(m);

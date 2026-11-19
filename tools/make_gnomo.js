@@ -52,9 +52,12 @@ function skeleton(pos) {
   return { nodes, ibm };
 }
 
-function writeGlb(file, sex) {
-  const info = JSON.parse(fs.readFileSync(path.join(DATA, `gnomo_${sex}_rig.json`), 'utf8'));
-  const raw = fs.readFileSync(path.join(DATA, `gnomo_${sex}_rig.bin`));
+// data: nombre base en blender/salida (sin .json/.bin); mesh: nombre de la malla en el glTF;
+// material(prim, info): material glTF de cada primitiva. Las primitivas (info.primitivas, en
+// orden) comparten los vértices y se reparten los índices: cuerpo/gorro, o tela/brillo.
+function writeGlb(file, data, mesh, material) {
+  const info = JSON.parse(fs.readFileSync(path.join(DATA, data + '.json'), 'utf8'));
+  const raw = fs.readFileSync(path.join(DATA, data + '.bin'));
   const n = info.vertices;
   let off0 = 0;
   const take = (T, count) => {
@@ -97,18 +100,23 @@ function writeGlb(file, sex) {
   const mn = [Infinity, Infinity, Infinity];
   const mx = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < pos.length; i += 3) for (let c = 0; c < 3; c++) (mn[c] = Math.min(mn[c], pos[i + c])), (mx[c] = Math.max(mx[c], pos[i + c]));
-  const prim = {
-    attributes: {
-      POSITION: addAcc(pos, 'VEC3', 5126, n, { min: mn, max: mx }),
-      NORMAL: addAcc(nor, 'VEC3', 5126, n),
-      COLOR_0: addAcc(col, 'VEC3', 5126, n),
-      JOINTS_0: addAcc(jnt, 'VEC4', 5123, n),
-      WEIGHTS_0: addAcc(wgt, 'VEC4', 5126, n),
-    },
-    indices: addAcc(idx, 'SCALAR', 5125, idx.length),
-    material: 0,
-    mode: 4,
+  const attributes = {
+    POSITION: addAcc(pos, 'VEC3', 5126, n, { min: mn, max: mx }),
+    NORMAL: addAcc(nor, 'VEC3', 5126, n),
+    COLOR_0: addAcc(col, 'VEC3', 5126, n),
+    JOINTS_0: addAcc(jnt, 'VEC4', 5123, n),
+    WEIGHTS_0: addAcc(wgt, 'VEC4', 5126, n),
   };
+  const lista = (info.primitivas || [{ nombre: 'unica', indices: info.indices }]).filter((p) => p.indices > 0);
+  const materials = [];
+  const prims = [];
+  let desde = 0;
+  for (const p of lista) {
+    const parte = idx.slice(desde, desde + p.indices);
+    desde += p.indices;
+    materials.push(material(p, info));
+    prims.push({ attributes, indices: addAcc(parte, 'SCALAR', 5125, parte.length), material: materials.length - 1, mode: 4 });
+  }
   const ibmAcc = addAcc(ibm, 'MAT4', 5126, joints.length);
   const json = {
     asset: { version: '2.0', generator: 'tools/make_gnomo.js (malla de blender/proyectos/gnomos.blend)' },
@@ -116,9 +124,8 @@ function writeGlb(file, sex) {
     scenes: [{ nodes: src.json.scenes[0].nodes }],
     nodes,
     skins: [{ inverseBindMatrices: ibmAcc, joints, ...(skin0.skeleton !== undefined ? { skeleton: skin0.skeleton } : {}) }],
-    meshes: [{ name: `gnomo_${sex}`, primitives: [prim] }],
-    // "suave": el juego no le fuerza caras planas (la malla esculpida trae sus propias normales)
-    materials: [{ name: 'gnomo', extras: { suave: true }, pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.85 } }],
+    meshes: [{ name: mesh, primitives: prims }],
+    materials,
     accessors,
     bufferViews: views,
     buffers: [{ byteLength: off }],
@@ -140,8 +147,30 @@ function writeGlb(file, sex) {
   return { vertices: n, triangulos: idx.length / 3, kb: Math.round((12 + 16 + js.length + bin.length) / 1024) };
 }
 
+// Marcas que lee actors.js (en material.userData):
+//   suave: no forzarle caras planas (la malla esculpida trae sus propias normales)
+//   gorro: es el gorro del gnomo (se oculta si la túnica trae capucha, sombrero o corona)
+//   colores: la armadura trae sus propios colores por vértice (no se pinta con el color del grado)
+//   brilla: se dibuja sin sombra (runas, gemas, estrellas)
+//   cubre_cabeza: esta armadura reemplaza el gorro
+const PBR = { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.85 };
+const CUERPO = (p) => ({ name: p.nombre === 'gorro' ? 'gorro' : 'gnomo', extras: { suave: true, ...(p.nombre === 'gorro' ? { gorro: true } : {}) }, pbrMetallicRoughness: PBR });
+const ARMADURA = (p, info) =>
+  info.primitivas
+    ? { name: p.nombre, extras: { colores: true, suave: true, ...(p.brilla ? { brilla: true } : {}), ...(info.cubre_cabeza ? { cubre_cabeza: true } : {}) }, pbrMetallicRoughness: PBR }
+    : { name: 'armadura', pbrMetallicRoughness: { baseColorFactor: [0.6, 0.6, 0.6, 1], metallicFactor: 0.3, roughnessFactor: 0.6 } };
+
 fs.mkdirSync(OUT, { recursive: true });
+fs.mkdirSync(path.join(OUT, 'armaduras'), { recursive: true });
 for (const sex of ['m', 'f']) {
-  const r = writeGlb(path.join(OUT, `gnomo_${sex}.glb`), sex);
+  const r = writeGlb(path.join(OUT, `gnomo_${sex}.glb`), `gnomo_${sex}_rig`, `gnomo_${sex}`, CUERPO);
   console.log(`gnomo_${sex}.glb: ${r.vertices} vértices, ${r.triangulos} triángulos, ${r.kb} KB`);
+  // Armaduras hechas sobre este cuerpo (gnomos_armadura.py): mismo esqueleto y mismas coordenadas,
+  // que es lo que espera actors.js para pegarlas al personaje
+  for (const f of fs.readdirSync(DATA)) {
+    const m = f.match(new RegExp(`^gnomo_${sex}_armadura_(\\w+)\\.json$`));
+    if (!m) continue;
+    const a = writeGlb(path.join(OUT, 'armaduras', `${m[1]}_gnomo_${sex}.glb`), f.slice(0, -5), `armadura_${m[1]}`, ARMADURA);
+    console.log(`armaduras/${m[1]}_gnomo_${sex}.glb: ${a.vertices} vértices, ${a.triangulos} triángulos, ${a.kb} KB`);
+  }
 }

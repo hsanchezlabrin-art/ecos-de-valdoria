@@ -7,5 +7,5 @@
     V.VERSION = factory().VERSION;
   }
 })(function () {
-  return { VERSION: '0.27.0' };
+  return { VERSION: '0.28.0' };
 });

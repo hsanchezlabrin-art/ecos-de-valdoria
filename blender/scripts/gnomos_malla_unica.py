@@ -73,6 +73,8 @@ def grupo(nombre):
         return "pierna" + nombre[-2:]
     if nombre.startswith(TRONCO_P):
         return "tronco"
+    if nombre.startswith("gorro"):  # aparte: algunas túnicas lo reemplazan (capucha, sombrero)
+        return "gorro"
     return "cabeza"
 
 
