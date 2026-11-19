@@ -6,3 +6,7 @@ desktop/dist
 desktop.ini
 Thumbs.db
 .DS_Store
+
+blender/salida/
+__pycache__/
+*.blend1

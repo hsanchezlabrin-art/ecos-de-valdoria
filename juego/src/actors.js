@@ -139,8 +139,9 @@
 
   // Colas con movimiento: por raza, qué vértices son la cola (en proporción a la altura del modelo):
   // detrás de la cadera más de `back`, y entre `down` por debajo y `up` por encima de ella.
-  // Razas cuyo esqueleto tiene proporciones propias (se generan con tools/make_hada.js)
-  const OWN_BONES = new Set(['hada']);
+  // Razas cuyo esqueleto tiene proporciones propias (se generan con tools/make_hada.js y
+  // tools/make_gnomo.js)
+  const OWN_BONES = new Set(['hada', 'gnomo']);
 
   const TAILS = {
     lagarto: { back: 0.16, up: 0.1, down: 0.12 },
@@ -314,7 +315,8 @@
         mt.map.anisotropy = 4;
       }
       mt.side = THREE.FrontSide;
-      mt.flatShading = true; // caras planas: aspecto low-poly
+      // caras planas: aspecto low-poly (salvo mallas esculpidas que traen sus normales: "suave")
+      mt.flatShading = !(mt.userData && mt.userData.suave);
       mt.roughness = 0.85;
       mt.metalness = 0;
       mt.needsUpdate = true;

@@ -8,6 +8,15 @@
 })(function () {
   return [
     {
+      version: '0.27.0',
+      date: '2026-11-19',
+      title: 'Gnomos nuevos',
+      items: [
+        'El Gnomo y la Gnoma tienen un modelo 3D nuevo, más parecido a su diseño: gorro puntiagudo con gafas de aviador, barba con mechones para él y trenzas para ella.',
+        'Formas redondeadas y sombreado suave, con las mismas animaciones que las demás razas.',
+      ],
+    },
+    {
       version: '0.26.0',
       date: '2026-11-19',
       title: 'La Hada en 3D',
