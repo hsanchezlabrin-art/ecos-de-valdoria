@@ -23,6 +23,8 @@
     gnomo_f: 'assets/models/gnomo_f.glb',
     lagarto_m: 'assets/models/lagarto_m.glb',
     lagarto_f: 'assets/models/lagarto_f.glb',
+    hada_m: 'assets/models/hada_m.glb',
+    hada_f: 'assets/models/hada_f.glb',
   };
   const LIBRARY = 'assets/models/animaciones.glb';
 
@@ -109,8 +111,11 @@
   // (al morir o saltar sí sube y baja: solo se fija el avance horizontal). scale ajusta la altura de
   // la cadera cuando el clip viene de otro personaje.
   // La cadera queda fija en su posición de reposo (rest): algunos clips empiezan desplazados.
-  function fitClip(clip, scale, rest) {
+  function fitClip(clip, scale, rest, ownBones) {
     const out = clip.clone();
+    // Esqueleto con proporciones propias (hada): las animaciones solo giran los huesos; el largo de
+    // cada hueso lo manda el modelo, así que se descartan sus pistas de posición y escala
+    if (ownBones) out.tracks = out.tracks.filter((tr) => /Hips\.position$/.test(tr.name) || !/\.(position|scale)$/.test(tr.name));
     for (const tr of out.tracks) {
       if (!/Hips\.position$/.test(tr.name)) continue;
       const v = (tr.values = Float32Array.from(tr.values));
@@ -134,6 +139,9 @@
 
   // Colas con movimiento: por raza, qué vértices son la cola (en proporción a la altura del modelo):
   // detrás de la cadera más de `back`, y entre `down` por debajo y `up` por encima de ella.
+  // Razas cuyo esqueleto tiene proporciones propias (se generan con tools/make_hada.js)
+  const OWN_BONES = new Set(['hada']);
+
   const TAILS = {
     lagarto: { back: 0.16, up: 0.1, down: 0.12 },
   };
@@ -212,7 +220,8 @@
     let mesh = null;
     const B = {};
     scene.traverse((o) => {
-      if (o.isSkinnedMesh) mesh = o;
+      // Con varias mallas (cuerpo y alas de la hada) se mide la más grande: el cuerpo
+      if (o.isSkinnedMesh && (!mesh || o.geometry.attributes.position.count > mesh.geometry.attributes.position.count)) mesh = o;
       if (o.isBone) B[o.name] = o;
     });
     if (!mesh || !B.Hips || !B.Spine || !B.Head || !B.LeftArm) return null;
@@ -312,8 +321,10 @@
     });
     // Altura según la malla en su pose original (la escala del esqueleto engaña a Box3)
     let h = 1.7;
+    let hv = 0;
     gltf.scene.traverse((o) => {
-      if (o.isSkinnedMesh) {
+      if (o.isSkinnedMesh && o.geometry.attributes.position.count > hv) {
+        hv = o.geometry.attributes.position.count; // la malla más grande es el cuerpo (las alas son otra)
         o.geometry.computeBoundingBox();
         h = o.geometry.boundingBox.max.y - o.geometry.boundingBox.min.y || h;
       }
@@ -323,10 +334,10 @@
     const rest = hipRest(gltf.scene);
     if (library) {
       const k = library.hipLen ? rest.length() / library.hipLen || 1 : 1;
-      for (const [name, clip] of Object.entries(library.clips)) clips[name] = fitClip(clip, k, rest);
+      for (const [name, clip] of Object.entries(library.clips)) clips[name] = fitClip(clip, k, rest, OWN_BONES.has(race));
     }
     // Las propias del personaje (si las trae) tienen prioridad
-    for (const clip of gltf.animations) if (['idle', 'walk', 'die'].includes(clip.name)) clips[clip.name] = fitClip(clip, 1, rest);
+    for (const clip of gltf.animations) if (['idle', 'walk', 'die'].includes(clip.name)) clips[clip.name] = fitClip(clip, 1, rest, OWN_BONES.has(race));
     for (const def of Object.values(ATTACKS)) if (clips[def.clip]) clips[def.clip] = subclip(clips[def.clip], def.range[0], def.range[1]);
     if (clips.celebrate) clips.celebrate = subclip(clips.celebrate, CELEBRATE[0], CELEBRATE[1]);
     return { gltf, scale: HEIGHT / h, clips, body };
@@ -619,6 +630,8 @@
       body: a.body ? scaleBody(a.body, a.scale) : null,
       tail,
       tailRest: tail ? tail.map((b) => b.quaternion.clone()) : null,
+      wingBones: bones.WingL && bones.WingR ? [bones.WingL, bones.WingR] : null, // alas de la hada
+      wingRest: bones.WingL && bones.WingR ? [bones.WingL.quaternion.clone(), bones.WingR.quaternion.clone()] : null,
       footRest: 0,
     };
     calibrateAnchors(m, { lFore: bones.LeftHand, rFore: bones.RightHand });
@@ -637,6 +650,21 @@
     m.tail[0].quaternion.copy(m.tailRest[0]).multiply(_qt.setFromAxisAngle(_up, Math.sin(t * sp) * amp));
     m.tail[1].quaternion.copy(m.tailRest[1]).multiply(_qt.setFromAxisAngle(_up, Math.sin(t * sp - 0.9) * amp * 1.3));
   }
+
+  // Alas de la hada: aleteo suave al estar quieta y más vivo al correr (cada ala gira sobre su eje vertical)
+  function flapWings(m, t, moving) {
+    const sp = 5 + 9 * moving;
+    const amp = 0.18 + 0.2 * moving;
+    for (let i = 0; i < 2; i++) {
+      const s = i ? -1 : 1;
+      m.wingBones[i].quaternion
+        .copy(m.wingRest[i])
+        .multiply(_qt.setFromAxisAngle(_up, s * (Math.sin(t * sp) * amp + 0.05)))
+        .multiply(_qz.setFromAxisAngle(_fwd, -s * Math.sin(t * sp + 0.6) * amp * 0.35));
+    }
+  }
+  const _qz = new THREE.Quaternion();
+  const _fwd = new THREE.Vector3(0, 0, 1);
 
   const scaleBody = (b, k) => {
     const v = (p) => p.clone().multiplyScalar(k);
@@ -828,6 +856,7 @@
     m.scene.position.y = 0;
     m.mixer.update(dt);
     if (m.tail) swayTail(m, t, moving);
+    if (m.wingBones) flapWings(m, t, moving);
     // La capa se levanta hacia atrás al correr (con un leve aleteo)
     m.capeLift = 0.08 + 0.5 * moving + Math.sin(t * 9) * 0.06 * moving;
     // Pies en el suelo: las animaciones compartidas vienen de otro cuerpo y pueden dejarlo flotando

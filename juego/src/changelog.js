@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.26.0',
+      date: '2026-11-19',
+      title: 'La Hada en 3D',
+      items: [
+        'La Hada-Gata ya tiene su modelo 3D (macho y hembra) en estilo vóxel: orejas de gato, cola, alas translúcidas y proporciones de cabezona.',
+        'Las alas aletean y la cola se balancea; usa las mismas animaciones de correr, atacar, celebrar y sentarse que las demás razas.',
+        'Las armaduras y las armas se ajustan al nuevo cuerpo.',
+      ],
+    },
+    {
       version: '0.25.1',
       date: '2026-11-19',
       title: 'Pantalla del iPhone',
