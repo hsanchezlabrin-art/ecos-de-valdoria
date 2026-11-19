@@ -98,6 +98,7 @@
       damageArea: (p, at, radius, mult) => hitCircle(w, p, at, radius, mult, {}),
       damageOne: (p, target, mult) => damageMob(w, p, target, mult),
       push: (target, from, dist) => target.kind === 'mob' && knockBack(target, from, dist),
+      mobsNear: (at, radius) => w.mobs.filter((m) => !m.dead && d2(m.pos, at) <= radius + bodyR(m)),
       addItem: (p, id, qty = 1) => {
         const okAdd = addItem(p, id, qty);
         if (okAdd) emit(w, { type: 'inventory', to: p.id });

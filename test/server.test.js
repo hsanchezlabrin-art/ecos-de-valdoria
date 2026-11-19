@@ -185,6 +185,7 @@ async function main() {
     b.send({ t: 'inviteAnswer', accept: true });
     await wait(400);
     ok(a.last.me.party && a.last.me.party.members.length === 2, 'Ana ve a Beto en su grupo con su vida y maná');
+    ok(a.last.p.every((r) => r.length === 26 && typeof r[25] === 'string'), 'cada jugador trae al final su apariencia cosmética (estela|poción|título)');
     b.send({ t: 'chat', text: '#vamos al bosque' });
     await wait(300);
     ok(a.chats.some((m) => m.kind === 'party' && m.text === 'vamos al bosque'), 'chat de grupo con #');

@@ -246,6 +246,9 @@
         case 'KeyK':
           UI.togglePanel('album');
           break;
+        case 'KeyB':
+          UI.togglePanel('friend');
+          break;
         case 'KeyF':
           Game.attackTarget();
           break;

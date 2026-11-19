@@ -367,6 +367,7 @@
       q.mounted = row[22] || 0;
       q.pvpState = row[23] || 0; // 0 blanco · 1 morado (atacó hace poco) · 2 rojo (PK)
       q.guildTag = row[24] || ''; // "emblema|color|nombre" del gremio
+      setLook(q, row[25]);
       if (q !== P) q.stage = row[18] || 0;
       q.riding = false;
       if (q.equip.weapon !== row[12] || q.equip.armor !== row[13]) {
@@ -657,6 +658,8 @@
     G.emoteReady = performance.now() + V.Data.EMOTE_CD * 1000;
     send({ t: 'sys', sys: 'emotes', cmd: 'play', arg: id });
   };
+  // Comando para un sistema del servidor (tienda de Amistad, cosméticos…)
+  const sysCmd = (sys, cmd, arg) => P && send({ t: 'sys', sys, cmd, arg: arg === undefined ? null : arg });
   // Gremio
   const guild = {
     create: (name, emblem, color) => send({ t: 'guildCreate', name, emblem, color }),
@@ -808,6 +811,16 @@
       case 'guildInvite':
         if (mine(ev)) UI.showGuildInvite(ev);
         break;
+      case 'combo':
+        spawnComboBurst(ev.pos, ev.color, ev.r);
+        for (const id of ev.hop || []) {
+          const m = net.mobs.get(id);
+          if (m && m.view) m.view.hopT = 0.6;
+        }
+        break;
+      case 'comboTag':
+        if (ev.ent && ev.ent.kind === 'mob') UI.showComboTag(ev.ent, ev.tag, ev.dur);
+        break;
       case 'emote':
         if (ev.ent && ev.ent.model) {
           V.Actors.emote(ev.ent.model, ev.id);
@@ -884,6 +897,33 @@
     spawnRing(ent.pos, 0xffd36b, 5, 1.2);
     spawnRing(ent.pos, 0xffffff, 3, 0.7);
     glows.push({ g, pillar, sparks, light, ent, t: 0, life: 2.2 });
+  }
+
+  // Combo elemental: dos anillos de su color y una lluvia de cubitos de colores que saltan y caen
+  const comboCubeGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+  const bursts = [];
+  function spawnComboBurst(at, color, r) {
+    spawnRing(at, color, r, 0.7);
+    spawnRing(at, 0xffffff, r * 0.55, 0.45);
+    spawnZone(at, r * 0.8, color, 0.5);
+    const g = new THREE.Group();
+    g.position.set(at.x, at.y + 0.6, at.z);
+    const tints = [color, 0xffffff, 0xffe27a, 0xff9ad5, 0x8fe8ff];
+    const cubes = [];
+    for (let i = 0; i < 34; i++) {
+      const c = new THREE.Mesh(comboCubeGeo, new THREE.MeshBasicMaterial({ color: V.Gfx.hot(tints[i % tints.length], 1.8), transparent: true }));
+      const a = Math.random() * Math.PI * 2;
+      const sp = (0.5 + Math.random()) * r * 1.3;
+      c.userData = { vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: 4 + Math.random() * 5, spin: (Math.random() - 0.5) * 12 };
+      c.scale.setScalar(0.7 + Math.random() * 0.9);
+      g.add(c);
+      cubes.push(c);
+    }
+    const light = new THREE.PointLight(color, 4, r * 4, 2);
+    light.position.y = 1;
+    g.add(light);
+    G.scene.add(g);
+    bursts.push({ g, cubes, light, t: 0, life: 1.1 });
   }
 
   // Cadena de rayos: líneas quebradas entre los puntos
@@ -1180,6 +1220,149 @@
     pv.walk += ((moving && !fly ? 1 : 0) - pv.walk) * Math.min(1, dt * 8);
     animateModel(m, t * 1.4, pv.walk, 0);
     if (m.wings) for (const [i, w] of m.wings.entries()) w.rotation.z = (i ? -1 : 1) * Math.sin(t * (fly ? 14 : 6)) * 0.5;
+  }
+
+  // ---------- Cosméticos: estelas y pociones (color, tamaño, aura) ----------
+  // La apariencia llega por red como "estela|poción|título" (última columna de cada jugador)
+  function setLook(q, raw) {
+    const [trail, potion, title] = String(raw || '').split('|');
+    const key = `${trail || ''}|${potion || ''}`;
+    q.title = title || '';
+    if (q.lookKey === key) return;
+    q.lookKey = key;
+    q.trailDef = (trail && V.Data.friendItem(trail)) || null;
+    q.potionDef = (potion && V.Data.friendItem(potion)) || null;
+  }
+
+  // Un cubito de adorno que sube, cae o se queda donde lo dejaste, y se desvanece
+  const bitGeo = {};
+  const geo = (k, make) => bitGeo[k] || (bitGeo[k] = make());
+  function spawnBit(shape, color, at, big) {
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false });
+    let obj;
+    let vx = (Math.random() - 0.5) * 0.4;
+    let vy = 0.5;
+    let vz = (Math.random() - 0.5) * 0.4;
+    let life = 0.9;
+    let spin = 2;
+    if (shape === 'burbujas') {
+      mat.opacity = 0.55;
+      obj = new THREE.Mesh(geo('bub', () => new THREE.IcosahedronGeometry(0.1, 0)), mat);
+      vy = 0.7;
+      life = 1.3;
+    } else if (shape === 'hojas') {
+      obj = new THREE.Mesh(geo('leaf', () => new THREE.BoxGeometry(0.2, 0.03, 0.12)), mat);
+      vy = -0.15;
+      life = 1.4;
+      spin = 4;
+    } else if (shape === 'corazones') {
+      // corazón de cubitos (vóxel)
+      obj = new THREE.Group();
+      const cube = geo('hc', () => new THREE.BoxGeometry(0.07, 0.07, 0.07));
+      for (const [x, y] of [[-0.07, 0.07], [0.07, 0.07], [-0.07, 0], [0, 0], [0.07, 0], [0, -0.07]]) obj.add(new THREE.Mesh(cube, mat).translateX(x).translateY(y));
+      vy = 0.6;
+      life = 1.2;
+      spin = 0;
+    } else if (shape === 'nieve') {
+      obj = new THREE.Mesh(geo('snow', () => new THREE.BoxGeometry(0.08, 0.08, 0.08)), mat);
+      vy = -0.3;
+      life = 1.5;
+    } else if (shape === 'arcoiris') {
+      obj = new THREE.Mesh(geo('rb', () => new THREE.BoxGeometry(0.14, 0.14, 0.14)), mat);
+      mat.color.setHSL((G.time * 0.5) % 1, 0.85, 0.62);
+      vy = 0.15;
+      vx *= 0.3;
+      vz *= 0.3;
+      life = 1.8;
+    } else {
+      obj = new THREE.Mesh(geo('spark', () => new THREE.OctahedronGeometry(0.08, 0)), mat);
+    }
+    obj.position.set(at.x, at.y, at.z);
+    if (big) obj.scale.setScalar(1.3);
+    obj.traverse((o) => (o.raycast = () => {}));
+    G.scene.add(obj);
+    props.push({
+      obj,
+      mats: [mat],
+      t: 0,
+      life,
+      fade: life * 0.5,
+      base: [mat.opacity],
+      tick: () => {
+        obj.position.x += vx * 0.016;
+        obj.position.y += vy * 0.016;
+        obj.position.z += vz * 0.016;
+        obj.rotation.y += spin * 0.03;
+      },
+    });
+  }
+
+  // Tiñe a un jugador. Clona sus materiales: los modelos los comparten entre personajes.
+  function tintEntity(ent, hex) {
+    const t = hex ? new THREE.Color(hex) : null;
+    ent.model.root.traverse((o) => {
+      if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
+      if (!t) {
+        if (o.userData.origMat) {
+          o.material.dispose();
+          o.material = o.userData.origMat;
+          o.userData.origMat = null;
+        }
+        return;
+      }
+      if (!o.userData.origMat) {
+        if (!o.material.color || !o.material.emissive) return;
+        o.userData.origMat = o.material;
+        o.material = o.material.clone();
+      }
+      o.material.color.copy(t).multiplyScalar(0.9);
+      o.material.emissive.copy(t).multiplyScalar(0.22);
+    });
+  }
+
+  function cosmeticFx(ent, dt) {
+    const v = ent.view;
+    const pot = ent.potionDef;
+    // Tamaño: se acerca suavemente al valor de la poción
+    const want = pot && pot.fx === 'size' ? pot.scale : 1;
+    v.potScale = v.potScale || 1;
+    if (Math.abs(v.potScale - want) > 0.002) v.potScale += (want - v.potScale) * Math.min(1, dt * 5);
+    else v.potScale = want;
+    if (v.potScale !== 1 || v.potScaled) {
+      ent.model.root.scale.setScalar(v.potScale);
+      v.potScaled = v.potScale !== 1;
+    }
+    // Color: se aplica una vez y se repasa cada segundo por si cambió el equipo
+    const colorHex = pot && pot.fx === 'color' ? pot.color : 0;
+    v.tintT = (v.tintT || 0) - dt;
+    if (colorHex !== (v.tintHex || 0) || (colorHex && v.tintT <= 0)) {
+      v.tintHex = colorHex;
+      v.tintT = 1;
+      tintEntity(ent, colorHex);
+    }
+    if (ent.dead) return;
+    const at = ent.pos;
+    // Estela al caminar
+    const tr = ent.trailDef;
+    if (tr && ent.moving && !ent.riding) {
+      v.cosT = (v.cosT || 0) - dt;
+      if (v.cosT <= 0) {
+        v.cosT = 0.09;
+        const cols = tr.colors.length ? tr.colors : [0xffffff];
+        const y = tr.shape === 'burbujas' || tr.shape === 'nieve' || tr.shape === 'hojas' ? 0.5 + Math.random() * 0.8 : tr.shape === 'arcoiris' ? 0.12 : 0.2 + Math.random() * 0.4;
+        spawnBit(tr.shape, cols[(Math.random() * cols.length) | 0], { x: at.x + (Math.random() - 0.5) * 0.5, y: at.y + y, z: at.z + (Math.random() - 0.5) * 0.5 });
+      }
+    }
+    // Aura de poción: figuritas que flotan a su alrededor
+    if (pot && pot.fx === 'aura') {
+      v.auraT = (v.auraT || 0) - dt;
+      if (v.auraT <= 0) {
+        v.auraT = 0.16;
+        const a = Math.random() * Math.PI * 2;
+        const shape = pot.aura === 'estrellas' ? 'chispas' : pot.aura === 'corazones' ? 'corazones' : 'burbujas';
+        spawnBit(shape, pot.color, { x: at.x + Math.cos(a) * 0.8, y: at.y + 0.2 + Math.random() * 1.4, z: at.z + Math.sin(a) * 0.8 }, true);
+      }
+    }
   }
 
   // Aura de Héroe (Ascensión Maestra): anillo dorado con chispas a los pies
@@ -1507,6 +1690,27 @@
         glows.splice(i, 1);
       }
     }
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const b = bursts[i];
+      b.t += dt;
+      const k = b.t / b.life;
+      b.light.intensity = 4 * Math.max(0, 1 - k * 2);
+      for (const c of b.cubes) {
+        const u = c.userData;
+        u.vy -= 18 * dt;
+        c.position.x += u.vx * dt;
+        c.position.y = Math.max(-0.5, c.position.y + u.vy * dt);
+        c.position.z += u.vz * dt;
+        c.rotation.x += u.spin * dt;
+        c.rotation.y += u.spin * dt;
+        c.material.opacity = Math.min(1, 2.2 * (1 - k));
+      }
+      if (k >= 1) {
+        G.scene.remove(b.g);
+        for (const c of b.cubes) c.material.dispose();
+        bursts.splice(i, 1);
+      }
+    }
     for (let i = fallers.length - 1; i >= 0; i--) {
       const f = fallers[i];
       f.t += dt;
@@ -1637,6 +1841,11 @@
     }
     root.position.set(ent.pos.x, ent.pos.y, ent.pos.z);
     root.rotation.y = ent.facing;
+    // Saltito de los monstruos atrapados en un combo
+    if (v.hopT > 0) {
+      v.hopT = Math.max(0, v.hopT - dt);
+      root.position.y += Math.sin(Math.PI * (1 - v.hopT / 0.6)) * 1.1;
+    }
     if (ent.dead) {
       v.deathK = Math.min(1, v.deathK + dt * 2.5);
       animateDeath(ent.model, v.deathK);
@@ -1696,6 +1905,7 @@
     if (ent.kind === 'player') {
       updatePet(ent, dt);
       heroAura(ent, dt);
+      cosmeticFx(ent, dt);
     }
   }
 
@@ -1755,7 +1965,7 @@
     PROTOCOL, connect, register, login, resume, logout, exitWorld, createChar, deleteChar, play,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
     clickInventory, useItem, sellItem, destroyItem, unequip, buyItem, respawnPlayer, update, sendChat, sendPhrase, report, classQuest, toggleGems, hatch, toggleMount,
-    invite, inviteByName, answerInvite, leaveParty, kickFromParty, guild, emote,
+    invite, inviteByName, answerInvite, leaveParty, kickFromParty, guild, emote, sysCmd,
     get online() {
       return true;
     },

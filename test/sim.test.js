@@ -571,6 +571,181 @@ for (const cls of Data.CLASS_IDS) {
   ok(p2.ext.album.sets.praderas === 1 && p2.ext.album.mobs.hongo >= 2 && !p2.ext.album.mobs.dragon_falso, 'el álbum se guarda y al cargar ignora entradas que no existen');
 }
 
+// 2i) Fase 3: combos elementales entre clases
+{
+  const Combo = require('../juego/src/systems/combo.js');
+  ok(Object.values(Data.COMBO_TAGS).every((t) => t.dur >= 3 && t.dur <= 5), 'las etiquetas de combo duran de 3 a 5 s');
+  const owners = new Set();
+  for (const cls of Object.keys(Data.ARCHETYPES)) if (Data.skillsFor(cls, 1).some((s) => s.applies && Data.COMBO_TAGS[s.applies])) owners.add(cls);
+  ok(owners.size === Object.keys(Data.ARCHETYPES).length, 'las 5 razas tienen al menos una habilidad que deja etiqueta');
+  ok(Object.keys(Data.COMBO_TAGS).every((t) => Data.COMBOS.some((c) => c.a === t || c.b === t)), 'cada etiqueta forma parte de algún combo');
+
+  const w = Sim.createWorld();
+  Sim.useSystem(w, Combo);
+  Sim.spawnMobs(w);
+  const m = w.mobs.find((x) => !x.def.boss && !x.dead);
+  const m2 = w.mobs.find((x) => !x.def.boss && !x.dead && x !== m);
+  const big = (x) => {
+    x.maxHp = 1e6;
+    x.hp = 1e6;
+  };
+  big(m);
+  big(m2);
+  const at = { x: m.pos.x, z: m.pos.z };
+  const gno = Sim.addPlayer(w, { ...Sim.newCharacter('Chispita', 'gnomo'), level: 15, stage: 1, pos: { x: at.x - 3, z: at.z } });
+  const liz = Sim.addPlayer(w, { ...Sim.newCharacter('Escamas', 'lagarto'), level: 15, stage: 1, pos: { x: at.x - 2.5, z: at.z + 1 } });
+  const skill = (cls, id) => Data.skillsFor(cls, 1).find((s) => s.id === id);
+  const cast = (p, cls, id, target = m) => w.bus.emit('skill:cast', { p, skill: skill(cls, id), target, level: 1 });
+  const combos = () => Sim.drainEvents(w).filter((e) => e.type === 'combo');
+  Sim.drainEvents(w);
+
+  // Etiqueta y caducidad
+  cast(gno, 'gnomo', 'pegamento');
+  ok(m.comboTags && m.comboTags.WET_GLUE && m.comboTags.WET_GLUE.by === gno.id, 'una habilidad con «applies» deja su etiqueta en el monstruo');
+  ok(Sim.drainEvents(w).some((e) => e.type === 'comboTag' && e.ent === m && e.tag === 'WET_GLUE'), 'el cliente recibe la etiqueta para mostrar su ícono');
+  cast(gno, 'gnomo', 'rayo_cristal');
+  Sim.step(w, DT);
+  ok(!combos().length && m.comboTags.WET_GLUE && m.comboTags.CRYSTAL_CHARGE, 'un mismo jugador no hace combo consigo mismo (se necesita un compañero)');
+  m.comboTags = null;
+  cast(gno, 'gnomo', 'pegamento');
+  run(w, Data.COMBO_TAGS.WET_GLUE.dur + 0.2, () => (m.hp = 1e6));
+  cast(liz, 'lagarto', 'aliento');
+  Sim.step(w, DT);
+  ok(!combos().length && m.comboTags.FIRE_SPARK && !m.comboTags.WET_GLUE, `fuera de la ventana (${Data.COMBO_TAGS.WET_GLUE.dur} s) la etiqueta caducó y no hay combo`);
+
+  // Combo entre dos razas: Gnomo (Pegajoso) + Caballero Lagarto (Chispas) = Explosión de Caramelo
+  m.comboTags = null;
+  m.pos.x = at.x;
+  m.pos.z = at.z;
+  m2.pos.x = at.x + 1.5;
+  m2.pos.z = at.z;
+  m2.pos.y = m.pos.y;
+  const hp0 = m.hp;
+  const hp2 = m2.hp;
+  cast(gno, 'gnomo', 'pegamento');
+  run(w, 1, () => {
+    m2.pos.x = at.x + 1.5;
+    m2.pos.z = at.z;
+  });
+  cast(liz, 'lagarto', 'aliento');
+  Sim.step(w, DT);
+  const evs = Sim.drainEvents(w);
+  const boom = evs.filter((e) => e.type === 'combo');
+  ok(boom.length === 1 && boom[0].id === 'caramelo' && boom[0].name === 'Explosión de Caramelo', 'Pegajoso + Chispas de dos jugadores = Explosión de Caramelo');
+  ok(m.hp < hp0 && m2.hp < hp2, 'el combo hace daño en área (al objetivo y a los de al lado)');
+  ok(Math.hypot(m2.pos.x - at.x, m2.pos.z - at.z) > 2.5, 'la Explosión de Caramelo empuja a los monstruos cercanos');
+  ok(evs.some((e) => e.type === 'float' && e.ent === m && /Caramelo/.test(e.text)), 'el nombre del combo aparece como texto flotante');
+  ok(evs.some((e) => e.type === 'log' && e.to === gno.id && /Combo/.test(e.text)) && evs.some((e) => e.type === 'log' && e.to === liz.id && /Combo/.test(e.text)), 'ambos jugadores ven el aviso del combo');
+  ok(!m.comboTags || (!m.comboTags.WET_GLUE && !m.comboTags.FIRE_SPARK), 'el combo consume las dos etiquetas');
+  cast(liz, 'lagarto', 'aliento');
+  Sim.step(w, DT);
+  ok(!combos().length, 'un combo se aplica una sola vez (repetir la habilidad no lo vuelve a lanzar)');
+
+  // Con las habilidades de verdad: Gnomo (Rayo de Cristal) + Elfo (Salto de Copa) = Tormenta Prismática
+  m.comboTags = null;
+  m.pos.x = at.x;
+  m.pos.z = at.z;
+  const elf = Sim.addPlayer(w, { ...Sim.newCharacter('Hojita', 'elfo'), level: 15, stage: 1, pos: { x: at.x + 4, z: at.z } });
+  gno.pos.x = at.x - 4;
+  gno.pos.z = at.z;
+  C.setTarget(w, gno, m);
+  C.setTarget(w, elf, m);
+  Sim.drainEvents(w);
+  C.useSkill(w, gno, gno.skills.findIndex((s) => s.id === 'rayo_cristal'));
+  Sim.step(w, DT);
+  C.useSkill(w, elf, elf.skills.findIndex((s) => s.id === 'salto_copa'));
+  Sim.step(w, DT);
+  const real = combos();
+  ok(real.length === 1 && real[0].id === 'prisma', 'Rayo de Cristal (Gnomo) + Salto de Copa (Elfo) = Tormenta Prismática');
+  ok(real[0].hop.includes(m.id), 'la Tormenta Prismática hace saltar a los monstruos (efecto visual)');
+
+  // Hada-Gato (Ola de Notas, Ráfaga) + Oso (Muro de Miel, Pegajoso) = Burbujas Pegajosas
+  m.comboTags = null;
+  const fairy = Sim.addPlayer(w, { ...Sim.newCharacter('Mishi', 'hada', 'f'), level: 15, stage: 1, pos: { x: at.x, z: at.z - 4 } });
+  const bear = Sim.addPlayer(w, { ...Sim.newCharacter('Osito', 'oso'), level: 15, stage: 1, pos: { x: at.x, z: at.z + 4 } });
+  cast(fairy, 'hada', 'ola_notas');
+  cast(bear, 'oso', 'muro_miel');
+  Sim.step(w, DT);
+  const bub = combos();
+  ok(bub.length === 1 && bub[0].id === 'burbujas', 'Hada-Gato + Oso también combinan (Burbujas Pegajosas)');
+
+  // PvP: contra otro jugador no hay etiquetas ni combos
+  cast(gno, 'gnomo', 'pegamento', liz);
+  cast(elf, 'elfo', 'salto_copa', liz);
+  Sim.step(w, DT);
+  ok(!liz.comboTags && !combos().length, 'los combos no existen contra jugadores (solo contra monstruos)');
+  // Una habilidad cuerpo a cuerpo no etiqueta a un objetivo fuera de su alcance
+  m.comboTags = null;
+  liz.pos.x = at.x - 30;
+  cast(liz, 'lagarto', 'aliento');
+  ok(!m.comboTags, 'el Aliento de Chispa no etiqueta a un monstruo que está lejos');
+}
+
+// 2j) Fase 4: Tienda de Amistad, pociones cosméticas, estelas y títulos
+{
+  const SysM = ['mentor', 'album', 'cosmetics', 'amistad'].map((id) => require(`../juego/src/systems/${id}.js`));
+  const Cos = SysM[2];
+  const w = Sim.createWorld();
+  for (const sy of SysM) Sim.useSystem(w, sy);
+  const p = Sim.addPlayer(w, { ...Sim.newCharacter('Coqueta', 'hada', 'f'), pos: { x: 50, z: 14 } });
+  const hpMax = p.stats.maxHp;
+  const buy = (id) => Sim.systemCommand(w, p, 'amistad', 'buy', id);
+  const sh = (id) => Data.friendItem(id);
+
+  buy('est_chispas');
+  ok(!p.ext.cosmetics.own.est_chispas && p.ext.mentor.pts === 0, 'sin Puntos de Amistad no se compra nada');
+  p.ext.mentor.pts = 40;
+  buy('est_chispas');
+  ok(p.ext.cosmetics.own.est_chispas && p.ext.cosmetics.trail === 'est_chispas' && p.ext.mentor.pts === 40 - sh('est_chispas').price, 'comprar una estela cuesta sus puntos y se activa sola');
+  const before = p.ext.mentor.pts;
+  buy('est_chispas');
+  ok(p.ext.mentor.pts === before, 'una estela ya comprada no se cobra dos veces');
+  buy('no_existe');
+  ok(p.ext.mentor.pts === before, 'un artículo que no existe no cobra');
+  p.ext.mentor.pts = 2;
+  buy('tit_mentor');
+  ok(!p.ext.cosmetics.own.tit_mentor && p.ext.mentor.pts === 2, 'con puntos de menos no se canjea (y no se pierden)');
+  p.ext.mentor.pts = 100;
+  buy('tit_amigo');
+  buy('tit_mano');
+  ok(p.ext.cosmetics.title === 'shop:tit_amigo', 'el primer título comprado queda puesto');
+
+  // Elegir título: de la tienda o del álbum; uno que no se tiene se rechaza
+  Sim.systemCommand(w, p, 'cosmetics', 'title', 'shop:tit_mano');
+  ok(p.ext.cosmetics.title === 'shop:tit_mano' && Cos.look(p).split('|')[2] === 'Mano Amiga', 'se elige un título y los demás lo ven en su apariencia');
+  Sim.systemCommand(w, p, 'cosmetics', 'title', 'album:praderas');
+  ok(p.ext.cosmetics.title === 'shop:tit_mano', 'un título del álbum que no se ganó se rechaza');
+  p.ext.album.sets.praderas = 1;
+  Sim.systemCommand(w, p, 'cosmetics', 'title', 'album:praderas');
+  ok(Sim.systemViews(w, p).cosmetics.title === 'album:praderas' && Cos.look(p).split('|')[2] === 'Amigo de las Praderas', 'las colecciones del álbum dan títulos');
+  ok(Sim.systemViews(w, p).cosmetics.titles.length === 3, 'el selector lista títulos del álbum y de la tienda');
+  Sim.systemCommand(w, p, 'cosmetics', 'trail', 'est_nieve');
+  ok(p.ext.cosmetics.trail === 'est_chispas', 'una estela que no se compró no se puede activar');
+
+  // Poción: dura un rato y no toca las estadísticas
+  buy('poc_gigante');
+  ok(p.ext.cosmetics.potion && p.ext.cosmetics.potion.id === 'poc_gigante' && p.stats.maxHp === hpMax, 'la poción cosmética se bebe al comprarla y no cambia las estadísticas');
+  ok(Cos.look(p).split('|')[1] === 'poc_gigante', 'la poción también viaja en la apariencia');
+  for (let t = 0; t < 30; t += DT) Sim.step(w, DT);
+  const left = Sim.systemViews(w, p).cosmetics.potion.left;
+  ok(left < sh('poc_gigante').dur && left > sh('poc_gigante').dur - 40, 'la poción va gastando su tiempo');
+  p.ext.cosmetics.potion.left = 0.1;
+  Sim.drainEvents(w);
+  for (let t = 0; t < 0.3; t += DT) Sim.step(w, DT);
+  ok(p.ext.cosmetics.potion === null && Sim.systemViews(w, p).cosmetics.potion === null, 'la poción caduca sola');
+
+  // Guardar y cargar
+  buy('poc_estrellas');
+  Sim.systemCommand(w, p, 'cosmetics', 'trail', '');
+  const saved = JSON.parse(JSON.stringify(Sim.serialize(p)));
+  const w2 = Sim.createWorld();
+  for (const sy of SysM) Sim.useSystem(w2, sy);
+  const q = Sim.addPlayer(w2, { ...saved, pos: { x: 50, z: 14 } });
+  ok(q.ext.cosmetics.own.est_chispas && q.ext.cosmetics.own.tit_mano && q.ext.cosmetics.title === 'album:praderas' && q.ext.cosmetics.trail === '' && q.ext.cosmetics.potion.id === 'poc_estrellas' && q.ext.mentor.pts === p.ext.mentor.pts, 'estelas, títulos, poción y puntos se guardan y se cargan');
+  const bad = Sim.addPlayer(w2, { ...Sim.newCharacter('Truco', 'oso'), ext: { cosmetics: { own: { est_chispas: 1, inventada: 1 }, trail: 'est_nieve', potion: { id: 'poc_mini', left: 99999 }, title: 'x' } } });
+  ok(!bad.ext.cosmetics.own.inventada && bad.ext.cosmetics.trail === '' && bad.ext.cosmetics.potion.left <= sh('poc_mini').dur && Cos.look(bad) === '|poc_mini|', 'datos guardados raros se limpian al cargar');
+}
+
 // 7) Tienda: hay que estar junto al mercader y se puede comprar y vender en cantidad
 {
   const w = Sim.createWorld();

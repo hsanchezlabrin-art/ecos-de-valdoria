@@ -151,7 +151,7 @@
       skills: [
         { id: 'rugido', name: 'Rugido Protector', glyph: '◉', type: 'aoe', mult: 0.6, radius: 6, taunt: true, allyShield: 0.15, shieldDur: 6, mp: 12, cd: 10, desc: 'Ruges fuerte: los monstruos cercanos te atacan a ti y tus aliados cercanos reciben un escudo.' },
         { id: 'salto_sismico', name: 'Salto Sísmico', glyph: '✸', type: 'aoe', mult: 1.6, radius: 4.5, stun: 1.5, mp: 16, cd: 9, desc: 'Saltas y caes con fuerza: 160% de daño alrededor y aturdes a los enemigos 1,5 s.' },
-        { id: 'muro_miel', name: 'Muro de Miel', glyph: '◍', type: 'zone', radius: 4, dur: 6, slow: true, tick: 0.3, fx: 0xf2b13a, mp: 14, cd: 14, desc: 'Un charco de miel pegajosa: ralentiza y daña poco a poco a los enemigos que lo pisan durante 6 s.' },
+        { id: 'muro_miel', name: 'Muro de Miel', glyph: '◍', type: 'zone', applies: 'WET_GLUE', radius: 4, dur: 6, slow: true, tick: 0.3, fx: 0xf2b13a, mp: 14, cd: 14, desc: 'Un charco de miel pegajosa: ralentiza y daña poco a poco a los enemigos que lo pisan durante 6 s.' },
         { id: 'piel_corteza', name: 'Piel de Corteza', glyph: '▦', type: 'buff', aura: 'bark', dr: 0.3, dur: 6, mp: 15, cd: 20, desc: 'Tu piel se vuelve corteza: recibes un 30% menos de daño durante 6 s.' },
         { id: 'tronco', name: 'Lanzamiento de Tronco', glyph: '▬', type: 'line', mult: 2, length: 14, width: 2, stun: 1.2, mp: 20, cd: 11, desc: 'Arrojas un tronco cuadrado en línea recta: 200% de daño y derriba a los enemigos 1,2 s.' },
       ],
@@ -193,7 +193,7 @@
       awaken: 'Explorador del Bosque',
       skills: [
         { id: 'bellotas', name: 'Lluvia de Bellotas', glyph: '⇣', type: 'area', fx: 'acorn', mult: 1.4, radius: 4.5, delay: 0.5, mp: 12, cd: 8, range: 16, desc: 'Una lluvia de bellotas cae sobre el objetivo y todo lo que lo rodea: 140% de daño.' },
-        { id: 'salto_copa', name: 'Salto de Copa', glyph: '↶', type: 'leap', dist: 7, shot: 1.2, knock: 3, mp: 12, cd: 10, desc: 'Saltas 7 m hacia atrás y disparas una flecha que empuja al objetivo.' },
+        { id: 'salto_copa', name: 'Salto de Copa', glyph: '↶', type: 'leap', applies: 'WIND_GUST', dist: 7, shot: 1.2, knock: 3, mp: 12, cd: 10, desc: 'Saltas 7 m hacia atrás y disparas una flecha que empuja al objetivo.' },
         { id: 'halcon', name: 'Compañero Halcón', glyph: '🦅', type: 'mark', hawk: true, pct: 0.25, dur: 10, mp: 10, cd: 16, range: 22, desc: 'Tu halcón marca al objetivo: recibe un 25% más de daño de todo tu grupo durante 10 s.' },
         { id: 'enredadera', name: 'Flecha Enredadera', glyph: '❦', type: 'dmg', proj: 'arrow', mult: 1.3, root: 3, mp: 16, cd: 12, range: 16, desc: 'Raíces cúbicas atrapan al objetivo: 130% de daño y no puede moverse durante 3 s.' },
         { id: 'paso_veloz', name: 'Paso Veloz', glyph: '»', type: 'buff', aura: 'wind', speed: 0.35, evade: 0.25, dur: 8, mp: 14, cd: 20, desc: 'Corres como el viento: +35% de velocidad y +25% de esquivar durante 8 s.' },
@@ -235,10 +235,10 @@
       lookF: { hair: 0xd8743a, beard: false },
       awaken: 'Artificiero de Cristal',
       skills: [
-        { id: 'rayo_cristal', name: 'Rayo de Cristal', glyph: 'ϟ', type: 'chain', mult: 1.6, jumps: 2, jumpR: 8, mp: 10, cd: 4, range: 14, desc: 'Un rayo de cristal golpea al objetivo y rebota hasta 3 enemigos: 160% de daño a cada uno.' },
+        { id: 'rayo_cristal', name: 'Rayo de Cristal', glyph: 'ϟ', type: 'chain', applies: 'CRYSTAL_CHARGE', mult: 1.6, jumps: 2, jumpR: 8, mp: 10, cd: 4, range: 14, desc: 'Un rayo de cristal golpea al objetivo y rebota hasta 3 enemigos: 160% de daño a cada uno.' },
         { id: 'torreta', name: 'Torreta de Chispas', glyph: '⛯', type: 'turret', summon: 'turret', mult: 0.9, dur: 8, every: 1, reach: 12, mp: 16, cd: 14, desc: 'Construyes un tótem que dispara chispas al enemigo más cercano durante 8 s.' },
         { id: 'polimorfia', name: 'Polimorfia Divertida', glyph: '🐑', type: 'poly', dur: 5, mp: 18, cd: 18, range: 14, desc: 'Conviertes al objetivo en una oveja o un pollo cuadrado inofensivo durante 5 s. Se rompe si lo golpean. (No sirve con jefes.)' },
-        { id: 'pegamento', name: 'Bomba de Pegamento', glyph: '⚗', type: 'area', fx: 'glue', mult: 1.5, radius: 4, delay: 0.45, slow: 4, mp: 18, cd: 10, range: 14, desc: 'Un frasco explota sobre el objetivo: 150% de daño en área y ralentiza 4 s.' },
+        { id: 'pegamento', name: 'Bomba de Pegamento', glyph: '⚗', type: 'area', applies: 'WET_GLUE', fx: 'glue', mult: 1.5, radius: 4, delay: 0.45, slow: 4, mp: 18, cd: 10, range: 14, desc: 'Un frasco explota sobre el objetivo: 150% de daño en área y ralentiza 4 s.' },
         { id: 'propulsores', name: 'Propulsores de Mochila', glyph: '⇢', type: 'blink', dist: 8, mp: 12, cd: 12, desc: 'Tu mochila te lanza 8 m hacia adelante dejando una nube de humo.' },
       ],
       branches: {
@@ -282,7 +282,7 @@
         { id: 'burbuja', name: 'Burbuja Estelar', glyph: '◯', type: 'bubble', dur: 10, reach: 16, mp: 14, cd: 14, desc: 'Una burbuja protege al aliado más herido (o a ti): bloquea por completo el siguiente golpe.' },
         { id: 'bendicion', name: 'Bendición de Velocidad', glyph: '»', type: 'buff', group: true, radius: 12, speed: 0.2, haste: 0.2, dur: 15, mp: 20, cd: 30, desc: 'Tú y tu grupo se mueven y atacan un 20% más rápido durante 15 s.' },
         { id: 'destello', name: 'Destello Purificador', glyph: '✧', type: 'heal', group: true, radius: 9, amount: 0.12, cleanse: true, mp: 14, cd: 12, desc: 'Quita veneno, quemaduras y lentitud a tu grupo (los causan lobos, orcos, gólems, sapos y Tharmok) y lo cura un poco.' },
-        { id: 'ola_notas', name: 'Ola de Notas', glyph: '♫', type: 'dmg', proj: 'arcane', mult: 1.8, healAlly: 0.15, mp: 14, cd: 6, range: 14, desc: 'Una nota musical daña al enemigo (180%) y rebota hacia el aliado más herido para curarlo.' },
+        { id: 'ola_notas', name: 'Ola de Notas', glyph: '♫', type: 'dmg', applies: 'WIND_GUST', proj: 'arcane', mult: 1.8, healAlly: 0.15, mp: 14, cd: 6, range: 14, desc: 'Una nota musical daña al enemigo (180%) y rebota hacia el aliado más herido para curarlo.' },
       ],
       branches: {
         a: {
@@ -322,7 +322,7 @@
       awaken: 'Guerrero Escama de Fuego',
       skills: [
         { id: 'torbellino', name: 'Torbellino de Escamas', glyph: '❂', type: 'aoe', mult: 1.5, radius: 4.5, mp: 14, cd: 7, desc: 'Giras con tu espada: 150% de daño a todos los enemigos a tu alrededor.' },
-        { id: 'aliento', name: 'Aliento de Chispa', glyph: '🔥', type: 'cone', mult: 1, radius: 7, angle: 70, burn: { mult: 1.6, dur: 4 }, mp: 14, cd: 9, desc: 'Escupes chispas al frente: 100% de daño y los quemas (160% más en 4 s).' },
+        { id: 'aliento', name: 'Aliento de Chispa', glyph: '🔥', type: 'cone', applies: 'FIRE_SPARK', mult: 1, radius: 7, angle: 70, burn: { mult: 1.6, dur: 4 }, mp: 14, cd: 9, desc: 'Escupes chispas al frente: 100% de daño y los quemas (160% más en 4 s).' },
         { id: 'carga', name: 'Carga Heroica', glyph: '⇥', type: 'charge', mult: 1.6, stun: 1, mp: 14, cd: 11, range: 12, desc: 'Corres hacia el objetivo desde hasta 12 m: 160% de daño y lo aturdes 1 s.' },
         { id: 'escudo_brasas', name: 'Escudo de Brasas', glyph: '♨', type: 'buff', aura: 'fire', thorns: 0.5, dur: 10, mp: 16, cd: 20, desc: 'Te rodeas de fuego: quien te golpee cuerpo a cuerpo se quema (50% de tu ataque) durante 10 s.' },
         { id: 'corte_cruzado', name: 'Corte Cruzado', glyph: '✕', type: 'dmg', mult: 1.2, hits: 2, critIfBurning: true, mp: 16, cd: 8, range: 2.8, desc: 'Dos tajos rápidos de 120%. Si el enemigo se está quemando, ambos son críticos.' },
@@ -825,6 +825,56 @@
   // ---------- Ayudante de Novatos (Puntos de Amistad) ----------
   const MENTOR = { gap: 10, boss: 10, quest: 5, killsPerPoint: 5, dailyCap: 50 };
 
+  // ---------- Tienda de Amistad: pociones cosméticas, estelas y títulos ----------
+  // Se pagan con Puntos de Amistad (p.ext.mentor.pts). Son solo de adorno: no cambian estadísticas.
+  //  - potion: se bebe al comprarla y dura `dur` segundos jugados (color, tamaño o aura).
+  //  - trail: estela de partículas al caminar; se compra una vez y se activa o quita cuando quieras.
+  //  - title: texto que aparece sobre el nombre; se compra una vez.
+  const POTION_SECS = 600;
+  const FRIEND_SHOP = [
+    { id: 'poc_rosa', kind: 'potion', fx: 'color', color: 0xff7ab8, name: 'Poción Rosa Chicle', icon: '🧪', price: 5, dur: POTION_SECS, desc: 'Te tiñe de rosa chicle.' },
+    { id: 'poc_azul', kind: 'potion', fx: 'color', color: 0x5aa9ff, name: 'Poción Azul Cielo', icon: '🧪', price: 5, dur: POTION_SECS, desc: 'Te tiñe de azul cielo.' },
+    { id: 'poc_verde', kind: 'potion', fx: 'color', color: 0x6fdc6a, name: 'Poción Verde Hoja', icon: '🧪', price: 5, dur: POTION_SECS, desc: 'Te tiñe de verde hoja.' },
+    { id: 'poc_dorada', kind: 'potion', fx: 'color', color: 0xffd04a, name: 'Poción Dorada', icon: '🧪', price: 8, dur: POTION_SECS, desc: 'Brillas como el oro.' },
+    { id: 'poc_gigante', kind: 'potion', fx: 'size', scale: 1.35, name: 'Poción de Gigante', icon: '⬆️', price: 8, dur: POTION_SECS, desc: 'Te haces grandote.' },
+    { id: 'poc_mini', kind: 'potion', fx: 'size', scale: 0.7, name: 'Poción Minúscula', icon: '⬇️', price: 8, dur: POTION_SECS, desc: 'Te haces chiquito.' },
+    { id: 'poc_estrellas', kind: 'potion', fx: 'aura', aura: 'estrellas', color: 0xffe36b, name: 'Aura de Estrellas', icon: '⭐', price: 10, dur: POTION_SECS, desc: 'Estrellitas dan vueltas a tu alrededor.' },
+    { id: 'poc_corazones', kind: 'potion', fx: 'aura', aura: 'corazones', color: 0xff6f9c, name: 'Aura de Corazones', icon: '💗', price: 10, dur: POTION_SECS, desc: 'Corazoncitos flotan a tu alrededor.' },
+    { id: 'poc_burbujas', kind: 'potion', fx: 'aura', aura: 'burbujas', color: 0x9fe8ff, name: 'Aura de Burbujas', icon: '🫧', price: 10, dur: POTION_SECS, desc: 'Burbujas suben a tu alrededor.' },
+    { id: 'est_chispas', kind: 'trail', shape: 'chispas', colors: [0xffe36b, 0xfff3b0], name: 'Estela de Chispas', icon: '✨', price: 15, desc: 'Chispitas doradas tras tus pasos.' },
+    { id: 'est_burbujas', kind: 'trail', shape: 'burbujas', colors: [0x9fe8ff, 0xd6f6ff], name: 'Estela de Burbujas', icon: '🫧', price: 15, desc: 'Burbujas que suben al caminar.' },
+    { id: 'est_hojas', kind: 'trail', shape: 'hojas', colors: [0x6fdc6a, 0xa8e86a, 0xffb74a], name: 'Estela de Hojas', icon: '🍃', price: 15, desc: 'Hojitas que caen a tu paso.' },
+    { id: 'est_corazones', kind: 'trail', shape: 'corazones', colors: [0xff6f9c, 0xff9ec0], name: 'Estela de Corazones', icon: '💗', price: 20, desc: 'Corazoncitos por donde pasas.' },
+    { id: 'est_nieve', kind: 'trail', shape: 'nieve', colors: [0xffffff, 0xd6ecff], name: 'Estela de Copos', icon: '❄️', price: 20, desc: 'Copos de nieve a tu paso.' },
+    { id: 'est_arcoiris', kind: 'trail', shape: 'arcoiris', colors: [], name: 'Estela Arcoíris', icon: '🌈', price: 30, desc: 'Cubitos que cambian de color.' },
+    { id: 'tit_amigo', kind: 'title', text: 'Amigo de Todos', name: 'Título «Amigo de Todos»', icon: '🤝', price: 20, desc: 'Un título sobre tu nombre.' },
+    { id: 'tit_mano', kind: 'title', text: 'Mano Amiga', name: 'Título «Mano Amiga»', icon: '🖐️', price: 30, desc: 'Un título sobre tu nombre.' },
+    { id: 'tit_mentor', kind: 'title', text: 'Gran Mentor', name: 'Título «Gran Mentor»', icon: '🎓', price: 60, desc: 'Un título sobre tu nombre.' },
+  ];
+  const friendItem = (id) => FRIEND_SHOP.find((x) => x.id === id) || null;
+
+  // ---------- Combos elementales entre clases ----------
+  // Algunas habilidades dejan una etiqueta en el monstruo (campo `applies` de la habilidad). Si otro
+  // jugador le pone una etiqueta que hace pareja antes de que caduque, estalla un combo. Solo contra
+  // monstruos: entre jugadores no hay combos.
+  const COMBO_TAGS = {
+    WET_GLUE: { name: 'Pegajoso', icon: '💧', color: 0x6fd6ff, dur: 5 },
+    FIRE_SPARK: { name: 'Chispas', icon: '🔥', color: 0xff8a3a, dur: 4 },
+    CRYSTAL_CHARGE: { name: 'Carga de Cristal', icon: '💎', color: 0xb98cff, dur: 4 },
+    WIND_GUST: { name: 'Ráfaga', icon: '🍃', color: 0x8fe8a0, dur: 3 },
+  };
+  // Pares a+b (el orden no importa). mult = daño en área sobre el ataque de quien lo completa;
+  // push = empuje en metros; bounce = los monstruos dan un saltito (solo visual)
+  const COMBOS = [
+    { a: 'WET_GLUE', b: 'FIRE_SPARK', id: 'caramelo', name: 'Explosión de Caramelo', mult: 1.8, radius: 4.5, push: 2.5, bounce: false, fx: 0xff9ad5 },
+    { a: 'WIND_GUST', b: 'CRYSTAL_CHARGE', id: 'prisma', name: 'Tormenta Prismática', mult: 2, radius: 5, push: 0, bounce: true, fx: 0xb98cff },
+    { a: 'FIRE_SPARK', b: 'WIND_GUST', id: 'brasas', name: 'Remolino de Brasas', mult: 1.7, radius: 5, push: 1.5, bounce: false, fx: 0xff7a2a },
+    { a: 'CRYSTAL_CHARGE', b: 'WET_GLUE', id: 'gelatina', name: 'Gelatina Cristalina', mult: 1.5, radius: 4, push: 0, bounce: true, fx: 0x6fd6ff },
+    { a: 'FIRE_SPARK', b: 'CRYSTAL_CHARGE', id: 'fuegos', name: 'Fuegos Artificiales', mult: 2.2, radius: 3.5, push: 1, bounce: true, fx: 0xffd36b },
+    { a: 'WET_GLUE', b: 'WIND_GUST', id: 'burbujas', name: 'Burbujas Pegajosas', mult: 1.4, radius: 5.5, push: 1, bounce: true, fx: 0x9fe8ff },
+  ];
+  const comboFor = (t1, t2) => COMBOS.find((c) => (c.a === t1 && c.b === t2) || (c.a === t2 && c.b === t1)) || null;
+
   const GEM_MULT = 1.25;
   // Tiendas: lista de { id, price, currency } (currency: objeto con el que se paga; sin él, oro)
   const gearOf = (cls, grades) => grades.flatMap((g) => [weaponFor(cls, g), armorFor(cls, g)]);
@@ -982,7 +1032,7 @@
     ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT,
     ARENAS, SHOPS, shopItems, MOB_H, mobHeight, PHRASES,
     GUILD_LVL, GUILD_COST, GUILD_MAX, GUILD_RANKS, GUILD_EMBLEMS, GUILD_COLORS,
-    EMOTES, EMOTE_CD, MENTOR, albumData,
+    EMOTES, EMOTE_CD, MENTOR, FRIEND_SHOP, friendItem, albumData, COMBO_TAGS, COMBOS, comboFor,
     PETS, isPet, PET_LVL, MOUNT_LVL, GLIDER_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName, itemCategory, isKeyItem,
     OLD_CLASS_MAP, migrateCharacter,
   };

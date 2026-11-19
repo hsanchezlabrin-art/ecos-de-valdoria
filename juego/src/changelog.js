@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.25.0',
+      date: '2026-11-19',
+      title: 'Combos y Tienda de Amistad',
+      items: [
+        'Combos elementales: si dos jugadores le ponen a un monstruo habilidades que hacen pareja (por ejemplo Pegajoso + Ráfaga de viento), estalla un combo con daño en área, empuje y cubitos de colores.',
+        'Tienda de Amistad (tecla B): canjea tus Puntos de Amistad por pociones cosméticas (color, tamaño o aura), estelas al caminar (chispas, burbujas, hojas, corazones, copos y arcoíris) y títulos. Solo son adornos: no cambian tus estadísticas.',
+        'Títulos sobre el nombre: elige uno de los que ganas en el Álbum o compras en la tienda, y todos lo ven.',
+      ],
+    },
+    {
       version: '0.24.0',
       date: '2026-11-19',
       title: 'Gestos, Puntos de Amistad y Álbum',

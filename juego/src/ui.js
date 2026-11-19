@@ -58,6 +58,7 @@ function initUI() {
     quests: $('questPanel'),
     guild: $('guildPanel'),
     album: $('albumPanel'),
+    friend: $('friendPanel'),
   };
   E.hud.hidden = false;
   E.pName.textContent = G.player.name;
@@ -81,6 +82,7 @@ function initUI() {
   $('btnQuests').onclick = () => togglePanel('quests');
   $('btnGuild').onclick = () => togglePanel('guild');
   $('btnAlbum').onclick = () => togglePanel('album');
+  $('btnFriend').onclick = () => togglePanel('friend');
   $('btnEmotes').onclick = () => toggleEmotes();
   buildEmoteWheel();
   $('btnGuildInv').onclick = () => G.playerSel && V.Game.guild.invite(G.playerSel.id);
@@ -184,7 +186,15 @@ function skillTitle(s) {
   const p = G.player;
   const lvl = p ? V.Data.skillLevel(p, s) : 0;
   const mp = V.Data.skillMp(s, Math.max(1, lvl));
-  return `${s.ultimate ? '★ ' : ''}${s.name}${lvl ? ` · Nv ${lvl}/${V.Data.skillMaxLevel(s)}` : ` (${req})`} · ${mp} MP · ${s.cd} s\n${s.desc}`;
+  return `${s.ultimate ? '★ ' : ''}${s.name}${lvl ? ` · Nv ${lvl}/${V.Data.skillMaxLevel(s)}` : ` (${req})`} · ${mp} MP · ${s.cd} s\n${s.desc}${comboHint(s)}`;
+}
+// Pista en la ayuda de la habilidad: qué etiqueta deja y con cuáles hace combo
+function comboHint(s) {
+  const D = V.Data;
+  const t = s.applies && D.COMBO_TAGS[s.applies];
+  if (!t) return '';
+  const pairs = D.COMBOS.filter((c) => c.a === s.applies || c.b === s.applies).map((c) => `${D.COMBO_TAGS[c.a === s.applies ? c.b : c.a].icon} ${c.name}`);
+  return `\n${t.icon} Deja «${t.name}» ${t.dur} s en el monstruo. Si un compañero le pone otra etiqueta, ¡combo!: ${pairs.join(' · ')}.`;
 }
 
 // Tras un cambio de clase: barra, título y paneles
@@ -343,9 +353,17 @@ function updateNameplates() {
     // Gremio: emblema y nombre bajo el nombre del jugador
     if (s === myPlate || s.ent) {
       const tag = s === myPlate ? (p.guild ? `${p.guild.emblem}|${p.guild.color}|${p.guild.name}` : '') : s.ent.guildTag || '';
-      if (tag !== (s.gtag || '')) {
+      const title = s === myPlate ? p.title || '' : s.ent.title || '';
+      if (tag !== (s.gtag || '') || title !== (s.title || '')) {
         s.gtag = tag;
+        s.title = title;
         s.el.textContent = s.name;
+        if (title) {
+          const ti = document.createElement('small');
+          ti.className = 'np-title';
+          ti.textContent = `«${title}»`;
+          s.el.prepend(ti);
+        }
         if (tag) {
           const [e, c, n] = tag.split('|');
           const t = document.createElement('small');
@@ -714,7 +732,7 @@ function closeAll() {
     $('emoteWheel').hidden = true;
     return true;
   }
-  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help', 'quests', 'guild', 'album']) {
+  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help', 'quests', 'guild', 'album', 'friend']) {
     if (!E[k].hidden) {
       E[k].hidden = true;
       closed = true;
@@ -966,6 +984,7 @@ function refreshPanels() {
   if (!E.quests.hidden) renderQuests();
   if (!E.guild.hidden) renderGuild();
   if (!E.album.hidden) renderAlbum();
+  if (!E.friend.hidden) renderFriend();
   if (!E.shop.hidden) {
     const list = $('shopList');
     list.innerHTML = '';
@@ -1508,9 +1527,131 @@ function showEmote(ent, id) {
   const e = V.Data.EMOTES.find((x) => x.id === id);
   if (e) showBubble(ent.id, `${e.icon} ${e.name}`);
 }
+// Etiqueta de combo sobre el monstruo (💧🔥💎🍃) mientras dure
+function showComboTag(m, tag, dur) {
+  const t = V.Data.COMBO_TAGS[tag];
+  if (!t || !m.np) return;
+  m.np.tags = m.np.tags || {};
+  let box = m.np.el.querySelector('.np-tags');
+  if (!box) {
+    box = document.createElement('span');
+    box.className = 'np-tags';
+    m.np.el.prepend(box);
+  }
+  m.np.tags[tag] = performance.now() + dur * 1000;
+  const draw = () => {
+    const now = performance.now();
+    for (const k of Object.keys(m.np.tags)) if (m.np.tags[k] <= now) delete m.np.tags[k];
+    box.innerHTML = '';
+    for (const k of Object.keys(m.np.tags)) {
+      const i = document.createElement('i');
+      i.textContent = V.Data.COMBO_TAGS[k].icon;
+      i.title = `${V.Data.COMBO_TAGS[k].name}: otro jugador puede completar un combo`;
+      box.append(i);
+    }
+  };
+  draw();
+  setTimeout(draw, dur * 1000 + 30);
+}
 function extChanged() {
   if (E && !E.stats.hidden) renderStats();
   if (E && !E.album.hidden) renderAlbum();
+  if (E && !E.friend.hidden) renderFriend();
+}
+
+// ---------- Tienda de Amistad y aspecto (tecla B) ----------
+
+let friendTab = 'shop';
+function renderFriend() {
+  const p = G.player;
+  const ext = p.ext || {};
+  const pts = (ext.mentor && ext.mentor.pts) || 0;
+  const cos = ext.cosmetics || { own: {}, trail: '', potion: null, title: '', titles: [] };
+  const box = $('friendBody');
+  const key = `${friendTab}|${pts}|${JSON.stringify(cos)}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = '';
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const cmd = (sys, c, arg) => V.Game.sysCmd(sys, c, arg);
+  const head = el('div', 'fr-head');
+  head.append(el('strong', '', `💗 ${pts} Puntos de Amistad`), el('small', '', 'Se ganan en grupo con un aventurero de otro nivel: jefes, misiones y monstruos. Solo sirven para adornos: no cambian tus estadísticas.'));
+  box.append(head);
+
+  const tabs = el('div', 'inv-tabs');
+  for (const [id, label] of [['shop', 'Tienda'], ['look', 'Mi aspecto']]) {
+    const b = el('button', id === friendTab ? 'on' : '', label);
+    b.type = 'button';
+    b.onclick = () => {
+      friendTab = id;
+      renderFriend();
+    };
+    tabs.append(b);
+  }
+  box.append(tabs);
+
+  if (friendTab === 'shop') {
+    const groups = [['potion', 'Pociones cosméticas'], ['trail', 'Estelas al caminar'], ['title', 'Títulos']];
+    for (const [kind, label] of groups) {
+      const sec = el('section', 'al-sec');
+      sec.append(el('h3', '', label));
+      const grid = el('div', 'fr-grid');
+      for (const it of V.Data.FRIEND_SHOP.filter((x) => x.kind === kind)) {
+        const owned = !!cos.own[it.id];
+        const card = el('div', `al-card fr-card${owned ? ' owned' : ''}`);
+        const ic = el('span', 'al-ic', it.icon);
+        if (it.color) ic.style.background = hexColor(it.color);
+        const sub = it.kind === 'potion' ? `${Math.round(it.dur / 60)} min · ${it.desc}` : it.desc;
+        const b = el('button', 'fr-buy', owned ? '✔ Tuyo' : `💗 ${it.price}`);
+        b.type = 'button';
+        b.disabled = owned || pts < it.price;
+        b.title = owned ? 'Ya lo tienes' : pts < it.price ? `Te faltan ${it.price - pts} puntos` : 'Canjear';
+        b.onclick = () => cmd('amistad', 'buy', it.id);
+        card.append(ic, el('b', '', it.name), el('small', '', sub), b);
+        grid.append(card);
+      }
+      sec.append(grid);
+      box.append(sec);
+    }
+    return;
+  }
+
+  // Mi aspecto: título, estela y poción activa
+  const pick = (title, rows, current, onPick, noneText) => {
+    const sec = el('section', 'al-sec');
+    sec.append(el('h3', '', title));
+    const list = el('div', 'fr-list');
+    for (const [id, name, sub] of [['', noneText, ''], ...rows]) {
+      const b = el('button', `fr-opt${id === current ? ' on' : ''}`);
+      b.type = 'button';
+      b.append(el('b', '', name));
+      if (sub) b.append(el('small', '', sub));
+      b.onclick = () => onPick(id);
+      list.append(b);
+    }
+    sec.append(list);
+    box.append(sec);
+  };
+  const pot = cos.potion && V.Data.friendItem(cos.potion.id);
+  const psec = el('section', 'al-sec');
+  psec.append(el('h3', '', 'Poción activa'));
+  if (pot) {
+    const row = el('div', 'fr-pot');
+    row.append(el('b', '', `${pot.icon} ${pot.name}`), el('small', '', `Quedan unos ${Math.max(1, Math.round(cos.potion.left / 60))} min jugando`));
+    const q = el('button', 'fr-opt', 'Quitar');
+    q.type = 'button';
+    q.onclick = () => cmd('cosmetics', 'clearPotion');
+    row.append(q);
+    psec.append(row);
+  } else psec.append(el('p', 'muted', 'No tienes ninguna. Se compran en la Tienda.'));
+  box.append(psec);
+  pick('Título sobre tu nombre', (cos.titles || []).map((t) => [t.id, `«${t.text}»`, t.src]), cos.title, (id) => cmd('cosmetics', 'title', id), 'Sin título');
+  pick('Estela al caminar', V.Data.FRIEND_SHOP.filter((x) => x.kind === 'trail' && cos.own[x.id]).map((x) => [x.id, `${x.icon} ${x.name}`, '']), cos.trail, (id) => cmd('cosmetics', 'trail', id), 'Sin estela');
 }
 
 // ---------- Álbum de coleccionables (tecla K) ----------
@@ -2238,7 +2379,7 @@ function drawBigMap() {
 
 V.UI = {
   initUI, notify, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
-  floatText, log, logLoot, banner, showDeath, showInvite, openDrops, openGuild, guildChanged, showGuildInvite, toggleEmotes, showEmote, extChanged,
+  floatText, log, logLoot, banner, showDeath, showInvite, openDrops, openGuild, guildChanged, showGuildInvite, toggleEmotes, showEmote, showComboTag, extChanged,
   togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI, openTrade,
   classChanged, openMaster, refreshMaster, openHatch,
 };

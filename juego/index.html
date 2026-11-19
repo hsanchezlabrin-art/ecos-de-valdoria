@@ -543,6 +543,27 @@
   .al-card.unknown { opacity: .55; }
   .al-card.unknown .al-ic { color: var(--muted); border: 1px dashed var(--edge-soft); background: #15181d; }
   body.touch #albumPanel { width: min(720px, calc(100vw / var(--ui) - 24px)); }
+  /* Tienda de Amistad: pociones, estelas y títulos */
+  #friendPanel { width: 580px; height: min(640px, calc(100% - 40px)); }
+  #friendBody { display: grid; gap: 12px; align-content: start; }
+  .fr-head { display: grid; gap: 4px; }
+  .fr-head strong { font: 700 18px var(--display); color: #ff9ec0; }
+  .fr-head small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+  .fr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+  .fr-card { align-content: start; }
+  .fr-card small { min-height: 2.6em; }
+  .fr-card.owned { border-color: #8fd37a; }
+  .fr-buy { padding: 5px 12px; font-size: 13px; letter-spacing: 0; }
+  .fr-buy:disabled { opacity: .5; cursor: default; }
+  .fr-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .fr-opt { display: grid; gap: 1px; padding: 6px 10px; text-align: left; font-size: 13px; letter-spacing: 0; }
+  .fr-opt b { font-weight: 700; }
+  .fr-opt small { font-size: 11px; color: var(--muted); }
+  .fr-opt.on { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+  .fr-pot { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+  .fr-pot small { color: var(--muted); }
+  .np .np-title { display: block; font: 700 11px var(--body); letter-spacing: 0; text-align: center; color: #ffd36b; }
+  body.touch #friendPanel { width: min(720px, calc(100vw / var(--ui) - 24px)); }
   /* Gremio */
   .np .np-guild { display: block; font: 600 11px var(--body); letter-spacing: 0; text-align: center; opacity: .95; }
   #guildPanel { width: 420px; }
@@ -744,6 +765,10 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .ft.poison { color: #9be05a; }
   .ft.stun { color: #ffe38a; font-size: 15px; }
+  .ft.combo { color: #fff; font: 700 26px var(--display); text-shadow: 0 0 10px rgba(255,140,220,.9), 0 0 4px rgba(120,200,255,.9), 0 2px 3px #000; animation-duration: 1.8s; }
+  .np .np-tags { display: block; text-align: center; font-size: 16px; line-height: 1; margin-bottom: 2px; filter: drop-shadow(0 1px 1px #000); }
+  .np .np-tags i { font-style: normal; margin: 0 1px; animation: tagPulse .8s ease-in-out infinite alternate; display: inline-block; }
+  @keyframes tagPulse { from { transform: scale(.9); } to { transform: scale(1.15); } }
   .ft.lvlup { color: #ffd36b; font: 700 30px var(--display); text-shadow: 0 0 12px rgba(255,200,90,.8), 0 2px 3px #000; animation-duration: 2.2s; }
   #log p.chat-party { color: #8fe0a0; }
   #log p.chat-party b { color: #b9f0c4; }
@@ -869,6 +894,7 @@
     <button id="btnQuests" data-icon="❗">Misiones <kbd>J</kbd></button>
     <button id="btnGuild" data-icon="⚑">Gremio <kbd>G</kbd></button>
     <button id="btnAlbum" data-icon="📖">Álbum <kbd>K</kbd></button>
+    <button id="btnFriend" data-icon="💗">Amistad <kbd>B</kbd></button>
     <button id="btnMap" data-icon="⌖">Mapa <kbd>M</kbd></button>
     <button id="btnHelp" data-icon="?">Controles <kbd>H</kbd></button>
     <button id="btnGfx" data-icon="⚙">Ajustes <kbd>O</kbd></button>
@@ -931,6 +957,11 @@
   <section class="panel" id="albumPanel" hidden>
     <header><h2>Álbum</h2><button class="x" data-close="album" aria-label="Cerrar">✕</button></header>
     <div id="albumBody"></div>
+  </section>
+
+  <section class="panel" id="friendPanel" hidden>
+    <header><h2>Tienda de Amistad</h2><button class="x" data-close="friend" aria-label="Cerrar">✕</button></header>
+    <div id="friendBody"></div>
   </section>
 
   <section class="panel" id="guildPanel" hidden>
@@ -1022,6 +1053,7 @@
       <dt>I · C · J · M · H · O</dt><dd>Inventario · Estado · Misiones · Mapa · Esta ayuda · Configuración</dd>
       <dt>Enter</dt><dd>Chat. Empieza con # para hablar solo con tu grupo, con @ para tu gremio, o escribe /invitar Nombre</dd>
       <dt>T</dt><dd>Gestos: saludar, aplaudir, animar, bailar, celebrar y sentarse (también el botón 😊 junto al chat)</dd>
+      <dt>B</dt><dd>Tienda de Amistad: pociones cosméticas, estelas, títulos y tu aspecto</dd>
       <dt>K</dt><dd>Álbum: criaturas, tierras, botín y gestos que descubriste, y premios por completar colecciones</dd>
       <dt>G</dt><dd>Gremio: miembros, invitar y mensaje del gremio. Se funda con el Maestro del Gremio en la Ciudadela (nivel 15 y 1.000 de oro)</dd>
       <dt>Esc</dt><dd>Cerrar ventanas o soltar el objetivo</dd>

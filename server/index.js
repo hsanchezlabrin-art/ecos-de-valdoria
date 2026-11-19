@@ -24,7 +24,7 @@ const Sim = require(path.join(SRC, 'sim.js'));
 const Terrain = require(path.join(SRC, 'terrain.js'));
 const { VERSION } = require(path.join(SRC, 'version.js'));
 // Sistemas desacoplados (juego/src/systems): se registran en el mundo al crearlo
-const SYSTEMS = ['emotes', 'mentor', 'album'].map((id) => require(path.join(SRC, 'systems', `${id}.js`)));
+const SYSTEMS = ['emotes', 'mentor', 'album', 'combo', 'cosmetics', 'amistad'].map((id) => require(path.join(SRC, 'systems', `${id}.js`)));
 const C = Sim.cmd;
 
 const PORT = +process.env.PORT || 8080;
@@ -50,6 +50,7 @@ const migrated = DB.migrateChars((cls, data) => Data.migrateCharacter(cls, data)
 if (migrated) console.log(`[migración] ${migrated} personajes convertidos a las nuevas razas`);
 
 const world = Sim.createWorld();
+const COSMETICS = SYSTEMS.find((s) => s.id === 'cosmetics'); // su apariencia viaja en la última columna de playerRow
 for (const sys of SYSTEMS) Sim.useSystem(world, sys);
 Sim.spawnMobs(world);
 // Gremios guardados; los miembros cuyo personaje ya no existe salen del gremio
@@ -123,7 +124,7 @@ function savePlayer(c) {
 // ---------- Estado que se envía a cada jugador ----------
 
 function playerRow(q) {
-  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0, q.gemsOn && Sim.countItem(q, 'gema_poder') > 0 ? 1 : 0, q.pet ? q.pet.type : 0, q.mounted || 0, Sim.pvpState(q), Sim.guildTag(world, q)];
+  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0, q.gemsOn && Sim.countItem(q, 'gema_poder') > 0 ? 1 : 0, q.pet ? q.pet.type : 0, q.mounted || 0, Sim.pvpState(q), Sim.guildTag(world, q), COSMETICS.look(q)];
 }
 
 function mobRow(m) {
