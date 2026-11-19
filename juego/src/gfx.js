@@ -43,8 +43,69 @@
     }
     return clampQ(isTouch ? 'media' : 'alta');
   }
-  let quality = savedQuality();
-  const preset = () => PRESETS[quality];
+  // ---------- Ajustes del jugador (Configuración): se guardan en este equipo ----------
+  const SET_KEY = 'valdoria-ajustes';
+  const DEFAULTS = {
+    quality: 'auto', // 'auto' o un perfil fijo
+    chars: 'medio', // visibilidad de personajes: cerca / medio / lejos
+    view: 'media', // distancia de visión del paisaje: cercana / media / lejana
+    fps: isTouch ? 60 : 120, // límite de cuadros por segundo: 30 / 60 / 120
+    shadows: true,
+    brightness: 100, // en %
+    gamma: 100,
+    contrast: 100,
+    saturation: 100,
+    volMaster: 80, // sonido (se usará cuando el juego tenga audio)
+    volMusic: 70,
+    volSfx: 80,
+  };
+  const CHOICES = {
+    quality: ['auto', ...ORDER],
+    chars: ['cerca', 'medio', 'lejos'],
+    view: ['cercana', 'media', 'lejana'],
+    fps: [30, 60, 120],
+  };
+  const RANGES = { brightness: [50, 150], gamma: [60, 160], contrast: [50, 150], saturation: [0, 200], volMaster: [0, 100], volMusic: [0, 100], volSfx: [0, 100] };
+  function loadSettings() {
+    const out = { ...DEFAULTS };
+    let raw = null;
+    try {
+      raw = JSON.parse(localStorage.getItem(SET_KEY) || 'null');
+      // Antes había un botón que fijaba la calidad a mano: se respeta esa elección
+      if (!raw && localStorage.getItem('valdoria-graficos-manual') === '1') raw = { quality: localStorage.getItem(KEY) };
+    } catch {
+      raw = null;
+    }
+    for (const [k, v] of Object.entries(raw || {})) {
+      if (CHOICES[k] ? CHOICES[k].includes(v) : RANGES[k] ? typeof v === 'number' : typeof v === typeof DEFAULTS[k]) out[k] = v;
+    }
+    for (const [k, [a, b]] of Object.entries(RANGES)) out[k] = Math.min(b, Math.max(a, Math.round(out[k])));
+    if (out.quality !== 'auto') out.quality = clampQ(out.quality);
+    return out;
+  }
+  const settings = loadSettings();
+  const saveSettings = () => {
+    try {
+      localStorage.setItem(SET_KEY, JSON.stringify(settings));
+    } catch {
+      /* sin almacenamiento */
+    }
+  };
+
+  let quality = settings.quality === 'auto' ? savedQuality() : settings.quality;
+
+  // Perfil efectivo: el perfil gráfico con los ajustes del jugador encima (sombras y distancia a la
+  // que se ven personajes). Se calcula solo cuando algo cambia (se consulta en cada cuadro).
+  const CHAR_DIST = { cerca: 55, medio: null, lejos: 200 };
+  const VIEW_DIST = { cercana: [40, 170], media: [70, 270], lejana: [110, 420] };
+  let eff = null;
+  function computeEffective() {
+    const b = PRESETS[quality];
+    const vd = CHAR_DIST[settings.chars] || b.viewDist;
+    eff = { ...b, shadows: b.shadows && settings.shadows, viewDist: vd, shadowDist: Math.min(b.shadowDist, vd) };
+  }
+  computeEffective();
+  const preset = () => eff;
 
   // Brillo extra de luces y hechizos: solo con efectos de cámara (sin ellos se vería quemado)
   const glowK = (k) => (preset().post && post && post.hdr ? k : 1);
@@ -735,7 +796,7 @@
       { blending: THREE.AdditiveBlending, transparent: true }
     );
     const final = shader(
-      `uniform sampler2D tDiffuse; uniform sampler2D tBloom; uniform float bloom; uniform vec3 tint; varying vec2 vUv;
+      `uniform sampler2D tDiffuse; uniform sampler2D tBloom; uniform float bloom; uniform vec3 tint; uniform vec4 adj; varying vec2 vUv;
        void main(){
          vec3 c = texture2D(tDiffuse, vUv).rgb + texture2D(tBloom, vUv).rgb * bloom;
          c *= tint;
@@ -746,9 +807,13 @@
          c = mix(c, 0.8 + 0.2 * (1.0 - exp(-over / 0.2)), step(0.8, c));
          vec2 d = vUv - 0.5;
          c *= 1.0 - dot(d, d) * 0.55;
+         // Ajustes del jugador: gamma, brillo, contraste y saturación (x = brillo, y = contraste, z = saturación, w = gamma)
+         c = pow(max(c, 0.0), vec3(1.0 / adj.w)) * adj.x;
+         c = (c - 0.5) * adj.y + 0.5;
+         c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, adj.z);
          gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
        }`,
-      { tDiffuse: { value: null }, tBloom: { value: null }, bloom: { value: 0.4 }, tint: { value: sky.tint } }
+      { tDiffuse: { value: null }, tBloom: { value: null }, bloom: { value: 0.4 }, tint: { value: sky.tint }, adj: { value: new THREE.Vector4(1, 1, 1, 1) } }
     );
     const pass = (m, target) => {
       quad.material = m;
@@ -796,7 +861,8 @@
       final.uniforms.tBloom.value = levels[0].texture;
       pass(final, null);
     }
-    post = { render, setSize, setSamples, hdr };
+    const setAdjust = (b, c, sa, g) => final.uniforms.adj.value.set(b, c, sa, g);
+    post = { render, setSize, setSamples, hdr, setAdjust };
     return post;
   }
 
@@ -836,11 +902,62 @@
     post.setSize(innerWidth, innerHeight, renderer.getPixelRatio());
   }
 
+  // Distancia de visión: niebla y hasta dónde dibuja la cámara (más cerca = menos trabajo)
+  function applyView() {
+    const [near, far] = VIEW_DIST[settings.view];
+    if (ctx.scene && ctx.scene.fog) {
+      ctx.scene.fog.near = near;
+      ctx.scene.fog.far = far;
+    }
+    const cam = G.camera;
+    if (cam) {
+      cam.far = Math.max(far + 120, 300);
+      cam.updateProjectionMatrix();
+    }
+  }
+
+  // Brillo, gamma, contraste y saturación. Con efectos de cámara se hace en el mismo paso final
+  // (sin costo extra); sin ellos (calidad Baja) con un filtro del navegador sobre el lienzo, y solo
+  // si algún valor no es el normal.
+  let gammaFilter = null;
+  function applyImage() {
+    const b = settings.brightness / 100;
+    const c = settings.contrast / 100;
+    const sa = settings.saturation / 100;
+    const g = settings.gamma / 100;
+    if (post) post.setAdjust(b, c, sa, g);
+    const canvas = ctx.renderer && ctx.renderer.domElement;
+    if (!canvas) return;
+    const neutral = b === 1 && c === 1 && sa === 1 && g === 1;
+    if (preset().post || neutral) {
+      canvas.style.filter = '';
+      return;
+    }
+    let f = `brightness(${b}) contrast(${c}) saturate(${sa})`;
+    if (g !== 1) {
+      if (!gammaFilter) {
+        const ns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(ns, 'svg');
+        svg.setAttribute('width', '0');
+        svg.setAttribute('height', '0');
+        svg.style.position = 'absolute';
+        svg.innerHTML = '<filter id="vGamma" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="gamma" exponent="1"/><feFuncG type="gamma" exponent="1"/><feFuncB type="gamma" exponent="1"/></feComponentTransfer></filter>';
+        document.body.append(svg);
+        gammaFilter = svg.querySelectorAll('feFuncR, feFuncG, feFuncB');
+      }
+      for (const fn of gammaFilter) fn.setAttribute('exponent', String(1 / g));
+      f += ' url(#vGamma)';
+    }
+    canvas.style.filter = f;
+  }
+
   function apply() {
+    computeEffective();
     const p = preset();
     const { renderer, sun, scene } = ctx;
     if (!renderer) return;
     applyResolution();
+    applyView();
     post.setSamples(p.msaa);
     if (renderer.shadowMap.enabled !== p.shadows) {
       renderer.shadowMap.enabled = p.shadows;
@@ -867,6 +984,7 @@
     if (grass) grass.mat.uniforms.uRadius.value = p.grassR || 1;
     if (grass) grass.mesh.visible = p.grass > 0;
     for (const g of glows) g.mat.color.copy(g.base).multiplyScalar(glowK(g.k));
+    applyImage();
   }
 
   function setQuality(q) {
@@ -880,23 +998,39 @@
     }
     apply();
   }
-  // Elección manual del jugador: desde ahí no se ajusta sola
-  const MANUAL_KEY = 'valdoria-graficos-manual';
-  let manual = false;
-  try {
-    manual = localStorage.getItem(MANUAL_KEY) === '1';
-  } catch {
-    /* sin almacenamiento */
+  // Calidad fija elegida en Configuración: desde ahí no se ajusta sola ("Automática" la reactiva)
+  let manual = settings.quality !== 'auto';
+  const cycleQuality = () => setSetting('quality', ORDER[(ORDER.indexOf(quality) + 1) % (maxIdx + 1)]);
+
+  // Cambiar un ajuste (desde el panel de Configuración)
+  function setSetting(key, value) {
+    if (!(key in DEFAULTS)) return;
+    if (CHOICES[key]) {
+      if (!CHOICES[key].includes(value)) return;
+    } else if (RANGES[key]) {
+      const [a, b] = RANGES[key];
+      value = Math.min(b, Math.max(a, Math.round(Number(value) || 0)));
+    } else value = !!value;
+    if (key === 'quality' && value !== 'auto') value = clampQ(value);
+    settings[key] = value;
+    saveSettings();
+    if (key === 'quality') {
+      manual = value !== 'auto';
+      gov.ceiling = Infinity;
+      if (manual) setQuality(value);
+    } else if (key === 'fps') updateTarget();
+    if (key !== 'quality' || !manual) apply();
+    dispatchEvent(new CustomEvent('valdoria-settings', { detail: { key } }));
   }
-  const cycleQuality = () => {
-    manual = true;
-    try {
-      localStorage.setItem(MANUAL_KEY, '1');
-    } catch {
-      /* sin almacenamiento */
-    }
-    setQuality(ORDER[(ORDER.indexOf(quality) + 1) % (maxIdx + 1)]);
-  };
+  function resetSettings() {
+    for (const k of Object.keys(DEFAULTS)) settings[k] = DEFAULTS[k];
+    saveSettings();
+    manual = false;
+    gov.ceiling = Infinity;
+    updateTarget();
+    apply();
+    dispatchEvent(new CustomEvent('valdoria-settings', { detail: { key: '*' } }));
+  }
 
   // ---------- Medición de cada cuadro y ajuste automático ----------
   // Se mide de verdad: cuadros por segundo, tiempo de CPU (lógica + envío del dibujo) y, si el
@@ -926,8 +1060,12 @@
     const sorted = intervals.sort((x, y) => x - y);
     stats.refresh = Math.round(1000 / sorted[45]);
     intervals.length = 0;
-    stats.target = isTouch ? Math.min(60, stats.refresh) : Math.min(144, stats.refresh);
-    stats.capped = isTouch && stats.refresh > 70;
+    updateTarget();
+  }
+  // Meta y tope: el límite elegido (30, 60 o 120), sin pasar la frecuencia de la pantalla
+  function updateTarget() {
+    stats.target = Math.min(settings.fps, stats.refresh);
+    stats.capped = settings.fps < stats.refresh - 5;
   }
 
   // Al empezar cada cuadro: false = saltar este cuadro (tope de 60 en pantallas rápidas)
@@ -935,7 +1073,7 @@
     const dt = now - gov.last;
     gov.last = now;
     measureRefresh(dt);
-    if (stats.capped && now - lastDrawn < 1000 / 60 - 2.5) return false;
+    if (stats.capped && now - lastDrawn < 1000 / settings.fps - 2.5) return false;
     lastDrawn = now;
     if (monitor.on) ctx.renderer.info.reset();
     return true;
@@ -1097,7 +1235,7 @@
         }
       })();
       this.el.textContent = [
-        `FPS ${stats.fps.toFixed(0)} (prom. ${stats.fpsAvg.toFixed(0)}) · meta ${stats.target}${stats.capped ? ' (tope 60 por batería)' : ''} · pantalla ${stats.refresh} Hz`,
+        `FPS ${stats.fps.toFixed(0)} (prom. ${stats.fpsAvg.toFixed(0)}) · meta ${stats.target}${stats.capped ? ` (límite ${settings.fps})` : ''} · pantalla ${stats.refresh} Hz`,
         `CPU lógica ${stats.cpuLogic.toFixed(2)} ms · CPU envío dibujo ${stats.cpuRender.toFixed(2)} ms`,
         `GPU ${stats.gpu != null ? stats.gpu.toFixed(2) + ' ms' : 'no medible en este navegador'}`,
         `Llamadas de dibujo ${stats.calls} · triángulos ${(stats.tris / 1000).toFixed(0)} mil`,
@@ -1195,6 +1333,17 @@
     resize,
     frameBegin,
     frameEnd,
+    get settings() {
+      return { ...settings };
+    },
+    DEFAULTS,
+    CHOICES,
+    RANGES,
+    setSetting,
+    resetSettings,
+    get manual() {
+      return manual;
+    },
     stats,
     monitor,
     pixelRatio,

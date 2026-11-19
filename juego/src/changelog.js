@@ -8,6 +8,18 @@
 })(function () {
   return [
     {
+      version: '0.22.0',
+      date: '2026-11-18',
+      title: 'Configuración del juego',
+      items: [
+        'Nuevo panel de Configuración, en la pantalla de inicio y dentro del juego (botón Ajustes o tecla O).',
+        'Gráficos: calidad (o Automática), visibilidad de personajes, distancia de visión, límite de FPS (30, 60 o 120) y sombras.',
+        'Imagen: brillo, gamma, contraste y saturación.',
+        'Sonido: volumen general, de música y de efectos (se usarán cuando el juego tenga audio).',
+        'Botón para volver a los valores por defecto.',
+      ],
+    },
+    {
       version: '0.21.0',
       date: '2026-11-18',
       title: 'Inventario renovado',

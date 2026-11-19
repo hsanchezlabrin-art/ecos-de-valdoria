@@ -228,6 +228,9 @@
         case 'KeyJ':
           UI.togglePanel('quests');
           break;
+        case 'KeyO':
+          V.Settings.toggle();
+          break;
         case 'KeyM':
           UI.togglePanel('map');
           break;
@@ -681,26 +684,18 @@
     location.reload(); // al abrir de nuevo, la sesión guardada lleva directo al selector
   });
   document.getElementById('btnFull').addEventListener('click', () => V.Mobile.toggleFullscreen());
-  // Calidad gráfica: Baja → Media → Alta (se guarda en este equipo)
+  // Ajustes: abre el panel de Configuración (gráficos, imagen y sonido)
   document.getElementById('hudVer').textContent = `v${V.VERSION}`;
-  const btnGfx = document.getElementById('btnGfx');
-  const syncGfx = () => (btnGfx.firstChild.textContent = `Gráficos: ${V.Gfx.preset().label} `);
-  syncGfx();
   addEventListener('valdoria-gfx', (e) => {
-    syncGfx();
     const up = e.detail && e.detail.dir > 0;
     UI.log(
       up
-        ? `Tu equipo va holgado: calidad gráfica subida a ${V.Gfx.preset().label}. Puedes cambiarla con el botón Gráficos.`
-        : `El juego iba lento: calidad gráfica ajustada a ${V.Gfx.preset().label}. Puedes cambiarla con el botón Gráficos.`,
+        ? `Tu equipo va holgado: calidad gráfica subida a ${V.Gfx.preset().label}. Puedes cambiarla en Ajustes.`
+        : `El juego iba lento: calidad gráfica ajustada a ${V.Gfx.preset().label}. Puedes cambiarla en Ajustes.`,
       'sys'
     );
   });
-  btnGfx.addEventListener('click', () => {
-    V.Gfx.cycleQuality();
-    syncGfx();
-    UI.log(`Calidad gráfica: ${V.Gfx.preset().label}.`, 'sys');
-  });
+  document.getElementById('btnGfx').addEventListener('click', () => V.Settings.toggle());
 
   // Al abrir: si hay una sesión guardada, entra directo al selector de personajes
   async function startScreen() {

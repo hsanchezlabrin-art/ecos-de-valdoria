@@ -535,6 +535,24 @@
   .im-actions button.danger, #trOk.danger { color: #ffb3aa; border-color: #a0453a; }
   #trOk.danger { background: linear-gradient(#7d2a22, #4e1812); }
   .tr-total.warn { color: #ffb3aa; }
+  /* Panel de Configuración: por encima de todo, también de la pantalla de inicio */
+  #setPanel { position: fixed; z-index: 12; left: 50%; top: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 24px)); max-height: calc(100% - 24px); display: flex; flex-direction: column; padding: 14px 16px; }
+  #setPanel .set-body { overflow-y: auto; display: grid; gap: 14px; padding-right: 4px; }
+  .set-sec { display: grid; gap: 10px; }
+  .set-sec h3 { margin: 0; font: 700 13px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--gold); border-bottom: 1px solid var(--edge-soft); padding-bottom: 4px; }
+  .set-row { display: grid; gap: 6px; }
+  .set-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-weight: 700; font-size: 14px; }
+  .set-label small { font-weight: 400; font-size: 12px; color: var(--muted); }
+  .set-label .set-val { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--parch); }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; }
+  .seg button { flex: 1 1 auto; padding: 7px 8px; font-size: 13px; font-weight: 700; background: #12151a; border: 1px solid var(--edge-soft); border-radius: 3px; color: var(--muted); white-space: nowrap; }
+  .seg button.on { color: #1a1408; background: var(--gold); border-color: var(--gold); }
+  .seg button:hover:not(.on) { border-color: var(--gold); color: var(--parch); }
+  .set-row input[type=range] { width: 100%; accent-color: var(--gold); }
+  .set-note { margin: 0; font-size: 12px; color: var(--muted); }
+  .set-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--edge-soft); }
+  .start-card { position: relative; }
+  .set-open { position: absolute; top: 12px; right: 12px; padding: 6px 10px; font-size: 13px; }
   .st-tabs { margin: 0 0 10px; }
   .st-tabs button { padding: 8px; font-size: 14px; }
   #skList { display: grid; gap: 8px; }
@@ -716,7 +734,7 @@
     <button id="btnQuests" data-icon="❗">Misiones <kbd>J</kbd></button>
     <button id="btnMap" data-icon="⌖">Mapa <kbd>M</kbd></button>
     <button id="btnHelp" data-icon="?">Controles <kbd>H</kbd></button>
-    <button id="btnGfx" data-icon="✦">Gráficos <kbd>✦</kbd></button>
+    <button id="btnGfx" data-icon="⚙">Ajustes <kbd>O</kbd></button>
     <button id="btnGuide" data-icon="➜">Guía: sí <kbd>➜</kbd></button>
     <button id="btnFull" data-icon="⛶" hidden>Pantalla completa <kbd>⛶</kbd></button>
     <button id="btnExit" data-icon="⏏">Salir <kbd>⏏</kbd></button>
@@ -845,7 +863,7 @@
       <dt>Tab · F</dt><dd>Siguiente monstruo · Atacar al objetivo</dd>
       <dt>1 – 6</dt><dd>Habilidades (niveles 1, 3, 5, 8, 11 y 15)</dd>
       <dt>7 · 8</dt><dd>Poción de vida · Poción de maná</dd>
-      <dt>I · C · J · M · H</dt><dd>Inventario · Estado · Misiones · Mapa · Esta ayuda</dd>
+      <dt>I · C · J · M · H · O</dt><dd>Inventario · Estado · Misiones · Mapa · Esta ayuda · Configuración</dd>
       <dt>Enter</dt><dd>Chat. Empieza con # para hablar solo con tu grupo, o escribe /invitar Nombre</dd>
       <dt>Esc</dt><dd>Cerrar ventanas o soltar el objetivo</dd>
       <dt><span class="np-aggro-key">!</span></dt><dd>Monstruo agresivo: te ataca si te acercas. Los demás solo pelean si los golpeas</dd>
@@ -875,8 +893,12 @@
   <div id="floats"></div>
 </div>
 
+<!-- Configuración: gráficos, imagen y sonido (desde el inicio y dentro del juego) -->
+<section class="panel" id="setPanel" hidden role="dialog" aria-modal="true" aria-label="Configuración"></section>
+
 <div id="start">
   <div class="start-card">
+    <button type="button" class="ghost set-open" id="btnSetStart" aria-label="Configuración">⚙ Configuración</button>
     <p class="eyebrow" id="versionTag"></p>
     <h1>Ecos de Valdoria</h1>
 
@@ -977,6 +999,7 @@
 <script src="./src/data.js"></script>
 <script src="./src/terrain.js"></script>
 <script src="./src/gfx.js"></script>
+<script src="./src/settings.js"></script>
 <script src="./src/models.js"></script>
 <script src="./src/actors.js"></script>
 <script src="./src/world.js"></script>
