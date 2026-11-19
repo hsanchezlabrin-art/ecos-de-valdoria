@@ -8,6 +8,16 @@
 })(function () {
   return [
     {
+      version: '0.22.1',
+      date: '2026-11-18',
+      title: 'App de escritorio siempre al día',
+      items: [
+        'La app de Windows y Mac carga el juego desde la web: cada novedad llega al instante, sin reinstalar.',
+        'La app solo pide actualizarse cuando cambia la app en sí (no con cada versión del juego).',
+        'En Mac, el aviso descarga el instalador directamente.',
+      ],
+    },
+    {
       version: '0.22.0',
       date: '2026-11-18',
       title: 'Configuración del juego',

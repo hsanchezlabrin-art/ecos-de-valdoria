@@ -123,7 +123,7 @@
     });
     const upd = document.getElementById('update');
     window.splash.onUpdatePrompt(({ version }) => {
-      document.getElementById('updText').textContent = `Hay una versión nueva: ${version}. Para jugar en línea conviene actualizar.`;
+      document.getElementById('updText').textContent = `Hay una versión nueva de la app (${version}). Pulsa Descargar para bajar el instalador; el juego en sí ya está al día.`;
       status.textContent = '';
       upd.classList.add('show');
     });

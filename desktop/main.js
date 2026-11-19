@@ -1,15 +1,22 @@
 // App de escritorio de Ecos de Valdoria (Electron).
 //
 // Al abrirse muestra un splash con el estilo del juego que:
-//  1. Busca actualizaciones. En Windows la descarga e instala sola y reinicia el juego.
-//     En macOS (app sin firma de Apple) avisa y ofrece descargar la versión nueva.
-//  2. Carga el juego en una ventana oculta y la muestra cuando el mundo está listo.
+//  1. Revisa si cambió la app en sí (la «carcasa»: ventana, arranque, splash). Solo entonces se
+//     actualiza: en Windows se descarga e instala sola; en macOS (sin firma de Apple) avisa y
+//     descarga el instalador .dmg directamente.
+//  2. Carga el juego DESDE LA WEB (igual que el navegador), así cada versión nueva del juego llega
+//     al instante en Windows y en Mac sin reinstalar nada. Sin internet usa la copia interna.
 const { app, BrowserWindow, ipcMain, Menu, shell, net } = require('electron');
 const path = require('path');
 
 const REPO = 'hsanchezlabrin-art/ecos-de-valdoria';
-const RELEASES_URL = `https://github.com/${REPO}/releases/latest`;
+const MAC_DMG_URL = `https://github.com/${REPO}/releases/latest/download/EcosDeValdoria-Mac.dmg`;
+const WEB = 'https://ecos-de-valdoria.vercel.app';
+const GAME_URL = `${WEB}/juego/`;
 const CHECK_TIMEOUT = 8000;
+// Versión de la carcasa de escritorio: subirla SOLO cuando cambie algo de desktop/ (main.js,
+// preload, splash, instalador). El sitio publica la vigente en /escritorio.json.
+const SHELL = 2;
 
 let splash = null;
 let win = null;
@@ -64,7 +71,7 @@ function createMain() {
   } else {
     Menu.setApplicationMenu(null);
   }
-  win.loadFile(path.join(__dirname, 'app', 'index.html'));
+  loadGame();
 
   // F11 pantalla completa · Ctrl+Shift+I herramientas de desarrollo
   win.webContents.on('before-input-event', (e, input) => {
@@ -81,11 +88,36 @@ function createMain() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+  // La ventana del juego solo navega dentro del juego; lo demás va al navegador del sistema
+  win.webContents.on('will-navigate', (e, url) => {
+    if (url.startsWith(GAME_URL) || url.startsWith('file:')) return;
+    e.preventDefault();
+    shell.openExternal(url);
+  });
 
   // Si algo falla, no dejar al jugador mirando el splash para siempre
   const fallback = setTimeout(reveal, 45000);
   win.once('closed', () => clearTimeout(fallback));
   win.on('close', () => win.webContents.send('before-quit'));
+}
+
+// El juego se carga desde la web; si no hay conexión o el sitio no responde, se usa la copia
+// interna que trae la app (sirve para mostrar el aviso de «sin conexión» del propio juego).
+function loadGame() {
+  let local = false;
+  const useLocal = () => {
+    if (local || !win || win.isDestroyed()) return;
+    local = true;
+    clearTimeout(slow);
+    win.loadFile(path.join(__dirname, 'app', 'index.html'));
+  };
+  const slow = setTimeout(useLocal, 15000);
+  win.webContents.once('dom-ready', () => clearTimeout(slow));
+  win.webContents.on('did-fail-load', (_e, code, _desc, url, isMain) => {
+    if (isMain && code !== -3 && !local && String(url).startsWith(WEB)) useLocal();
+  });
+  status('Conectando con Valdoria…', 0.06);
+  win.loadURL(GAME_URL).catch(useLocal);
 }
 
 function reveal() {
@@ -101,6 +133,31 @@ function reveal() {
 }
 
 // ---------- Actualizaciones ----------
+
+// Versión vigente de la carcasa según el sitio (null si no se pudo consultar)
+function remoteShell() {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), CHECK_TIMEOUT);
+    let body = '';
+    const req = net.request({ url: `${WEB}/escritorio.json?t=${Date.now()}` });
+    req.on('response', (res) => {
+      res.on('data', (d) => (body += d));
+      res.on('end', () => {
+        clearTimeout(timer);
+        try {
+          resolve(Number(JSON.parse(body).shell) || null);
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+    req.on('error', () => {
+      clearTimeout(timer);
+      resolve(null);
+    });
+    req.end();
+  });
+}
 
 const newer = (a, b) => {
   const pa = String(a).replace(/^v/, '').split('.').map(Number);
@@ -146,8 +203,8 @@ function updateWindows() {
   });
 }
 
-// macOS: sin firma de Apple no se puede instalar sola. Se consulta la última versión
-// publicada y, si es más nueva, el splash ofrece descargarla o jugar igual.
+// macOS: sin firma de Apple no se puede instalar sola. Si la carcasa cambió, el splash ofrece
+// descargar el instalador .dmg (directo, sin abrir páginas) o jugar igual.
 function checkMac() {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(), CHECK_TIMEOUT);
@@ -163,7 +220,7 @@ function checkMac() {
             toSplash('update-prompt', { version: tag.replace(/^v/, '') });
             ipcMain.once('update-choice', (_e, choice) => {
               if (choice === 'download') {
-                shell.openExternal(RELEASES_URL);
+                shell.openExternal(MAC_DMG_URL);
                 app.quit();
               } else resolve();
             });
@@ -186,6 +243,9 @@ function checkMac() {
 async function checkForUpdates() {
   if (!app.isPackaged) return false;
   status('Buscando actualizaciones…', 0.04);
+  // El juego se actualiza solo (se carga desde la web): la app solo se reinstala si su carcasa cambió
+  const shellNow = await remoteShell();
+  if (shellNow == null || shellNow <= SHELL) return false;
   if (process.platform === 'win32') return updateWindows();
   if (process.platform === 'darwin') await checkMac();
   return false;
