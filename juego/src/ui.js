@@ -1226,6 +1226,7 @@ function openGuild(found) {
   togglePanel('guild', true);
 }
 function guildChanged() {
+  if (!E) return; // aún no se arma la interfaz (primer paquete al entrar)
   guildOpenRow = null;
   guildEditNotice = false;
   if (!E.guild.hidden) renderGuild();

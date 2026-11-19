@@ -30,7 +30,7 @@
   <div class="wrap">
     <p class="eyebrow">Guía del viajero</p>
     <h1>Cómo jugar a Ecos de Valdoria</h1>
-    <p class="lead">Todo lo que necesitas para tu primera aventura: controles, clases, habilidades, niveles, zonas, equipo y los personajes de la aldea.</p>
+    <p class="lead">Todo lo que necesitas para tu aventura: controles, clases, habilidades, niveles, zonas, equipo, grupos, gremios y PvP.</p>
   </div>
 </div>
 
@@ -45,6 +45,9 @@
     <a href="#equipo">Equipo y objetos</a>
     <a href="#npcs">Personajes de la aldea</a>
     <a href="#grupos">Grupos</a>
+    <a href="#gremios">Gremios</a>
+    <a href="#pvp">PvP y PK</a>
+    <a href="#ventanas">Ventanas y ajustes</a>
     <a href="#mundo">Agua y caminos</a>
     <a href="#consejos">Consejos</a>
   </nav>
@@ -58,7 +61,7 @@
         <li>Habla con la <strong>Capitana Brisa</strong> para saber a qué zona ir según tu nivel.</li>
         <li>Empieza en los <strong>Prados de Brezo</strong> (nivel 1–2): los jabalíes no atacan si no los provocas.</li>
         <li>Vende el botín al <strong>Mercader Orlen</strong> y compra pociones y mejor equipo.</li>
-        <li>Si caes, despiertas en la aldea con el 70% de vida y pierdes el 5% de la experiencia del nivel.</li>
+        <li>Si caes, no pierdes nada: despiertas en un lugar seguro cerca, con el 70% de vida.</li>
       </ul>
     </section>
 
@@ -79,6 +82,7 @@
       <div class="keys">
         <div class="key"><kbd>Clic</kbd><span>Moverte, atacar a un monstruo, hablar con un NPC o seleccionar a un jugador</span></div>
         <div class="key"><kbd>Shift</kbd> + <kbd>Clic</kbd><span>Ver el botín que puede soltar un monstruo</span></div>
+        <div class="key"><kbd>Ctrl</kbd> + <kbd>Clic</kbd><span>Atacar a otro jugador (ataque forzado, ver <a href="#pvp">PvP</a>)</span></div>
         <div class="key"><kbd>Arrastrar</kbd><span>Girar la cámara</span></div>
         <div class="key"><kbd>Rueda</kbd><span>Acercar o alejar la cámara</span></div>
         <div class="key"><kbd>W A S D</kbd><span>Caminar respecto a la cámara</span></div>
@@ -89,12 +93,15 @@
         <div class="key"><kbd>9</kbd><span>Activar o desactivar Gemas de Poder</span></div>
         <div class="key"><kbd>0</kbd><span>Montar o bajar de tu mascota (nivel 20)</span></div>
         <div class="key"><kbd>7</kbd> <kbd>8</kbd><span>Poción de vida · Poción de maná</span></div>
-        <div class="key"><kbd>I</kbd><span>Inventario y equipo</span></div>
-        <div class="key"><kbd>C</kbd><span>Estado: ataque, defensa, crítico, velocidades</span></div>
+        <div class="key"><kbd>I</kbd><span>Inventario y equipo (pestañas, oro, espacios y Destruir)</span></div>
+        <div class="key"><kbd>C</kbd><span>Estado: estadísticas y habilidades con su nivel</span></div>
+        <div class="key"><kbd>J</kbd><span>Misiones y su progreso</span></div>
+        <div class="key"><kbd>G</kbd><span>Gremio</span></div>
+        <div class="key"><kbd>O</kbd><span>Configuración: gráficos, imagen y sonido</span></div>
         <div class="key"><kbd>M</kbd><span>Mapa grande (arrastra para moverlo, rueda para acercar)</span></div>
         <div class="key"><kbd>H</kbd><span>Ayuda de controles</span></div>
         <div class="key"><kbd>Esc</kbd><span>Cerrar ventanas o soltar el objetivo</span></div>
-        <div class="key"><kbd>Enter</kbd><span>Chat. Empieza con <b>#</b> para hablar con tu grupo; <b>/invitar Nombre</b> invita a alguien</span></div>
+        <div class="key"><kbd>Enter</kbd><span>Chat. Empieza con <b>#</b> para hablar con tu grupo y con <b>@</b> para tu gremio; <b>/invitar Nombre</b> invita a alguien al grupo</span></div>
         <div class="key"><kbd>F11</kbd><span>Pantalla completa (en Mac: Ctrl + Cmd + F)</span></div>
       </div>
       <h3>En celular o tablet (navegador)</h3>
@@ -104,7 +111,8 @@
         <div class="key"><kbd>Tocar</kbd><span>Moverte a un punto, atacar a un monstruo o hablar con un personaje</span></div>
         <div class="key"><kbd>Deslizar</kbd><span>Girar la cámara con un dedo</span></div>
         <div class="key"><kbd>Pellizcar</kbd><span>Acercar o alejar la cámara con dos dedos</span></div>
-        <div class="key"><kbd>Botones</kbd><span>Habilidades y pociones en la barra inferior</span></div>
+        <div class="key"><kbd>Botones</kbd><span>Habilidades y pociones en la barra inferior; ATACAR elige al monstruo más cercano</span></div>
+        <div class="key"><kbd>Forzar ataque</kbd><span>Para atacar a otro jugador: tócalo y usa «Forzar ataque» en su ficha (pide un segundo toque para confirmar)</span></div>
       </div>
       <p class="callout">El color del nombre de un monstruo indica su dificultad: <span style="color:#8d8a84">gris</span> (muy fácil, casi no da experiencia), <span style="color:#8fd37a">verde</span>, blanco (tu nivel), <span style="color:#f2cf5b">amarillo</span> y <span style="color:#ff6b5a">rojo</span> (muy superior a ti).</p>
     </section>
@@ -112,6 +120,7 @@
     <section id="clases">
       <h2>Razas, clases y habilidades</h2>
       <p>Hay cinco razas. Cada una empieza con <strong>3 habilidades</strong>. Con el <strong>Maestro Aldric</strong> de la aldea haces tus cambios de clase, cada uno con una misión: <strong>Despertar</strong> (nivel 10, 2 habilidades nuevas), <strong>Especialización</strong> (nivel 25: eliges la rama A o B, con una pasiva y una Ultimate) y <strong>Ascensión Maestra</strong> (nivel 40: tu Ultimate se vuelve Maestra). Cada raza solo usa su tipo de armadura y sus armas.</p>
+      <p><strong>Niveles de habilidad:</strong> como en Lineage 2, cada habilidad sube de nivel cada <strong>5 niveles</strong> de tu personaje desde que la aprendes, hasta <strong>Nv 8</strong>. Cada nivel le da un 6% más de poder (daño, curación y escudos) y cuesta un poco más de maná. En la ventana Estado (<kbd>C</kbd>) ves el nivel de cada una y cuándo sube; toca una habilidad para ver su detalle.</p>
       <div id="guideClasses" style="display:grid;gap:18px"></div>
     </section>
 
@@ -154,6 +163,42 @@
         <li>La experiencia de cada monstruo se reparte entre los miembros que estén cerca (45 m), según su nivel, con un <strong>10% extra por cada miembro</strong>. Cada miembro cercano recibe su propio oro y su propio botín (cofrecitos que solo ve él), y avanza en su misión de cambio de clase.</li>
         <li>Bajo tu marco ves la vida y el maná de tu grupo; en el mapa aparecen en verde.</li>
         <li>Empieza un mensaje con <kbd>#</kbd> para hablar solo con tu grupo.</li>
+      </ul>
+    </section>
+
+    <section id="gremios">
+      <h2>Gremios</h2>
+      <p>Un gremio reúne a tus amigos de forma permanente (hasta <strong>30 miembros</strong>), aunque no estén conectados:</p>
+      <ul class="plain">
+        <li>Se funda con el <strong>Maestro del Gremio</strong> en la Ciudadela de Gludio-Cubo. Necesitas <strong>nivel 15</strong> y <strong>1.000 de oro</strong>. Eliges un nombre, un <strong>emblema</strong> y un <strong>color</strong>.</li>
+        <li>Abre la ventana del gremio con <kbd>G</kbd> (o el botón ⚑): ves a los miembros, quién está conectado, su nivel y su rango.</li>
+        <li>Rangos: el <strong>Líder</strong> nombra oficiales, pasa el mando y puede disolver el gremio; los <strong>Oficiales</strong> invitan y expulsan miembros y editan el mensaje del gremio.</li>
+        <li>Para invitar, escribe el nombre en la ventana del gremio o elige al jugador y pulsa <strong>«Invitar al gremio»</strong> en su ficha.</li>
+        <li>Empieza un mensaje con <b>@</b> para hablar solo con tu gremio.</li>
+        <li>El emblema y el nombre del gremio aparecen bajo el nombre de cada miembro, y los miembros no pueden atacarse entre ellos.</li>
+      </ul>
+    </section>
+
+    <section id="pvp">
+      <h2>PvP y PK</h2>
+      <p>Fuera de las ciudades puedes pelear contra otros jugadores, como en Lineage 2. Para que nadie ataque por error, <strong>hay que forzar el ataque</strong>:</p>
+      <ul class="plain">
+        <li>En computador: <kbd>Ctrl</kbd> + <kbd>Clic</kbd> sobre el jugador. En celular: tócalo y pulsa <strong>«Forzar ataque»</strong> en su ficha (pide un segundo toque).</li>
+        <li>Quien ataca queda con el <span style="color:#d6a2ff"><strong>nombre morado</strong></span> durante 30 segundos: cualquiera puede atacarlo sin forzar, y la víctima puede defenderse.</li>
+        <li>Si derrotas a alguien que no estaba peleando te vuelves <span style="color:#ff6b5a"><strong>PK</strong></span>: nombre rojo y <strong>karma</strong>. Mientras tengas karma, cualquiera puede atacarte y la experiencia de los monstruos solo baja tu karma.</li>
+        <li>Derrotar a un jugador morado suma un <strong>PvP</strong> y no da karma. Tus PvP, PK y karma se ven en la ventana Estado.</li>
+        <li>No hay PvP en la aldea ni en la Ciudadela, ni contra personajes de <strong>nivel menor a 10</strong>, ni contra tu grupo o tu gremio. El daño entre jugadores es menor que contra monstruos, y al caer no se pierde nada.</li>
+      </ul>
+    </section>
+
+    <section id="ventanas">
+      <h2>Ventanas y ajustes</h2>
+      <ul class="plain">
+        <li><strong>Inventario</strong> (<kbd>I</kbd>): pestañas Todo, Equipo, Consumibles, Misión y Otros; tu oro, los espacios usados y la opción <strong>Destruir</strong>.</li>
+        <li><strong>Misiones</strong> (<kbd>J</kbd>): tu misión de cambio de clase y su progreso.</li>
+        <li><strong>Estado</strong> (<kbd>C</kbd>): estadísticas a la izquierda y habilidades a la derecha.</li>
+        <li><strong>Configuración</strong> (<kbd>O</kbd>, también en la pantalla de inicio): calidad gráfica, visibilidad de personajes, distancia de visión, límite de FPS, sombras, brillo, gamma, contraste, saturación y volumen.</li>
+        <li>Los avisos importantes (subidas de nivel, misiones, falta de maná) aparecen en el centro de la pantalla.</li>
       </ul>
     </section>
 

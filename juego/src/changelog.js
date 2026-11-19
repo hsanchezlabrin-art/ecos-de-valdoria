@@ -8,6 +8,15 @@
 })(function () {
   return [
     {
+      version: '0.23.1',
+      date: '2026-11-18',
+      title: 'Web al día y corrección',
+      items: [
+        'La web y la guía explican los gremios, el PvP y PK, los niveles de habilidad, las misiones y la configuración.',
+        'Corregido un error al entrar al mundo que podía saltarse la primera actualización de tu personaje.',
+      ],
+    },
+    {
       version: '0.23.0',
       date: '2026-11-18',
       title: 'Gremios, PvP y habilidades con niveles',
