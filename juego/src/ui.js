@@ -57,6 +57,7 @@ function initUI() {
     master: $('masterPanel'),
     quests: $('questPanel'),
     guild: $('guildPanel'),
+    album: $('albumPanel'),
   };
   E.hud.hidden = false;
   E.pName.textContent = G.player.name;
@@ -79,6 +80,9 @@ function initUI() {
   $('btnStats').onclick = () => togglePanel('stats');
   $('btnQuests').onclick = () => togglePanel('quests');
   $('btnGuild').onclick = () => togglePanel('guild');
+  $('btnAlbum').onclick = () => togglePanel('album');
+  $('btnEmotes').onclick = () => toggleEmotes();
+  buildEmoteWheel();
   $('btnGuildInv').onclick = () => G.playerSel && V.Game.guild.invite(G.playerSel.id);
   $('guildYes').onclick = () => answerGuild(true);
   $('guildNo').onclick = () => answerGuild(false);
@@ -706,7 +710,11 @@ function closeAll() {
     answerGuild(false);
     return true;
   }
-  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help', 'quests', 'guild']) {
+  if (!$('emoteWheel').hidden) {
+    $('emoteWheel').hidden = true;
+    return true;
+  }
+  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help', 'quests', 'guild', 'album']) {
     if (!E[k].hidden) {
       E[k].hidden = true;
       closed = true;
@@ -957,6 +965,7 @@ function refreshPanels() {
   if (!E.stats.hidden) renderStats();
   if (!E.quests.hidden) renderQuests();
   if (!E.guild.hidden) renderGuild();
+  if (!E.album.hidden) renderAlbum();
   if (!E.shop.hidden) {
     const list = $('shopList');
     list.innerHTML = '';
@@ -1453,6 +1462,162 @@ function renderGuild() {
   box.append(foot);
 }
 
+// ---------- Rueda de gestos (tecla T o botón 😊) ----------
+
+function buildEmoteWheel() {
+  const wheel = $('emoteWheel');
+  const ring = wheel.querySelector('.ew-ring');
+  const list = V.Data.EMOTES;
+  list.forEach((e, i) => {
+    const a = (i / list.length) * Math.PI * 2 - Math.PI / 2;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ew-btn';
+    b.style.left = `calc(50% + ${(Math.cos(a) * 100).toFixed(1)}px)`;
+    b.style.top = `calc(50% + ${(Math.sin(a) * 100).toFixed(1)}px)`;
+    b.innerHTML = '<span></span><small></small>';
+    b.firstChild.textContent = e.icon;
+    b.lastChild.textContent = e.name;
+    b.onclick = () => {
+      wheel.hidden = true;
+      V.Game.emote(e.id);
+    };
+    ring.append(b);
+  });
+  wheel.querySelector('.ew-mid').onclick = () => {
+    wheel.hidden = true;
+    $('phrasePanel').hidden = false;
+  };
+  // Clic fuera de la rueda: se cierra
+  wheel.addEventListener('pointerdown', (ev) => {
+    if (ev.target === wheel) wheel.hidden = true;
+  });
+}
+function toggleEmotes() {
+  const wheel = $('emoteWheel');
+  wheel.hidden = !wheel.hidden;
+  if (wheel.hidden) return;
+  // Enfriamiento visible: los gestos se apagan hasta que se pueda hacer otro
+  const wait = Math.max(0, (G.emoteReady || 0) - performance.now());
+  wheel.classList.toggle('cooling', wait > 0);
+  clearTimeout(toggleEmotes.t);
+  if (wait > 0) toggleEmotes.t = setTimeout(() => wheel.classList.remove('cooling'), wait);
+}
+// Emoji sobre la cabeza de quien hace el gesto
+function showEmote(ent, id) {
+  const e = V.Data.EMOTES.find((x) => x.id === id);
+  if (e) showBubble(ent.id, `${e.icon} ${e.name}`);
+}
+function extChanged() {
+  if (E && !E.stats.hidden) renderStats();
+  if (E && !E.album.hidden) renderAlbum();
+}
+
+// ---------- Álbum de coleccionables (tecla K) ----------
+
+let albumTab = 'sets';
+const hexColor = (n) => `#${(n >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
+function albumEntry(cat, id) {
+  const D = V.Data;
+  if (cat === 'mobs') {
+    const m = D.MOBS[id];
+    return { icon: m.boss ? '👑' : m.name[0], color: hexColor(m.color), name: m.name, sub: `Nv ${m.lvl[0]}–${m.lvl[1]}${m.boss ? ' · Jefe' : ''}` };
+  }
+  if (cat === 'zones') {
+    const z = D.ZONES.find((x) => x.id === id);
+    const t = z.tint || [0.5, 0.5, 0.5];
+    return { icon: z.safe ? '⌂' : '⛰', color: `rgb(${t.map((c) => Math.round(c * 255)).join(',')})`, name: z.name, sub: z.lvl ? `Nivel ${z.lvl}` : 'Zona segura' };
+  }
+  if (cat === 'items') {
+    const it = D.ITEMS[id];
+    return { icon: it.glyph || '◆', color: (RARITY[it.rarity] || RARITY.comun).color, name: it.name, sub: '' };
+  }
+  const e = D.EMOTES.find((x) => x.id === id);
+  return { icon: e.icon, color: '#3a3f48', name: e.name, sub: '' };
+}
+function renderAlbum() {
+  const p = G.player;
+  const a = (p.ext && p.ext.album) || {};
+  const book = (cat) => a[cat] || {};
+  const box = $('albumBody');
+  const key = `${albumTab}|${JSON.stringify(a)}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = '';
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const { sets, cats } = V.Data.albumData();
+  const all = sets.flatMap((s) => s.items.map((id) => [s.cat, id]));
+  const found = all.filter(([c, id]) => book(c)[id]).length;
+  const done = sets.filter((s) => (a.sets || {})[s.id]);
+  const head = el('div', 'al-head');
+  const pct = Math.floor((found / all.length) * 100);
+  head.append(el('strong', '', `${found} / ${all.length} descubiertos (${pct}%)`), el('small', '', `${done.length} de ${sets.length} colecciones completas`));
+  const bar = el('div', 'qbar');
+  const fill = el('i');
+  fill.style.transform = `scaleX(${(found / all.length).toFixed(3)})`;
+  bar.append(fill);
+  head.append(bar);
+  if (done.length) head.append(el('p', 'al-titles', `Títulos: ${done.map((s) => s.title).join(' · ')}`));
+  box.append(head);
+
+  const tabs = el('div', 'inv-tabs al-tabs');
+  for (const [id, label] of [['sets', 'Colecciones'], ...Object.entries(cats)]) {
+    const total = id === 'sets' ? sets.length : sets.filter((s) => s.cat === id).reduce((n, s) => n + s.items.length, 0);
+    const got = id === 'sets' ? done.length : sets.filter((s) => s.cat === id).reduce((n, s) => n + s.items.filter((x) => book(id)[x]).length, 0);
+    const b = el('button', id === albumTab ? 'on' : '', `${label} ${got}/${total}`);
+    b.type = 'button';
+    b.onclick = () => {
+      albumTab = id;
+      renderAlbum();
+    };
+    tabs.append(b);
+  }
+  box.append(tabs);
+
+  if (albumTab === 'sets') {
+    const list = el('div', 'al-sets');
+    for (const s of sets) {
+      const got = s.items.filter((id) => book(s.cat)[id]).length;
+      const ok = !!(a.sets || {})[s.id];
+      const c = el('div', `qc al-set${ok ? ' done' : ''}`);
+      const t = el('div', 'qt');
+      t.append(el('span', '', `${ok ? '✔ ' : ''}${s.name}`), el('small', '', `${got}/${s.items.length}`));
+      const b2 = el('div', 'qbar');
+      const f2 = el('i');
+      f2.style.transform = `scaleX(${(got / s.items.length).toFixed(3)})`;
+      b2.append(f2);
+      const gifts = s.give.map(([id, q]) => `${ITEMS[id].name} ×${q}`).join(', ');
+      c.append(t, b2, el('p', 'muted', `Premio: ${s.gold.toLocaleString('es')} oro, ${gifts} y el título «${s.title}»`));
+      list.append(c);
+    }
+    box.append(list);
+    return;
+  }
+  for (const s of sets.filter((x) => x.cat === albumTab)) {
+    const sec = el('section', 'al-sec');
+    sec.append(el('h3', '', s.name));
+    const grid = el('div', 'al-grid');
+    for (const id of s.items) {
+      const n = book(s.cat)[id];
+      const card = el('div', `al-card${n ? '' : ' unknown'}`);
+      const e = albumEntry(s.cat, id);
+      const ic = el('span', 'al-ic', n ? e.icon : '?');
+      if (n) ic.style.background = e.color;
+      const sub = n ? [e.sub, s.cat === 'mobs' ? `derrotados ${n}` : s.cat === 'items' ? `encontrados ${n}` : ''].filter(Boolean).join(' · ') : 'Por descubrir';
+      card.append(ic, el('b', '', n ? e.name : '???'), el('small', '', sub));
+      card.title = n ? e.name : 'Aún no lo descubres';
+      grid.append(card);
+    }
+    sec.append(grid);
+    box.append(sec);
+  }
+}
+
 function showGuildInvite(ev) {
   $('guildInviteText').textContent = `${ev.name} te invita a su gremio ${ev.emblem} ${ev.guild}.`;
   $('guildInviteText').style.setProperty('--gc', ev.color || '');
@@ -1661,6 +1826,7 @@ function renderStats() {
       ['Etapa', `${STAGES[p.stage].name}${p.branch ? ` · Rama ${p.branch.toUpperCase()}` : ''}`],
       ['Pasiva', pas ? pas.name : 'Nivel 25'],
       ['PvP / PK', `${p.pvp || 0} / ${p.pk || 0}`],
+      ['Amistad', p.ext && p.ext.mentor ? `${p.ext.mentor.pts} pts · hoy ${p.ext.mentor.today}/${p.ext.mentor.cap}` : '0 pts'],
       ['Karma', p.karma ? `${p.karma} (nombre rojo)` : p.flagT ? `0 · morado ${p.flagT} s` : '0'],
     ]],
     ['Vida y maná', [
@@ -2072,7 +2238,7 @@ function drawBigMap() {
 
 V.UI = {
   initUI, notify, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
-  floatText, log, logLoot, banner, showDeath, showInvite, openDrops, openGuild, guildChanged, showGuildInvite,
+  floatText, log, logLoot, banner, showDeath, showInvite, openDrops, openGuild, guildChanged, showGuildInvite, toggleEmotes, showEmote, extChanged,
   togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI, openTrade,
   classChanged, openMaster, refreshMaster, openHatch,
 };

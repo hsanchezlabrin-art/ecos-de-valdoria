@@ -11,6 +11,7 @@ on:
       - 'juego/src/data.js'
       - 'juego/src/terrain.js'
       - 'juego/src/sim.js'
+      - 'juego/src/systems/**'
       - 'juego/src/version.js'
       - 'fly.toml'
       - '.dockerignore'

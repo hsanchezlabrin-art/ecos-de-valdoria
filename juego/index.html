@@ -491,6 +491,16 @@
   .tf-report button { padding: 6px 8px; font-size: 12px; text-align: left; border: 1px solid var(--edge-soft); border-radius: 3px; background: #1a1d22; color: var(--parch); }
   .chat-row { display: flex; gap: 6px; }
   .chat-row #chatInput { flex: 1; min-width: 0; }
+  #btnEmotes { padding: 0 8px; font-size: 16px; border: 1px solid var(--edge-soft); border-radius: 2px; background: rgba(0,0,0,.55); }
+  #emoteWheel { position: fixed; inset: 0; z-index: 7; background: radial-gradient(circle at 50% 50%, rgba(0,0,0,.45), rgba(0,0,0,.15) 60%); }
+  .ew-ring { position: absolute; left: 50%; top: 50%; width: 290px; height: 290px; transform: translate(-50%, -50%); border-radius: 50%; border: 1px solid var(--edge); background: rgba(14,16,20,.82); box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+  .ew-btn, .ew-mid { position: absolute; transform: translate(-50%, -50%); display: grid; place-items: center; gap: 2px; width: 74px; height: 74px; border-radius: 50%; border: 1px solid var(--edge-soft); background: #1a1d22; color: var(--parch); cursor: pointer; }
+  .ew-btn span, .ew-mid { font-size: 28px; line-height: 1; }
+  .ew-btn small, .ew-mid small { font-size: 11px; color: var(--muted); }
+  .ew-btn:hover, .ew-mid:hover { border-color: var(--gold); background: #23272e; }
+  .ew-mid { left: 50%; top: 50%; width: 82px; height: 82px; }
+  #emoteWheel.cooling .ew-btn { opacity: .4; pointer-events: none; }
+  body.touch .ew-ring { zoom: var(--ui); }
   #btnPhrases { padding: 0 8px; font-size: 16px; border: 1px solid var(--edge-soft); border-radius: 2px; background: rgba(0,0,0,.55); }
   #phrasePanel { position: absolute; left: 0; bottom: calc(100% + 6px); width: 100%; padding: 8px; background: var(--panel-solid); border: 1px solid var(--edge); border-radius: 3px; display: grid; gap: 6px; z-index: 7; font-size: 12px; color: var(--muted); }
   #phrasePanel .ph-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
@@ -515,6 +525,24 @@
   .st-grid dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
   .st-grid dt.sep, .st-grid dd.sep { border-top: 1px solid #23211d; padding-top: 6px; margin-top: 2px; }
   .st-grid .up { color: #8fd37a; }
+  /* Álbum de coleccionables */
+  #albumPanel { width: 560px; height: min(640px, calc(100% - 40px)); } /* alto fijo: no salta al cambiar de pestaña */
+  #albumBody { display: grid; gap: 12px; }
+  .al-head { display: grid; gap: 6px; }
+  .al-head strong { font: 700 16px var(--display); }
+  .al-head small, .al-titles { color: var(--muted); font-size: 12px; margin: 0; }
+  .al-titles { color: var(--gold); }
+  .al-tabs { flex-wrap: wrap; }
+  .al-sets { display: grid; gap: 8px; }
+  .al-sec h3 { margin: 4px 0 6px; font: 700 13px var(--display); letter-spacing: .08em; color: var(--gold); text-transform: uppercase; }
+  .al-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+  .al-card { display: grid; justify-items: center; gap: 3px; padding: 8px 6px; text-align: center; border: 1px solid var(--edge-soft); border-radius: 4px; background: rgba(0,0,0,.25); }
+  .al-card b { font-size: 12px; line-height: 1.2; overflow-wrap: anywhere; }
+  .al-card small { font-size: 11px; color: var(--muted); }
+  .al-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 6px; font: 700 20px var(--display); color: #fff; text-shadow: 0 1px 2px #000; background: #2a2e35; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); }
+  .al-card.unknown { opacity: .55; }
+  .al-card.unknown .al-ic { color: var(--muted); border: 1px dashed var(--edge-soft); background: #15181d; }
+  body.touch #albumPanel { width: min(720px, calc(100vw / var(--ui) - 24px)); }
   /* Gremio */
   .np .np-guild { display: block; font: 600 11px var(--body); letter-spacing: 0; text-align: center; opacity: .95; }
   #guildPanel { width: 420px; }
@@ -825,6 +853,7 @@
     <div id="logLines" aria-live="polite"></div>
     <div class="chat-row">
       <input id="chatInput" maxlength="160" placeholder="Enter para hablar · #texto para el grupo · /invitar Nombre" autocomplete="off" spellcheck="false" enterkeyhint="send">
+      <button type="button" id="btnEmotes" title="Gestos (T)" aria-label="Gestos">😊</button>
       <button type="button" id="btnPhrases" title="Frases rápidas" aria-label="Frases rápidas">💬</button>
     </div>
     <div id="phrasePanel" hidden>
@@ -839,6 +868,7 @@
     <button id="btnStats" data-icon="♙">Estado <kbd>C</kbd></button>
     <button id="btnQuests" data-icon="❗">Misiones <kbd>J</kbd></button>
     <button id="btnGuild" data-icon="⚑">Gremio <kbd>G</kbd></button>
+    <button id="btnAlbum" data-icon="📖">Álbum <kbd>K</kbd></button>
     <button id="btnMap" data-icon="⌖">Mapa <kbd>M</kbd></button>
     <button id="btnHelp" data-icon="?">Controles <kbd>H</kbd></button>
     <button id="btnGfx" data-icon="⚙">Ajustes <kbd>O</kbd></button>
@@ -892,6 +922,15 @@
         <p class="hint">Toca una habilidad para ver qué hace. Suben de nivel solas cada 5 niveles de tu personaje: más poder y algo más de maná.</p>
       </div>
     </div>
+  </section>
+
+  <div id="emoteWheel" hidden role="dialog" aria-label="Gestos">
+    <div class="ew-ring"><button type="button" class="ew-mid" title="Frases rápidas">💬<small>Frases</small></button></div>
+  </div>
+
+  <section class="panel" id="albumPanel" hidden>
+    <header><h2>Álbum</h2><button class="x" data-close="album" aria-label="Cerrar">✕</button></header>
+    <div id="albumBody"></div>
   </section>
 
   <section class="panel" id="guildPanel" hidden>
@@ -982,6 +1021,8 @@
       <dt>7 · 8</dt><dd>Poción de vida · Poción de maná</dd>
       <dt>I · C · J · M · H · O</dt><dd>Inventario · Estado · Misiones · Mapa · Esta ayuda · Configuración</dd>
       <dt>Enter</dt><dd>Chat. Empieza con # para hablar solo con tu grupo, con @ para tu gremio, o escribe /invitar Nombre</dd>
+      <dt>T</dt><dd>Gestos: saludar, aplaudir, animar, bailar, celebrar y sentarse (también el botón 😊 junto al chat)</dd>
+      <dt>K</dt><dd>Álbum: criaturas, tierras, botín y gestos que descubriste, y premios por completar colecciones</dd>
       <dt>G</dt><dd>Gremio: miembros, invitar y mensaje del gremio. Se funda con el Maestro del Gremio en la Ciudadela (nivel 15 y 1.000 de oro)</dd>
       <dt>Esc</dt><dd>Cerrar ventanas o soltar el objetivo</dd>
       <dt><span class="np-aggro-key">!</span></dt><dd>Monstruo agresivo: te ataca si te acercas. Los demás solo pelean si los golpeas</dd>

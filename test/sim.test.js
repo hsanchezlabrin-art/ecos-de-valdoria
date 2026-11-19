@@ -427,6 +427,150 @@ for (const cls of Data.CLASS_IDS) {
   ok(!a.guild && !w.guilds.size && w.guildsDirty, 'el líder disuelve el gremio');
 }
 
+// 2f) Fase 0: bus de eventos y sistemas desacoplados
+{
+  const w = Sim.createWorld();
+  const seen = [];
+  // Un sistema que falla no debe detener la simulación
+  Sim.useSystem(w, { id: 'roto', init: (ww, api) => api.bus.on('player:levelUp', () => { throw new Error('a propósito'); }) });
+  Sim.useSystem(w, {
+    id: 'espia',
+    load: (raw) => ({ n: (raw && raw.n) || 0 }),
+    init: (ww, api) => {
+      for (const t of ['player:levelUp', 'mob:killed', 'skill:cast', 'zone:entered', 'player:died', 'player:respawn', 'item:used']) api.bus.on(t, () => seen.push(t));
+    },
+    commands: { sumar: (ww, p, n) => (p.ext.espia.n += +n || 0) },
+    view: (ww, p) => ({ n: p.ext.espia.n }),
+  });
+  Sim.spawnMobs(w);
+  const p = Sim.addPlayer(w, { ...Sim.newCharacter('Espiado', 'lagarto'), ext: { espia: { n: 2 }, otro: { x: 1 } } });
+  ok(p.ext.espia.n === 2 && p.ext.otro.x === 1, 'cada sistema carga su parte del guardado (y se conserva la de otros)');
+  const errLog = console.error;
+  console.error = () => {};
+  p.xp = Data.xpToNext(p.level);
+  Sim.step(w, DT);
+  C.setTarget(w, p, null);
+  p.xp = 0;
+  // gainXp no es público: se sube de nivel cazando
+  const m = w.mobs.find((x) => !x.def.boss && !x.dead);
+  m.hp = 1;
+  p.pos.x = m.pos.x - 1;
+  p.pos.z = m.pos.z;
+  p.xp = Data.xpToNext(p.level) - 1;
+  C.setTarget(w, p, m);
+  C.attack(w, p);
+  for (let i = 0; i < 40; i++) Sim.step(w, DT);
+  console.error = errLog;
+  ok(seen.includes('mob:killed') && seen.includes('player:levelUp'), 'el bus avisa monstruos derrotados y subidas de nivel, aunque otro sistema falle');
+  ok(seen.includes('zone:entered'), 'el bus avisa al entrar a una tierra');
+  p.cds = {};
+  p.mp = 999;
+  m.dead = false;
+  m.hp = 1e6;
+  C.setTarget(w, p, m);
+  C.useSkill(w, p, 0);
+  ok(seen.includes('skill:cast'), 'el bus avisa al usar una habilidad');
+  Sim.systemCommand(w, p, 'espia', 'sumar', 3);
+  Sim.systemCommand(w, p, 'espia', 'toString', 0);
+  Sim.systemCommand(w, p, 'nadie', 'sumar', 3);
+  ok(p.ext.espia.n === 5 && Sim.systemViews(w, p).espia.n === 5, 'los comandos llegan solo al sistema y comando correctos');
+  ok(Sim.serialize(p).ext.espia.n === 5, 'los datos de los sistemas se guardan con el personaje');
+}
+
+// 2g) Fase 1: gestos (emotes) y Ayudante de Novatos
+{
+  const Emotes = require('../juego/src/systems/emotes.js');
+  const Mentor = require('../juego/src/systems/mentor.js');
+  const w = Sim.createWorld();
+  Sim.useSystem(w, Emotes);
+  Sim.useSystem(w, Mentor);
+  const p = Sim.addPlayer(w, { ...Sim.newCharacter('Bailarina', 'elfo', 'f'), pos: { x: 50, z: 14 } });
+  Sim.drainEvents(w);
+  Sim.systemCommand(w, p, 'emotes', 'play', 'saludar');
+  Sim.systemCommand(w, p, 'emotes', 'play', 'bailar');
+  let evs = Sim.drainEvents(w).filter((e) => e.type === 'emote');
+  ok(evs.length === 1 && evs[0].id === 'saludar' && evs[0].ent === p, `un gesto se envía a quienes están cerca, y otro antes de ${Data.EMOTE_CD} s se ignora (anti-spam)`);
+  for (let t = 0; t < Data.EMOTE_CD + 0.1; t += DT) Sim.step(w, DT);
+  Sim.systemCommand(w, p, 'emotes', 'play', 'bailar');
+  Sim.systemCommand(w, p, 'emotes', 'play', 'volar');
+  evs = Sim.drainEvents(w).filter((e) => e.type === 'emote');
+  ok(evs.length === 1 && evs[0].id === 'bailar', 'pasado el enfriamiento se puede hacer otro; los gestos inventados no existen');
+
+  // Puntos de Amistad: veterano (nivel 30) y novato (nivel 12) en grupo
+  Sim.spawnMobs(w);
+  const vet = Sim.addPlayer(w, { ...Sim.newCharacter('Veterana', 'oso', 'f'), level: 30, pos: { x: 50, z: 14 } });
+  const nov = Sim.addPlayer(w, { ...Sim.newCharacter('Novato', 'gnomo'), level: 12, pos: { x: 51, z: 14 } });
+  C.partyInvite(w, vet, nov.id);
+  C.partyAnswer(w, nov, true);
+  const boss = w.mobs.find((m) => m.def.boss);
+  boss.pos.x = 52;
+  boss.pos.z = 14;
+  boss.hp = 1;
+  vet.pos.x = 50.5;
+  C.setTarget(w, vet, boss);
+  C.attack(w, vet);
+  for (let i = 0; i < 60 && !boss.dead; i++) Sim.step(w, DT);
+  ok(boss.dead && vet.ext.mentor.pts === Data.MENTOR.boss && nov.ext.mentor.pts === Data.MENTOR.boss, `derrotar un jefe juntos da ${Data.MENTOR.boss} Puntos de Amistad a ambos`);
+  ok(p.ext.mentor.pts === 0, 'quien no estaba en el grupo no gana puntos');
+  // Monstruos comunes: 1 punto cada 5; tope diario
+  for (let k = 0; k < Data.MENTOR.killsPerPoint; k++) w.bus.emit('mob:killed', { killer: vet, mob: { def: {} }, members: [vet, nov] });
+  ok(nov.ext.mentor.pts === Data.MENTOR.boss + 1, `cada ${Data.MENTOR.killsPerPoint} monstruos juntos dan 1 punto`);
+  for (let k = 0; k < 20; k++) w.bus.emit('boss:defeated', { killer: vet, mob: boss, members: [vet, nov] });
+  ok(nov.ext.mentor.today === Data.MENTOR.dailyCap && nov.ext.mentor.pts === Data.MENTOR.dailyCap, `como máximo ${Data.MENTOR.dailyCap} puntos por día`);
+  const near = Sim.addPlayer(w, { ...Sim.newCharacter('Parecido', 'elfo'), level: 25, pos: { x: 50, z: 14 } });
+  w.bus.emit('boss:defeated', { killer: vet, mob: boss, members: [vet, near] });
+  ok(near.ext.mentor.pts === 0, 'con menos de 10 niveles de diferencia no hay puntos');
+  ok(Sim.systemViews(w, nov).mentor.pts === Data.MENTOR.dailyCap && Sim.serialize(nov).ext.mentor.pts === Data.MENTOR.dailyCap, 'los puntos se ven en el panel y se guardan');
+}
+
+// 2h) Fase 2: álbum de coleccionables
+{
+  const Album = require('../juego/src/systems/album.js');
+  const Emotes = require('../juego/src/systems/emotes.js');
+  const w = Sim.createWorld();
+  Sim.useSystem(w, Emotes);
+  Sim.useSystem(w, Album);
+  Sim.spawnMobs(w);
+  const sets = Data.albumData().sets;
+  ok(sets.length >= 8 && sets.every((s) => s.items.length && s.gold > 0 && s.title), `el álbum arma ${sets.length} colecciones desde los datos del juego`);
+  const p = Sim.addPlayer(w, { ...Sim.newCharacter('Coleccionista', 'elfo'), level: 30, pos: { x: 0, z: 5 } });
+  Sim.step(w, DT);
+  ok(p.ext.album.zones.aldea === 1, 'al entrar a una tierra queda anotada');
+  // Derrotar un monstruo de cada tipo de las Praderas completa su colección
+  const gold0 = p.gold;
+  const praderas = sets.find((s) => s.id === 'praderas');
+  for (const key of praderas.items) {
+    const m = w.mobs.find((x) => x.key === key && !x.dead);
+    m.hp = 1;
+    p.pos.x = m.pos.x - 1;
+    p.pos.z = m.pos.z;
+    C.setTarget(w, p, m);
+    C.attack(w, p);
+    for (let i = 0; i < 60 && !m.dead; i++) Sim.step(w, DT);
+  }
+  ok(praderas.items.every((k) => p.ext.album.mobs[k] >= 1), 'cada criatura derrotada queda en el álbum');
+  ok(p.ext.album.sets.praderas === 1 && p.gold >= gold0 + praderas.gold, `completar las Praderas da ${praderas.gold} de oro y el título «${praderas.title}»`);
+  ok(Sim.drainEvents(w).some((e) => e.type === 'banner' && e.to === p.id && /Colección completa/.test(e.sub)), 'al completar una colección aparece un aviso grande');
+  const goldDone = p.gold;
+  w.bus.emit('mob:killed', { killer: p, mob: w.mobs.find((x) => x.key === 'hongo'), members: [p] });
+  ok(p.gold === goldDone && p.ext.album.mobs.hongo >= 2, 'una colección se premia una sola vez (el contador sigue sumando)');
+  // Gestos y botín
+  for (const e of Data.EMOTES) {
+    p.emoteReady = 0;
+    Sim.systemCommand(w, p, 'emotes', 'play', e.id);
+  }
+  ok(p.ext.album.sets.gestos === 1, 'usar todos los gestos completa la colección de Gestos');
+  w.bus.emit('item:gained', { p, id: 'lana', qty: 2 });
+  w.bus.emit('item:gained', { p, id: 'espada_inventada', qty: 1 });
+  ok(p.ext.album.items.lana === 1 && !p.ext.album.items.espada_inventada, 'el botín se anota (solo lo que existe en el álbum)');
+  // Guardar y cargar
+  const saved = Sim.serialize(p).ext.album;
+  const w2 = Sim.createWorld();
+  Sim.useSystem(w2, Album);
+  const p2 = Sim.addPlayer(w2, { ...Sim.newCharacter('Coleccionista', 'elfo'), ext: { album: { ...saved, mobs: { ...saved.mobs, dragon_falso: 3 } } } });
+  ok(p2.ext.album.sets.praderas === 1 && p2.ext.album.mobs.hongo >= 2 && !p2.ext.album.mobs.dragon_falso, 'el álbum se guarda y al cargar ignora entradas que no existen');
+}
+
 // 7) Tienda: hay que estar junto al mercader y se puede comprar y vender en cantidad
 {
   const w = Sim.createWorld();

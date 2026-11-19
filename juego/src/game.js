@@ -495,6 +495,11 @@
       UI.classChanged();
     }
     if (!G.npcSel && !G.playerSel) P.target = d.target ? net.mobs.get(d.target) || null : null;
+    // Paneles de los sistemas (mentor…): llegan solo cuando cambian
+    if (d.ext) {
+      P.ext = { ...(P.ext || {}), ...d.ext };
+      UI.extChanged();
+    }
     if (d.guild !== undefined) {
       P.guild = d.guild || null;
       UI.guildChanged();
@@ -646,6 +651,12 @@
   const answerInvite = (accept) => send({ t: 'inviteAnswer', accept });
   const leaveParty = () => send({ t: 'partyLeave' });
   const kickFromParty = (id) => send({ t: 'partyKick', id });
+  // Gestos (sistema 'emotes'): el servidor valida y aplica el enfriamiento
+  const emote = (id) => {
+    if (!P || P.dead) return;
+    G.emoteReady = performance.now() + V.Data.EMOTE_CD * 1000;
+    send({ t: 'sys', sys: 'emotes', cmd: 'play', arg: id });
+  };
   // Gremio
   const guild = {
     create: (name, emblem, color) => send({ t: 'guildCreate', name, emblem, color }),
@@ -796,6 +807,12 @@
         break;
       case 'guildInvite':
         if (mine(ev)) UI.showGuildInvite(ev);
+        break;
+      case 'emote':
+        if (ev.ent && ev.ent.model) {
+          V.Actors.emote(ev.ent.model, ev.id);
+          UI.showEmote(ev.ent, ev.id);
+        }
         break;
       case 'openGuild':
         if (mine(ev)) UI.openGuild(true);
@@ -1738,7 +1755,7 @@
     PROTOCOL, connect, register, login, resume, logout, exitWorld, createChar, deleteChar, play,
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
     clickInventory, useItem, sellItem, destroyItem, unequip, buyItem, respawnPlayer, update, sendChat, sendPhrase, report, classQuest, toggleGems, hatch, toggleMount,
-    invite, inviteByName, answerInvite, leaveParty, kickFromParty, guild,
+    invite, inviteByName, answerInvite, leaveParty, kickFromParty, guild, emote,
     get online() {
       return true;
     },

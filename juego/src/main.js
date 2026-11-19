@@ -240,6 +240,12 @@
         case 'KeyH':
           UI.togglePanel('help');
           break;
+        case 'KeyT':
+          UI.toggleEmotes();
+          break;
+        case 'KeyK':
+          UI.togglePanel('album');
+          break;
         case 'KeyF':
           Game.attackTarget();
           break;

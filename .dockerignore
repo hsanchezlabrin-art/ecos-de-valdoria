@@ -11,3 +11,5 @@
 !juego/src/terrain.js
 !juego/src/sim.js
 !juego/src/version.js
+!juego/src/systems
+!juego/src/systems/*.js

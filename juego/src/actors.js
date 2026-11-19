@@ -589,6 +589,9 @@
       mixer,
       actions,
       hips: bones.Hips || null,
+      bones,
+      emote: null, // gesto en curso { id, t0, dur }
+      emoteSit: false,
       hipY,
       curHipY: hipY,
       hand: bones.RightHand || null,
@@ -793,6 +796,13 @@
       }
     }
     m.prevAtk = atk;
+    // Un gesto se corta al moverse o atacar
+    if (m.emote || m.emoteSit) {
+      if (walk > 0.3 || swim > 0.01 || m.atk) {
+        m.emote = null;
+        m.emoteSit = false;
+      }
+    }
     m.atkLeft = Math.max(0, m.atkLeft - dt);
     const def = m.atk;
     const wa = def ? Math.min(1, m.atkLeft / 0.12, (def.time - m.atkLeft) / 0.08 + 0.2) : 0;
@@ -801,7 +811,7 @@
     if (moving > 0.3) m.celebLeft = 0;
     m.celebLeft = Math.max(0, m.celebLeft - dt);
     const wc = A.celebrate ? Math.min(1, m.celebLeft / 0.25) * (1 - wa) : 0;
-    const sit = m.sitting && A.sit ? 1 : 0;
+    const sit = (m.sitting || m.emoteSit) && A.sit ? 1 : 0;
     const rest = (1 - wa) * (1 - wc);
     if (A.sit) A.sit.setEffectiveWeight(sit * rest);
     if (A.idle) A.idle.setEffectiveWeight((1 - sit) * (1 - moving) * rest);
@@ -827,7 +837,130 @@
       const lift = lowestFoot(m) - m.footRest;
       if (lift > 0.005) m.scene.position.y = -Math.min(0.4, lift);
     }
+    if (m.emote) emoteSkinned(m, now());
     syncArms(m);
+    // Sentado en el suelo (gesto): la cadera baja hasta el piso
+    if (m.emoteSit && !m.sitting) m.rig.position.y = (SIT_HIP - m.curHipY) * m.rig.scale.y;
+  }
+
+  // ---------- Gestos (emotes) ----------
+  // Los clips compartidos solo traen festejo y sentado: saludar, aplaudir, animar y bailar se hacen
+  // apuntando los brazos hacia direcciones del cuerpo (independiente de los ejes de cada hueso,
+  // así sirve igual para todas las razas). Direcciones en el espacio del modelo: x = lado, y = arriba,
+  // z = adelante; `s` es el lado del brazo (+1 o -1).
+  const SIT_HIP = 0.32;
+  const _ea = new THREE.Vector3();
+  const _eb = new THREE.Vector3();
+  const _ec = new THREE.Vector3();
+  const _ed = new THREE.Vector3();
+  const _eq = new THREE.Quaternion();
+  const _ep = new THREE.Quaternion();
+  const _ei = new THREE.Quaternion();
+  function aimBone(m, bone, child, x, y, z, k) {
+    if (!bone || !child || k <= 0) return;
+    bone.getWorldPosition(_ea);
+    child.getWorldPosition(_eb);
+    _ec.subVectors(_eb, _ea).normalize();
+    _ed.set(x, y, z).normalize().transformDirection(m.scene.matrixWorld);
+    _eq.setFromUnitVectors(_ec, _ed);
+    _eq.copy(_ei.identity().slerp(_eq, k));
+    bone.parent.getWorldQuaternion(_ep);
+    // Rotación en el mundo → en el espacio del padre del hueso
+    const local = _ep.clone().invert().multiply(_eq).multiply(_ep);
+    bone.quaternion.premultiply(local);
+    bone.updateMatrixWorld(true);
+  }
+  // Lado de cada brazo (signo de x del hombro en el espacio del modelo)
+  function armSide(m, bone) {
+    bone.getWorldPosition(_ea);
+    m.scene.worldToLocal(_ea);
+    return _ea.x >= 0 ? 1 : -1;
+  }
+  function arm(m, side, up, fore, k) {
+    const B = m.bones;
+    const [a, f, h] = side === 'R' ? [B.RightArm, B.RightForeArm, B.RightHand] : [B.LeftArm, B.LeftForeArm, B.LeftHand];
+    if (!a) return;
+    const s = armSide(m, a);
+    aimBone(m, a, f, up[0] * s, up[1], up[2], k);
+    aimBone(m, f, h, fore[0] * s, fore[1], fore[2], k);
+  }
+  function emoteSkinned(m, t) {
+    const e = m.emote;
+    const el = t - e.t0;
+    if (e.dur && el > e.dur) {
+      m.emote = null;
+      return;
+    }
+    const k = e.dur ? Math.max(0, Math.min(1, el / 0.25, (e.dur - el) / 0.3)) : 1;
+    m.root.updateMatrixWorld(true);
+    if (e.id === 'saludar') {
+      const w = Math.sin(el * 11) * 0.4;
+      arm(m, 'R', [0.5, 0.85, 0.15], [0.25 + w, 1, 0.2], k);
+    } else if (e.id === 'aplaudir') {
+      const open = (Math.sin(el * 14) + 1) / 2;
+      for (const sd of ['R', 'L']) arm(m, sd, [0.3, -0.55, 0.8], [-(0.2 + open * 0.6), 0.05, 0.9], k);
+    } else if (e.id === 'animar') {
+      arm(m, 'R', [0.25, 1, 0.1], [0.1, 1, 0.1], k * Math.max(0.15, Math.sin(el * 7)));
+      arm(m, 'L', [0.25, 1, 0.1], [0.1, 1, 0.1], k * Math.max(0.15, -Math.sin(el * 7)));
+      m.scene.position.y += Math.max(0, Math.sin(el * 14)) * 0.05 * k;
+    } else if (e.id === 'bailar') {
+      const sw = Math.sin(el * 5);
+      arm(m, 'R', [0.55, 0.75, 0.25], [0.2 + sw * 0.6, 0.9, 0.2], k);
+      arm(m, 'L', [0.55, 0.75, 0.25], [0.2 - sw * 0.6, 0.9, 0.2], k);
+      m.scene.rotation.y += sw * 0.45 * k;
+      m.scene.position.y += Math.abs(Math.sin(el * 10)) * 0.07 * k;
+    }
+  }
+
+  const WAVE_OUT = 0.7; // brazo derecho de la figura de bloques hacia afuera
+  // Figuras de bloques (razas sin modelo 3D): brazos y cuerpo, más simple
+  function emoteBlock(m, t) {
+    const e = m.emote;
+    const el = t - e.t0;
+    if (e.dur && el > e.dur) {
+      m.emote = null;
+      return;
+    }
+    if (!m.lArm || !m.rArm) return;
+    if (e.id === 'saludar') {
+      m.rArm.rotation.x = -2.4;
+      m.rArm.rotation.z = WAVE_OUT + Math.sin(el * 11) * 0.3;
+    } else if (e.id === 'aplaudir') {
+      const open = (Math.sin(el * 14) + 1) / 2;
+      m.lArm.rotation.x = m.rArm.rotation.x = -1.35;
+      m.lArm.rotation.y = -0.6 + open * 0.5;
+      m.rArm.rotation.y = 0.6 - open * 0.5;
+    } else if (e.id === 'animar') {
+      m.rArm.rotation.x = -2.9 * Math.max(0.15, Math.sin(el * 7));
+      m.lArm.rotation.x = -2.9 * Math.max(0.15, -Math.sin(el * 7));
+    } else if (e.id === 'bailar') {
+      const sw = Math.sin(el * 5);
+      m.lArm.rotation.x = -2.5 + sw * 0.5;
+      m.rArm.rotation.x = -2.5 - sw * 0.5;
+      m.rig.rotation.y = sw * 0.45;
+      m.rig.position.y += Math.abs(Math.sin(el * 10)) * 0.08;
+    } else if (e.id === 'celebrar') {
+      m.lArm.rotation.x = m.rArm.rotation.x = -2.9;
+      m.rig.position.y += Math.abs(Math.sin(el * 7)) * 0.35;
+    } else if (e.id === 'sentarse') {
+      m.rig.position.y -= 0.55 * (m.rig.scale.y || 1);
+      if (m.lLeg) m.lLeg.rotation.x = m.rLeg.rotation.x = -1.45;
+    }
+  }
+
+  function emote(m, id) {
+    if (!m || m.dying) return;
+    const def = (V.Data.EMOTES || []).find((x) => x.id === id);
+    if (!def) return;
+    if (m.skinned) {
+      if (id === 'celebrar') return celebrate(m);
+      if (id === 'sentarse') {
+        m.emote = null;
+        m.emoteSit = true;
+        return;
+      }
+    }
+    m.emote = { id, t0: now(), dur: def.dur };
   }
 
   // Al morir se reproduce la animación de caída (una vez) en lugar de tumbar la figura
@@ -866,11 +999,19 @@
 
   // Se envuelven las funciones de V.Models para que acepten ambos tipos de modelo
   const baseAnimate = M.animateModel;
-  M.animateModel = (m, t, walk, atk, swim = 0) => (m.skinned ? animateSkinned(m, t, walk, atk, swim) : baseAnimate(m, t, walk, atk, swim));
+  M.animateModel = (m, t, walk, atk, swim = 0) => {
+    if (m.skinned) return animateSkinned(m, t, walk, atk, swim);
+    if (m.emote && (walk > 0.3 || atk > 0 || swim > 0.01)) m.emote = null;
+    if (!m.emote && m.rig && m.rig.rotation.y && m.kind === 'hum') m.rig.rotation.y = 0;
+    if (!m.emote && m.lArm && m.lArm.rotation.y) m.lArm.rotation.y = m.rArm.rotation.y = 0;
+    if (!m.emote && m.rArm && m.rArm.rotation.z) m.rArm.rotation.z = 0;
+    baseAnimate(m, t, walk, atk, swim);
+    if (m.emote) emoteBlock(m, now());
+  };
   const baseDeath = M.animateDeath;
   M.animateDeath = (m, k) => (m.skinned ? deathSkinned(m, k) : baseDeath(m, k));
   const baseArmor = M.setArmorLook;
   M.setArmorLook = (m, item) => (m.skinned ? setArmorSkinned(m, item) : baseArmor(m, item));
 
-  V.Actors = { preload, request, buildHero, celebrate, has: (cls, sex) => !!assets[`${cls}_${sex}`] };
+  V.Actors = { preload, request, buildHero, celebrate, emote, has: (cls, sex) => !!assets[`${cls}_${sex}`] };
 })();

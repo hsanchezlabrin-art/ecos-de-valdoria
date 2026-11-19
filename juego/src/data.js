@@ -782,7 +782,48 @@
     { id: 'si', text: 'Sí 👍' },
     { id: 'no', text: 'No, gracias' },
     { id: 'adios', text: '¡Adiós, hasta pronto!' },
+    { id: 'curacion', text: '¡Necesito curación! 💚' },
+    { id: 'equipo', text: '¡Buen equipo! 🤝' },
+    { id: 'secreto', text: '¡Aquí hay un secreto! ✨' },
   ];
+
+  // ---------- Gestos (sistema de emotes) ----------
+  const EMOTES = [
+    { id: 'saludar', name: 'Saludar', icon: '👋', dur: 2.4 },
+    { id: 'aplaudir', name: 'Aplaudir', icon: '👏', dur: 2.4 },
+    { id: 'animar', name: 'Animar', icon: '📣', dur: 2.6 },
+    { id: 'bailar', name: 'Bailar', icon: '🎵', dur: 5 },
+    { id: 'celebrar', name: 'Celebrar', icon: '🎉', dur: 3.7 },
+    { id: 'sentarse', name: 'Sentarse', icon: '🪑', dur: 0 }, // hasta que se mueva
+  ];
+  const EMOTE_CD = 3; // segundos entre gestos (anti-spam)
+
+  // ---------- Álbum de coleccionables ----------
+  // Se arma solo a partir de los datos: monstruos por tierra, jefes, tierras, botín que de verdad
+  // sueltan los monstruos y gestos. Cada colección completa da oro, objetos y un título.
+  // (Se completa más abajo, cuando ya existen MOBS, ZONES e ITEMS.)
+  let ALBUM = null;
+  function albumData() {
+    if (ALBUM) return ALBUM;
+    const mobsIn = (zone) => Object.keys(MOBS).filter((k) => MOBS[k].zone === zone && !MOBS[k].boss);
+    const lootIds = [...new Set(Object.values(MOBS).flatMap((m) => m.drops.map((d) => d[0])))].filter((id) => !id.startsWith('@') && ITEMS[id] && ['junk', 'material'].includes(ITEMS[id].type));
+    const sets = [
+      { id: 'praderas', cat: 'mobs', name: 'Criaturas de las Praderas', items: mobsIn('praderas'), gold: 150, give: [['pocion_vida', 5]], title: 'Amigo de las Praderas' },
+      { id: 'bosque', cat: 'mobs', name: 'Criaturas del Bosque', items: mobsIn('bosque'), gold: 400, give: [['pocion_vida', 8]], title: 'Guardabosques' },
+      { id: 'minas', cat: 'mobs', name: 'Criaturas de las Minas', items: mobsIn('minas'), gold: 800, give: [['gema_poder', 10]], title: 'Minero Valiente' },
+      { id: 'valle', cat: 'mobs', name: 'Criaturas del Valle', items: mobsIn('valle'), gold: 1500, give: [['gema_poder', 15]], title: 'Amigo de los Dragones' },
+      { id: 'islas', cat: 'mobs', name: 'Criaturas del Cielo', items: mobsIn('islas'), gold: 3000, give: [['gema_poder', 20]], title: 'Héroe del Cielo' },
+      { id: 'jefes', cat: 'mobs', name: 'Grandes Jefes', items: Object.keys(MOBS).filter((k) => MOBS[k].boss), gold: 5000, give: [['gema_poder', 30]], title: 'Cazajefes' },
+      { id: 'tierras', cat: 'zones', name: 'Tierras de Valdoria', items: ZONES.map((z) => z.id), gold: 1000, give: [['pocion_mana', 10]], title: 'Gran Explorador' },
+      { id: 'botin', cat: 'items', name: 'Tesoros y Botín', items: lootIds, gold: 2000, give: [['gema_poder', 20]], title: 'Coleccionista' },
+      { id: 'gestos', cat: 'emotes', name: 'Gestos', items: EMOTES.map((e) => e.id), gold: 200, give: [['pocion_vida', 3]], title: 'Alma Expresiva' },
+    ].filter((s) => s.items.length);
+    ALBUM = { sets, cats: { mobs: 'Criaturas', zones: 'Tierras', items: 'Objetos', emotes: 'Gestos' } };
+    return ALBUM;
+  }
+
+  // ---------- Ayudante de Novatos (Puntos de Amistad) ----------
+  const MENTOR = { gap: 10, boss: 10, quest: 5, killsPerPoint: 5, dailyCap: 50 };
 
   const GEM_MULT = 1.25;
   // Tiendas: lista de { id, price, currency } (currency: objeto con el que se paga; sin él, oro)
@@ -941,6 +982,7 @@
     ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT,
     ARENAS, SHOPS, shopItems, MOB_H, mobHeight, PHRASES,
     GUILD_LVL, GUILD_COST, GUILD_MAX, GUILD_RANKS, GUILD_EMBLEMS, GUILD_COLORS,
+    EMOTES, EMOTE_CD, MENTOR, albumData,
     PETS, isPet, PET_LVL, MOUNT_LVL, GLIDER_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName, itemCategory, isKeyItem,
     OLD_CLASS_MAP, migrateCharacter,
   };

@@ -55,7 +55,106 @@
   // ---------- Mundo y eventos ----------
 
   function createWorld() {
-    return { time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map(), summons: [], loot: [], guilds: new Map(), guildsDirty: false };
+    return { time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map(), summons: [], loot: [], guilds: new Map(), guildsDirty: false, bus: createBus(), systems: [], api: null };
+  }
+
+  // ---------- Bus de eventos de dominio y sistemas (módulos desacoplados) ----------
+  // Los sistemas (emotes, mentor, combos…) viven en juego/src/systems/ y NUNCA tocan el interior del
+  // combate: escuchan eventos del bus y actúan con la API pequeña de apiFor(w). Un error dentro de
+  // un sistema se registra y no detiene la simulación.
+  function createBus() {
+    const subs = new Map();
+    return {
+      on(type, fn) {
+        if (!subs.has(type)) subs.set(type, []);
+        subs.get(type).push(fn);
+      },
+      emit(type, e) {
+        for (const fn of subs.get(type) || []) {
+          try {
+            fn(e);
+          } catch (err) {
+            console.error(`[bus] ${type}:`, err && err.stack ? err.stack : err);
+          }
+        }
+      },
+    };
+  }
+  const fire = (w, type, e) => w.bus.emit(type, e);
+
+  // Lo único que un sistema puede usar del núcleo
+  function apiFor(w) {
+    if (w.api) return w.api;
+    w.api = {
+      bus: w.bus,
+      Data,
+      now: () => w.time,
+      day: () => Math.floor(Date.now() / 864e5),
+      log: (p, text, cls = 'sys') => log(w, p, text, cls),
+      float: (ent, text, cls, dh = 0) => float(w, ent, text, cls, dh),
+      ring: (pos, color, r, life) => ring(w, pos, color, r, life),
+      banner: (p, title, sub) => emit(w, { type: 'banner', to: p.id, title, sub }),
+      fx: (ev) => emit(w, ev), // evento de red (con ent o pos: llega a quien esté cerca)
+      damageArea: (p, at, radius, mult) => hitCircle(w, p, at, radius, mult, {}),
+      damageOne: (p, target, mult) => damageMob(w, p, target, mult),
+      push: (target, from, dist) => target.kind === 'mob' && knockBack(target, from, dist),
+      addItem: (p, id, qty = 1) => {
+        const okAdd = addItem(p, id, qty);
+        if (okAdd) emit(w, { type: 'inventory', to: p.id });
+        return okAdd;
+      },
+      playerById: (id) => w.players.get(id) || null,
+      players: () => [...w.players.values()],
+      partyOf: (p) => partyOf(w, p),
+      zoneAt,
+      inSafe,
+      dist: d2,
+    };
+    return w.api;
+  }
+
+  // Registrar un sistema en un mundo (el servidor y las pruebas lo hacen al crear el mundo)
+  function useSystem(w, sys) {
+    if (!sys || !sys.id || w.systems.some((s) => s.id === sys.id)) return;
+    w.systems.push(sys);
+    if (sys.init) sys.init(w, apiFor(w));
+    for (const p of w.players.values()) loadExt(w, p, sys);
+  }
+  // Datos propios de cada sistema por jugador: p.ext[id] (se guardan con el personaje)
+  function loadExt(w, p, sys) {
+    if (!sys.load) return;
+    try {
+      p.ext[sys.id] = sys.load(p.ext[sys.id], p, apiFor(w)) || {};
+    } catch (err) {
+      console.error(`[sistema ${sys.id}] load:`, err);
+      p.ext[sys.id] = {};
+    }
+  }
+  function cleanExt(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    try {
+      const txt = JSON.stringify(raw);
+      return txt.length > 16000 ? {} : JSON.parse(txt); // límite de tamaño por si acaso
+    } catch {
+      return {};
+    }
+  }
+  // Comando del cliente para un sistema: { sys, cmd, arg }
+  function systemCommand(w, p, sysId, cmd, arg) {
+    const sys = w.systems.find((s) => s.id === sysId);
+    const fn = sys && sys.commands && Object.prototype.hasOwnProperty.call(sys.commands, cmd) ? sys.commands[cmd] : null;
+    if (!fn) return;
+    try {
+      fn(w, p, arg, apiFor(w));
+    } catch (err) {
+      console.error(`[sistema ${sysId}] ${cmd}:`, err);
+    }
+  }
+  // Lo que cada sistema muestra en los paneles de este jugador
+  function systemViews(w, p) {
+    const out = {};
+    for (const s of w.systems) if (s.view) out[s.id] = s.view(w, p, apiFor(w));
+    return out;
   }
   const emit = (w, ev) => w.events.push(ev);
   function drainEvents(w) {
@@ -151,6 +250,8 @@
       gemsOn: !!data.gemsOn,
       pet: data.pet && isPet(data.pet.type) ? { type: data.pet.type } : null,
       mounted: 0,
+      ext: cleanExt(data.ext),
+      zoneId: null,
       karma: Math.max(0, Math.floor(+data.karma) || 0),
       pvp: Math.max(0, Math.floor(+data.pvp) || 0),
       pk: Math.max(0, Math.floor(+data.pk) || 0),
@@ -174,6 +275,7 @@
     p.pos.y = groundY(p.pos.x, p.pos.z);
     w.players.set(id, p);
     attachGuild(w, p);
+    for (const s of w.systems) loadExt(w, p, s);
     recalcStats(w, p);
     p.hp = Math.min(data.hp ?? p.stats.maxHp, p.stats.maxHp);
     p.mp = Math.min(data.mp ?? p.stats.maxMp, p.stats.maxMp);
@@ -224,6 +326,7 @@
       karma: p.karma,
       pvp: p.pvp,
       pk: p.pk,
+      ext: cleanExt(p.ext),
       inv: p.inv.map((s) => ({ ...s })),
       equip: { ...p.equip },
       pos: alive ? { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2) } : { ...SPAWN },
@@ -678,6 +781,8 @@
       emit(w, { type: 'inventory', to: q.id });
     }
     if (m.def.boss) emit(w, { type: 'banner', to: null, title: `${m.def.name} ha sido derrotado`, sub: `Vuelve a aparecer en ${Math.round(m.respawnTime / 60)} minutos` });
+    fire(w, 'mob:killed', { killer: p, mob: m, members });
+    if (m.def.boss) fire(w, 'boss:defeated', { killer: p, mob: m, members });
   }
 
   // ---------- Botín en el suelo y mascotas ----------
@@ -701,6 +806,7 @@
     }
     const i = w.loot.indexOf(bag);
     if (i >= 0) w.loot.splice(i, 1);
+    fire(w, 'item:gained', { p, id: bag.item, qty: bag.qty });
     emit(w, { type: 'loot', to: p.id, id: bag.item, qty: bag.qty, verb });
     emit(w, { type: 'inventory', to: p.id });
     return true;
@@ -1005,6 +1111,7 @@
     p.diedAt = { x: p.pos.x, z: p.pos.z };
     for (const mob of w.mobs) if (mob.aggro === p) dropAggro(mob);
     forgetTarget(w, p);
+    fire(w, 'player:died', { p, by, cause });
     log(w, p, cause === 'agua' ? 'Te has mareado en el agua.' : by ? `${cause} te ha derrotado. No pierdes nada: descansa y vuelve.` : `Te has mareado ante ${cause}. No pierdes nada: descansa y vuelve.`, 'warn');
     emit(w, { type: 'playerDeath', to: p.id, ent: p });
   }
@@ -1037,6 +1144,7 @@
     if (!p.dead) return;
     const at = safePointNear(p.diedAt);
     revivePlayer(w, p, at, 0.7);
+    fire(w, 'player:respawn', { p });
     log(w, p, at.x === SPAWN.x && at.z === SPAWN.z ? 'Despiertas en la aldea, sano y salvo.' : 'Despiertas en un lugar seguro, cerca de donde estabas.', 'sys');
   }
 
@@ -1070,6 +1178,7 @@
       if (p.level === MOUNT_LVL && p.pet) log(w, p, `¡Tu ${PETS[p.pet.type].name} creció y ahora es un ${PETS[p.pet.type].mount}! Pulsa 0 para montarlo.`, 'lvl');
     }
     if (up) {
+      fire(w, 'player:levelUp', { p, level: p.level });
       syncMember(w, p);
       emit(w, { type: 'levelUp', ent: p, level: p.level }); // columna de luz visible para todos
       emit(w, { type: 'inventory', to: p.id });
@@ -1130,6 +1239,7 @@
       p.stage = q.stage;
       if (q.branch) p.branch = q.branch;
       p.quest = null;
+      fire(w, 'quest:done', { p, stage: p.stage, members: creditedFor(w, p, p) });
       refreshKit(p);
       recalcStats(w, p);
       p.hp = p.stats.maxHp;
@@ -1659,6 +1769,7 @@
     }
     if (s.selfBuff) addBuff(w, p, `${s.id}_self`, s.name, s.selfBuff);
     if (s.aura) emit(w, { type: 'aura', ent: p, kind: s.aura, dur: s.auraDur || (s.type === 'pulse' ? s.count * s.every : s.dur) || 4 });
+    fire(w, 'skill:cast', { p, skill: s, target: t, level: slvl });
     if (t && t.kind === 'player') {
       if (NEEDS_TARGET.includes(s.type)) castOnPlayer(w, p, s, t);
       else CAST[s.type](w, p, s, null);
@@ -2136,6 +2247,7 @@
     p[it.stat] = Math.min(max, p[it.stat] + amt);
     p.cds.pot = 1;
     removeAt(p, i);
+    fire(w, 'item:used', { p, id });
     float(w, p, `+${amt}`, it.stat === 'hp' ? 'heal' : 'mana');
     emit(w, { type: 'inventory', to: p.id });
   }
@@ -2334,6 +2446,14 @@
     updateLoot(w, dt);
     updateProjectiles(w, dt);
     updateTimers(w, dt);
+    for (const s of w.systems) {
+      if (!s.step) continue;
+      try {
+        s.step(w, dt, apiFor(w));
+      } catch (err) {
+        console.error(`[sistema ${s.id}] step:`, err);
+      }
+    }
   }
 
   // Auras pasivas (Bardo Melódico, Oráculo Estelar): afectan al grupo cercano
@@ -2367,6 +2487,11 @@
     if (p.frenzy && (p.frenzyT -= dt) <= 0) p.frenzy = 0;
     p.combatT = Math.max(0, p.combatT - dt);
     p.atkTimer = Math.max(0, p.atkTimer - dt);
+    const zone = zoneAt(p.pos);
+    if ((zone ? zone.id : null) !== p.zoneId) {
+      p.zoneId = zone ? zone.id : null;
+      if (zone) fire(w, 'zone:entered', { p, zone });
+    }
     if (p.flagT > 0 && (p.flagT -= dt) <= 0) {
       p.flagT = 0;
       if (p.karma <= 0) log(w, p, 'Tu nombre vuelve a ser blanco.', 'sys');
@@ -2819,6 +2944,10 @@
     skillReady,
     pvpState,
     PVP_MIN_LEVEL,
+    createBus,
+    useSystem,
+    systemCommand,
+    systemViews,
     guildView,
     guildTag,
     exportGuilds,

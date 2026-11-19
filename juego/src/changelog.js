@@ -8,6 +8,18 @@
 })(function () {
   return [
     {
+      version: '0.24.0',
+      date: '2026-11-19',
+      title: 'Gestos, Puntos de Amistad y Álbum',
+      items: [
+        'Rueda de gestos (tecla T o botón 😊 junto al chat): saludar, aplaudir, animar, bailar, celebrar y sentarse. Todos los que estén cerca lo ven.',
+        'Nuevas frases rápidas: «¡Necesito curación!», «¡Buen equipo!» y «¡Aquí hay un secreto!».',
+        'Puntos de Amistad: cuando un veterano y un novato (10 niveles o más de diferencia) derrotan un jefe, completan un cambio de clase o cazan juntos en grupo, ambos ganan puntos (máximo 50 al día). Se ven en la ventana Estado.',
+        'Álbum de coleccionables (tecla K): criaturas, tierras, botín y gestos que descubres, con 9 colecciones que dan oro, objetos y un título al completarlas.',
+        'Por dentro: el juego ahora tiene un sistema de módulos y eventos para agregar nuevas funciones sin tocar el combate.',
+      ],
+    },
+    {
       version: '0.23.1',
       date: '2026-11-18',
       title: 'Web al día y corrección',

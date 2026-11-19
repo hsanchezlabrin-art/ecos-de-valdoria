@@ -23,6 +23,8 @@ const Data = require(path.join(SRC, 'data.js'));
 const Sim = require(path.join(SRC, 'sim.js'));
 const Terrain = require(path.join(SRC, 'terrain.js'));
 const { VERSION } = require(path.join(SRC, 'version.js'));
+// Sistemas desacoplados (juego/src/systems): se registran en el mundo al crearlo
+const SYSTEMS = ['emotes', 'mentor', 'album'].map((id) => require(path.join(SRC, 'systems', `${id}.js`)));
 const C = Sim.cmd;
 
 const PORT = +process.env.PORT || 8080;
@@ -48,6 +50,7 @@ const migrated = DB.migrateChars((cls, data) => Data.migrateCharacter(cls, data)
 if (migrated) console.log(`[migración] ${migrated} personajes convertidos a las nuevas razas`);
 
 const world = Sim.createWorld();
+for (const sys of SYSTEMS) Sim.useSystem(world, sys);
 Sim.spawnMobs(world);
 // Gremios guardados; los miembros cuyo personaje ya no existe salen del gremio
 Sim.loadGuilds(world, DB.loadGuilds());
@@ -103,6 +106,7 @@ function charData(ch) {
     quest: d.quest || null,
     gemsOn: !!d.gemsOn,
     pet: d.pet && Data.isPet(d.pet.type) ? { type: d.pet.type } : null,
+    ext: d.ext && typeof d.ext === 'object' && !Array.isArray(d.ext) ? d.ext : {},
     karma: int(d.karma, 0, 1e9, 0),
     pvp: int(d.pvp, 0, 1e6, 0),
     pk: int(d.pk, 0, 1e6, 0),
@@ -169,6 +173,13 @@ function meData(c) {
   if (gKey !== c.guildKey) {
     c.guildKey = gKey;
     d.guild = Sim.guildView(world, p) || 0;
+  }
+  // Paneles de los sistemas (emotes, mentor…): solo cuando cambian
+  const views = Sim.systemViews(world, p);
+  const vKey = JSON.stringify(views);
+  if (vKey !== c.extKey) {
+    c.extKey = vKey;
+    d.ext = views;
   }
   if (c.invDirty) {
     d.inv = p.inv;
@@ -488,6 +499,11 @@ function onCommand(c, msg) {
       return;
     case 'chat':
       return onChat(c, p, msg);
+    case 'sys': {
+      // Comando para un sistema desacoplado: { sys, cmd, arg }
+      const arg = typeof msg.arg === 'string' ? str(msg.arg, 40) : Number.isFinite(+msg.arg) ? +msg.arg : null;
+      return Sim.systemCommand(world, p, str(msg.sys, 20), str(msg.cmd, 20), arg);
+    }
     case 'guildCreate':
       return C.guildCreate(world, p, str(msg.name, 30), int(msg.emblem, 0, 99, 0), int(msg.color, 0, 99, 0), (name) => {
         const f = filterChat(name);
