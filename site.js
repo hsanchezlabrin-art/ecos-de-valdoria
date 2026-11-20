@@ -97,6 +97,7 @@
       camera.position.set(Math.sin(yaw) * 26, 9.5, Math.cos(yaw) * 26);
       camera.lookAt(0, 3, 0);
       world.sky.position.copy(camera.position);
+      if (world.cull) world.cull(camera.position, 300); // solo se dibuja lo cercano a la aldea
       for (const f of world.fires) {
         f.light.intensity = f.base * (0.85 + Math.sin(t * 13) * 0.08 + Math.random() * 0.07);
         f.flame.scale.y = 0.9 + Math.sin(t * 17) * 0.12;
@@ -185,7 +186,8 @@
     if (!box) return;
     const ns = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '-190 -190 380 380');
+    const R = (V.Terrain ? V.Terrain.WORLD_LIMIT : 330) + 4;
+    svg.setAttribute('viewBox', `${-R} ${-R} ${R * 2} ${R * 2}`);
     const add = (tag, a) => {
       const n = document.createElementNS(ns, tag);
       for (const [k, v] of Object.entries(a)) n.setAttribute(k, v);
@@ -193,15 +195,17 @@
       return n;
     };
     const field = D.ZONES.filter((z) => z.id !== 'aldea');
-    for (const z of field) add('line', { x1: 0, y1: 0, x2: z.x, y2: z.z, stroke: 'rgba(176,146,98,.6)', 'stroke-width': 4, 'stroke-linecap': 'round' });
-    for (const z of field) add('circle', { cx: z.x, cy: z.z, r: z.r, fill: tint(z.tint), 'fill-opacity': 0.75, stroke: 'rgba(0,0,0,.35)' });
+    add('circle', { cx: 0, cy: 0, r: R - 4, fill: 'rgba(38,48,31,.5)', stroke: 'rgba(176,146,98,.35)' });
+    const roads = V.Terrain ? V.Terrain.ROADS : field.map((z) => [0, 0, z.x, z.z]);
+    for (const r of roads) add('line', { x1: r[0], y1: r[1], x2: r[2], y2: r[3], stroke: 'rgba(176,146,98,.6)', 'stroke-width': 5, 'stroke-linecap': 'round' });
+    for (const z of field) add('circle', { cx: z.x, cy: z.z, r: z.r, fill: z.safe ? 'rgba(217,181,106,.45)' : tint(z.tint), 'fill-opacity': 0.75, stroke: z.safe ? '#d9b56a' : 'rgba(0,0,0,.35)' });
     add('circle', { cx: 0, cy: 0, r: 22, fill: 'rgba(217,181,106,.45)', stroke: '#d9b56a', 'stroke-width': 1.5 });
     for (const z of D.ZONES) {
-      const t = add('text', { x: z.x, y: z.z + 3, 'text-anchor': 'middle', fill: '#f3e7cc', 'font-size': z.safe ? 9 : 10, 'font-family': 'Cinzel, Georgia, serif', 'font-weight': 700, 'paint-order': 'stroke', stroke: 'rgba(0,0,0,.7)', 'stroke-width': 3 });
-      t.textContent = { aldea: 'Aldea', praderas: 'Praderas', bosque: 'Bosque', minas: 'Minas', ciudadela: 'Ciudadela', valle: 'Valle', islas: 'Islas' }[z.id] || z.name;
+      const t = add('text', { x: z.x, y: z.z + 5, 'text-anchor': 'middle', fill: '#f3e7cc', 'font-size': 15, 'font-family': 'Cinzel, Georgia, serif', 'font-weight': 700, 'paint-order': 'stroke', stroke: 'rgba(0,0,0,.7)', 'stroke-width': 4 });
+      t.textContent = { aldea: 'Aldea', praderas: 'Praderas', bosque: 'Bosque', minas: 'Minas', ciudadela: 'Ciudadela', valle: 'Valle', islas: 'Islas', nevada: 'Villa Nevada', tundra: 'Tundra', pantano: 'Pantano', desierto: 'Desierto', oasis: 'Oasis', canon: 'Cañón', eclipse: 'Eclipse' }[z.id] || z.name;
     }
     // Jefes
-    for (const m of Object.values(D.MOBS).filter((mm) => mm.boss)) add('text', { x: m.at.x, y: m.at.z - 8, 'text-anchor': 'middle', 'font-size': 13, fill: '#c895ff' }).textContent = '☠';
+    for (const m of Object.values(D.MOBS).filter((mm) => mm.boss)) add('text', { x: m.at.x, y: m.at.z - 12, 'text-anchor': 'middle', 'font-size': 18, fill: '#c895ff' }).textContent = '☠';
     box.append(svg);
 
     const list = $('#zoneList');
@@ -371,7 +375,7 @@
           el('td', { class: 'num' }, `${G.lvl}${G.stage ? ` · ${D.STAGES[G.stage].name}` : ''}`),
           ids.map((id) => el('td', {}, D.ITEMS[id].name)),
           el('td', { class: 'num' }, `+${first.atk}`),
-          el('td', {}, tier <= 2 ? `Tienda (${first.price} oro) o botín` : tier === 3 ? 'Botín de Tharmok' : 'Regalo del gremio al cambiar de clase · nuevas zonas próximamente')
+          el('td', {}, ['Tienda de la aldea o botín', 'Tienda de la aldea o botín', 'Tiendas o botín', 'Ciudadela (Corvin) o botín del Valle', 'Ciudadela, Villa Nevada o botín de las Islas', 'Herrero Celestial (Polvo de Arcoíris) o botín de jefes', 'Villa Nevada, Oasis del Sol, Herrera de la Aurora o botín de las tierras lejanas', 'Herrera de la Aurora (Fragmentos de Aurora) o botín de los jefes del 64 al 80'][tier] || 'Botín')
         );
       });
       w.append(table([['Grado'], ['Requiere', 'num'], ...D.CLASS_IDS.map((c) => [D.CLASSES[c].short.m]), ['Ataque', 'num'], ['Dónde']], rows));

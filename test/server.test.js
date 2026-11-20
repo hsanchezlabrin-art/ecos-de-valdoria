@@ -185,7 +185,7 @@ async function main() {
     b.send({ t: 'inviteAnswer', accept: true });
     await wait(400);
     ok(a.last.me.party && a.last.me.party.members.length === 2, 'Ana ve a Beto en su grupo con su vida y maná');
-    ok(a.last.p.every((r) => r.length === 26 && typeof r[25] === 'string'), 'cada jugador trae al final su apariencia cosmética (estela|poción|título)');
+    ok(a.last.p.every((r) => r.length === 27 && typeof r[25] === 'string' && (r[26] === 0 || r[26] === 1)), 'cada jugador trae su apariencia cosmética (estela|poción|título) y si está protegido al reaparecer');
     b.send({ t: 'chat', text: '#vamos al bosque' });
     await wait(300);
     ok(a.chats.some((m) => m.kind === 'party' && m.text === 'vamos al bosque'), 'chat de grupo con #');
@@ -247,6 +247,72 @@ async function main() {
     ok(b2.closed, 'al entrar en otro lugar, la sesión anterior se cierra');
     b3.ws.close();
 
+    // ---------- Mercado entre jugadores, red de portales y protección (v0.31) ----------
+    // Veterano (nivel 12, con 3 Pieles de Jabalí) pone pieles a la venta y se desconecta
+    const vet = await connect();
+    vet.send({ t: 'login', v: V, user: 'viejo', pass: 'clave-vieja' });
+    const vAuth = await vet.next('auth');
+    vet.send({ t: 'play', id: vAuth.chars[0].id });
+    await vet.next('welcome');
+    await wait(400);
+    const vMe = () => ({ ...vet.snaps.filter((x) => x.me && x.me.inv).pop().me });
+    const pielI = vMe().inv.findIndex((s) => s.id === 'piel');
+    const eggI = vMe().inv.findIndex((s) => s.id === 'huevo_mascota');
+    vet.send({ t: 'marketSell', i: eggI, q: 1, price: 5 });
+    vet.send({ t: 'marketSell', i: pielI, q: 3, price: 10 });
+    vet.send({ t: 'market' });
+    const mk1 = await vet.next('market');
+    ok(mk1.mine.length === 1 && mk1.mine[0].item === 'piel' && mk1.mine[0].qty === 3, 'el Veterano publica 3 pieles en el mercado (el Huevo de misión no se puede vender)');
+    await wait(400);
+    ok(!vMe().inv.some((s) => s.id === 'piel'), 'las pieles salen de su mochila al publicarlas');
+    vet.ws.close();
+    await wait(600);
+    const disk1 = JSON.parse(fs.readFileSync(path.join(dataDir, 'db.json'), 'utf8'));
+    ok(disk1.market && disk1.market.list.length === 1 && !disk1.chars.c1.data.inv.some((s) => s.id === 'piel'), 'en el disco la piel está solo en el mercado (no en la mochila): no se duplica');
+    // Ana (conectada) busca y compra 2 pieles con el vendedor desconectado
+    a.send({ t: 'market', q: 'piel', cat: 'other' });
+    const mkA = await a.next('market');
+    ok(mkA.items.length === 1 && mkA.items[0].seller === 'Veterano', 'Ana encuentra las pieles buscando y filtrando por categoría');
+    const goldA = a.last.me.gold;
+    a.send({ t: 'marketBuy', id: mkA.items[0].id, q: 2 });
+    const mkA2 = await a.next('market');
+    await wait(300);
+    ok(mkA2.items.length === 1 && mkA2.items[0].qty === 1 && a.last.me.gold === goldA - 20, 'Ana compra 2 pieles (quedan 1) y paga 20 de oro');
+    a.send({ t: 'marketBuy', id: mkA.items[0].id, q: 5 });
+    await wait(300);
+    ok(a.last.me.gold === goldA - 20, 'no se puede comprar más de lo publicado');
+    await wait(400);
+    const disk2 = JSON.parse(fs.readFileSync(path.join(dataDir, 'db.json'), 'utf8'));
+    ok(disk2.market.pay.veterano && disk2.market.pay.veterano.gold === 19, 'el oro del vendedor desconectado queda guardado en disco (20 − 5% de impuesto)');
+    // El Veterano vuelve y cobra
+    const vet2 = await connect();
+    vet2.send({ t: 'login', v: V, user: 'viejo', pass: 'clave-vieja' });
+    const vAuth2 = await vet2.next('auth');
+    vet2.send({ t: 'play', id: vAuth2.chars[0].id });
+    await vet2.next('welcome');
+    await wait(500);
+    ok(vet2.last.me.gold === 900 + 19 && vet2.events.some((e) => e.type === 'log' && /Mientras no estabas vendiste/.test(e.text)), 'al volver, el Veterano cobra lo que vendió mientras no estaba');
+    vet2.send({ t: 'market' });
+    const mkV = await vet2.next('market');
+    vet2.send({ t: 'marketCancel', id: mkV.mine[0].id });
+    await vet2.next('market');
+    await wait(400);
+    const vInv = vet2.snaps.filter((x) => x.me && x.me.inv).pop().me.inv;
+    ok(vInv.some((s) => s.id === 'piel' && s.qty === 1), 'retira la última piel y vuelve a su mochila');
+    vet2.ws.close();
+    await wait(300);
+
+    // Red de portales: Ana habla con el portal; no conoce Villa Nevada, así que no viaja ni paga
+    a.send({ t: 'talk', id: 'portal_aldea' });
+    await wait(2500);
+    ok(a.events.some((e) => e.type === 'openPortal'), 'hablar con el Portal de los Viajeros abre la ventana de destinos');
+    ok(Array.isArray(a.last.me.ext ? a.last.me.ext.viajes.known : null) || a.snaps.some((s) => s.me && s.me.ext && s.me.ext.viajes), 'el cliente recibe la lista de destinos conocidos');
+    const goldP = a.last.me.gold;
+    a.send({ t: 'sys', sys: 'viajes', cmd: 'go', arg: 'nevada' });
+    await wait(400);
+    ok(a.last.me.gold === goldP && a.events.some((e) => e.type === 'log' && /Aún no conoces/.test(e.text)), 'el servidor no deja viajar a un destino desconocido');
+    ok(a.last.p.every((r) => r[26] === 0), 'nadie aparece protegido sin haber reaparecido');
+
     // ---------- Panel de control ----------
     const H = `http://127.0.0.1:${PORT}/admin`;
     const post = (route, body, tok) => fetch(`${H}/api/${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify(body) });
@@ -279,6 +345,7 @@ async function main() {
     const raw = JSON.stringify(db);
     ok(!raw.includes('secreto1') && !raw.includes(a.session), 'contraseñas y sesiones no se guardan en claro');
     ok(Object.keys(db.accounts).length === 3 && Object.keys(db.chars).length === 3 && !db.accounts.ciro, 'cuentas y personajes guardados en disco');
+    ok(db.market && Array.isArray(db.market.list) && db.market.list.length === 0, 'el mercado queda guardado en el disco');
     console.log(`\nServidor OK: ${checks} comprobaciones superadas.`);
   } finally {
     srv.kill();

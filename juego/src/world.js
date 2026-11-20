@@ -7,8 +7,70 @@ const { WORLD, WORLD_LIMIT, VILLAGE_R, WATER_Y, FIELD_ZONES, OUTER_ZONES, ss, le
 
 const THREE = window.THREE;
 
+// ---------- Bloques de instancias (rendimiento) ----------
+// Con el mundo grande, árboles, rocas y adornos se agrupan en bloques de CHUNK metros: cada bloque
+// tiene su propia esfera envolvente, así la cámara descarta los que no ve y los que quedan más
+// allá de la distancia de visión (cullChunks) ni se mandan a dibujar.
+const CHUNK = 64;
+const chunks = [];
+const _dummy = new THREE.Object3D();
+function chunked(scene, geo, material, list, place, shadows = true) {
+  if (!list.length) return [];
+  const groups = new Map();
+  for (const t of list) {
+    const k = `${Math.floor(t.x / CHUNK)},${Math.floor(t.z / CHUNK)}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(t);
+  }
+  geo.computeBoundingSphere();
+  const pad = geo.boundingSphere.radius + geo.boundingSphere.center.length();
+  const out = [];
+  const col = new THREE.Color();
+  for (const items of groups.values()) {
+    const im = new THREE.InstancedMesh(geo.clone(), material, items.length);
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    items.forEach((t, i) => {
+      _dummy.position.set(0, 0, 0);
+      _dummy.rotation.set(0, 0, 0);
+      _dummy.scale.set(1, 1, 1);
+      place(t, _dummy);
+      _dummy.updateMatrix();
+      im.setMatrixAt(i, _dummy.matrix);
+      if (t.c !== undefined) im.setColorAt(i, col.setHex(t.c));
+      cx += _dummy.position.x;
+      cy += _dummy.position.y;
+      cz += _dummy.position.z;
+    });
+    cx /= items.length;
+    cy /= items.length;
+    cz /= items.length;
+    let r = 0;
+    for (const t of items) r = Math.max(r, Math.hypot(t.x - cx, (t.y || cy) - cy, t.z - cz));
+    // El tamaño de cada instancia puede llegar a ~4 veces el de la figura base (árboles gigantes)
+    im.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(cx, cy, cz), r + pad * 4 + 2);
+    im.frustumCulled = true;
+    im.castShadow = shadows;
+    im.receiveShadow = true;
+    scene.add(im);
+    const c = { mesh: im, x: cx, z: cz, r: r + pad * 4 + 2 };
+    chunks.push(c);
+    out.push(im);
+  }
+  geo.dispose();
+  return out;
+}
+// Oculta los bloques que quedan más lejos que la distancia de visión (la niebla ya los tapa)
+function cullChunks(cam, far) {
+  for (const c of chunks) {
+    const vis = Math.hypot(c.x - cam.x, c.z - cam.z) - c.r < far;
+    if (c.mesh.visible !== vis) c.mesh.visible = vis;
+  }
+}
+
 function buildTerrain() {
-  const seg = 200;
+  const seg = V.Gfx.SEG;
   const g = new THREE.PlaneGeometry(WORLD, WORLD, seg, seg);
   g.rotateX(-Math.PI / 2);
   const pos = g.attributes.position;
@@ -33,6 +95,14 @@ function buildTerrain() {
     for (const zn of OUTER_ZONES) {
       const w = 1 - ss(zn.r * 0.55, zn.r * 1.35, Math.hypot(x - zn.x, z - zn.z));
       if (w > 0) mix(zn.tint.map((v) => v + n), w * 0.85);
+    }
+    const bm = V.Terrain.biome(x, z);
+    if (bm.snow > 0) mix([0.86 + n, 0.9 + n, 0.95 + n], bm.snow * 0.9);
+    if (bm.sand > 0) mix([0.84 + n, 0.72 + n, 0.46 + n], bm.sand * 0.85);
+    for (const zn of OUTER_ZONES) {
+      if (!zn.snow && zn.id !== 'desierto' && zn.id !== 'oasis') continue;
+      const w = 1 - ss(zn.r * 0.55, zn.r * 1.35, Math.hypot(x - zn.x, z - zn.z));
+      if (w > 0) mix(zn.tint.map((v) => v + n), w * 0.12);
     }
     const d = Math.hypot(x, z);
     mix(dirt, (1 - ss(9, 17, d)) * 0.75);
@@ -65,21 +135,12 @@ function buildSky(scene) {
 
 function buildVegetation(scene) {
   const L = layout();
-  const dummy = new THREE.Object3D();
-  const col = new THREE.Color();
-  const make = (geom, list, apply) => {
-    const im = new THREE.InstancedMesh(geom, mat(0xffffff), list.length);
-    list.forEach((t, i) => {
+  let dummy = _dummy;
+  const make = (geom, list, apply) =>
+    chunked(scene, geom, mat(0xffffff), list, (t, d) => {
+      dummy = d;
       apply(t);
-      dummy.updateMatrix();
-      im.setMatrixAt(i, dummy.matrix);
-      im.setColorAt(i, col.setHex(t.c));
     });
-    im.castShadow = true;
-    im.receiveShadow = true;
-    scene.add(im);
-    return im;
-  };
   const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 2.4, 6);
   trunkGeo.translate(0, 1.2, 0);
   make(trunkGeo, L.trunks, (t) => {
@@ -102,7 +163,52 @@ function buildVegetation(scene) {
     dummy.scale.set(t.s, t.s * 0.7, t.s);
     dummy.rotation.set(t.rot, t.rot * 2, 0);
   });
+  // Cactus del desierto: tronco con dos brazos (una sola figura de bloques)
+  const cactus = new THREE.BoxGeometry(0.5, 2.2, 0.5).translate(0, 1.1, 0);
+  const armL = new THREE.BoxGeometry(0.7, 0.35, 0.35).translate(-0.5, 1.2, 0);
+  const armLu = new THREE.BoxGeometry(0.35, 0.8, 0.35).translate(-0.75, 1.6, 0);
+  const armR = new THREE.BoxGeometry(0.6, 0.35, 0.35).translate(0.45, 0.9, 0);
+  const armRu = new THREE.BoxGeometry(0.35, 0.6, 0.35).translate(0.65, 1.2, 0);
+  make(mergeBoxes([cactus, armL, armLu, armR, armRu]), L.cacti, (t) => {
+    dummy.position.set(t.x, t.y - 0.05, t.z);
+    dummy.scale.setScalar(t.s);
+    dummy.rotation.set(0, t.rot, 0);
+  });
+  // Palmeras: tronco inclinado y hojas
+  const palmTrunk = new THREE.CylinderGeometry(0.16, 0.24, 4, 6).translate(0, 2, 0);
+  make(palmTrunk, L.palms.map((t) => ({ ...t, c: 0x8a6a46 })), (t) => {
+    dummy.position.set(t.x, t.y - 0.05, t.z);
+    dummy.scale.setScalar(t.s);
+    dummy.rotation.set(0.12, t.rot, 0.08);
+  });
+  make(new THREE.ConeGeometry(2, 0.7, 6).translate(0, 4.1, 0.3), L.palms.map((t) => ({ ...t, c: 0x4f9a3a })), (t) => {
+    dummy.position.set(t.x, t.y - 0.05, t.z);
+    dummy.scale.setScalar(t.s);
+    dummy.rotation.set(0.12, t.rot, 0.08);
+  });
+}
 
+// Une varias cajas en una sola figura (para dibujar el cactus con una instancia)
+function mergeBoxes(list) {
+  const pos = [];
+  const nor = [];
+  const idx = [];
+  let off = 0;
+  for (const g of list) {
+    const gi = g.toNonIndexed ? g : g;
+    const p = gi.attributes.position.array;
+    const n = gi.attributes.normal.array;
+    for (let i = 0; i < p.length; i++) pos.push(p[i]);
+    for (let i = 0; i < n.length; i++) nor.push(n[i]);
+    const ix = gi.index ? gi.index.array : null;
+    if (ix) for (let i = 0; i < ix.length; i++) idx.push(ix[i] + off);
+    off += p.length / 3;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  out.setIndex(idx);
+  return out;
 }
 
 function campfire(scene, x, z, big = false) {
@@ -134,7 +240,7 @@ function house(scene, h) {
   const y = heightAt(x, z);
   g.position.set(x, y, z);
   g.rotation.y = rot;
-  const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 3, d), mat(0xd8c9a8));
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 3, d), mat(h.wall || 0xd8c9a8));
   wall.position.y = 1.5;
   wall.castShadow = wall.receiveShadow = true;
   const beams = mat(0x5a3e28);
@@ -240,9 +346,16 @@ function buildZones(scene) {
   const L = layout();
   const { ARENAS } = V.Data;
   const fires = L.fires.filter((f) => f.x || f.z).map((f) => campfire(scene, f.x, f.z, f.big));
-  const dummy = new THREE.Object3D();
+  let dummy = new THREE.Object3D();
+  // Adornos de muchas piezas: en bloques (ver chunked). Los que se animan van en una sola malla.
+  const many = (geo, material, list, place) =>
+    chunked(scene, geo, material, list, (t, d) => {
+      dummy = d;
+      place(t);
+    });
   const inst = (geo, material, list, place) => {
     if (!list.length) return null;
+    dummy = new THREE.Object3D();
     const im = new THREE.InstancedMesh(geo, material, list.length);
     list.forEach((t, i) => {
       dummy.position.set(0, 0, 0);
@@ -288,18 +401,18 @@ function buildZones(scene) {
   // Setas brillantes del Bosque
   const shroomMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
   V.Gfx.glowNight(shroomMat, 1.2, 0.6);
-  inst(new THREE.CylinderGeometry(0.5, 0.15, 0.35, 7).translate(0, 0.9, 0), shroomMat, L.shrooms, (t) => {
+  many(new THREE.CylinderGeometry(0.5, 0.15, 0.35, 7).translate(0, 0.9, 0), shroomMat, L.shrooms, (t) => {
     dummy.position.set(t.x, t.y, t.z);
     dummy.scale.setScalar(t.s);
   });
-  inst(new THREE.CylinderGeometry(0.1, 0.12, 0.8, 5).translate(0, 0.4, 0), mat(0xf0e6d0), L.shrooms.map((t) => ({ ...t, c: 0xf0e6d0 })), (t) => {
+  many(new THREE.CylinderGeometry(0.1, 0.12, 0.8, 5).translate(0, 0.4, 0), mat(0xf0e6d0), L.shrooms.map((t) => ({ ...t, c: 0xf0e6d0 })), (t) => {
     dummy.position.set(t.x, t.y, t.z);
     dummy.scale.setScalar(t.s);
   });
 
   // Cristales de las Minas
   const crystalMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, metalness: 0.1, emissive: 0x3a5a8a, emissiveIntensity: 0.35, flatShading: true });
-  inst(new THREE.OctahedronGeometry(0.6, 0).scale(0.6, 1.6, 0.6).translate(0, 0.8, 0), crystalMat, L.crystals, (t) => {
+  many(new THREE.OctahedronGeometry(0.6, 0).scale(0.6, 1.6, 0.6).translate(0, 0.8, 0), crystalMat, L.crystals, (t) => {
     dummy.position.set(t.x, t.y, t.z);
     dummy.scale.setScalar(t.s);
     dummy.rotation.set(0.2, t.rot, 0.15);
@@ -315,7 +428,7 @@ function buildZones(scene) {
   });
 
   // Murallas (Fábrica y Ciudadela)
-  inst(new THREE.BoxGeometry(2.6, 1, 1.2).translate(0, 0.5, 0), mat(0xffffff), L.walls, (t) => {
+  many(new THREE.BoxGeometry(2.6, 1, 1.2).translate(0, 0.5, 0), mat(0xffffff), L.walls, (t) => {
     dummy.position.set(t.x, t.y - 0.2, t.z);
     dummy.rotation.set(0, t.rot + Math.PI / 2, 0);
     dummy.scale.set(1, t.h, 1);
@@ -414,8 +527,20 @@ function buildZones(scene) {
     });
     scene.add(g);
   }
-  inst(new THREE.CylinderGeometry(0.6, 0.7, 6, 8).translate(0, 3, 0), mat(0xf2efe6), L.pillars.map((t) => ({ ...t, c: 0xf2efe6 })), (t) => {
+  many(new THREE.CylinderGeometry(0.6, 0.7, 6, 8).translate(0, 3, 0), mat(0xf2efe6), L.pillars.map((t) => ({ ...t, c: t.c || 0xf2efe6 })), (t) => {
     dummy.position.set(t.x, t.y, t.z);
+    dummy.scale.set(1, t.h || 1, 1);
+  });
+
+  // Tierras lejanas: pirámides de bloques del desierto y charcos (pantano, oasis, charca de la Hidra)
+  many(new THREE.ConeGeometry(1, 1, 4).rotateY(Math.PI / 4).translate(0, 0.5, 0), mat(0xe0c890, { flatShading: true }), L.pyramids.map((t) => ({ ...t, c: 0xe0c890 })), (t) => {
+    dummy.position.set(t.x, t.y - 0.3, t.z);
+    dummy.scale.set(t.s * 1.4, t.s, t.s * 1.4);
+  });
+  const pondMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, transparent: true, opacity: 0.85 });
+  many(new THREE.CylinderGeometry(1, 1, 0.08, 14), pondMat, L.ponds, (t) => {
+    dummy.position.set(t.x, t.y, t.z);
+    dummy.scale.set(t.s, 1, t.s);
   });
 
   // Botones de la Fábrica Descontrolada
@@ -466,7 +591,7 @@ function buildWorld(scene) {
   const sky = buildSky(scene);
   const terrain = buildTerrain();
   scene.add(terrain);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD * 1.4, WORLD * 1.4), V.Gfx.waterMaterial());
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD * 1.4, WORLD * 1.4, 1, 1), V.Gfx.waterMaterial());
   water.rotation.x = -Math.PI / 2;
   water.position.y = WATER_Y;
   water.renderOrder = 1;
@@ -485,6 +610,7 @@ function buildWorld(scene) {
     fires: [...village.fires, ...zones.fires],
     anim: zones.anim,
     jelly: zones.jelly,
+    cull: cullChunks,
   };
 }
 

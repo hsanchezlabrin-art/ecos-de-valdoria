@@ -24,7 +24,7 @@ const Sim = require(path.join(SRC, 'sim.js'));
 const Terrain = require(path.join(SRC, 'terrain.js'));
 const { VERSION } = require(path.join(SRC, 'version.js'));
 // Sistemas desacoplados (juego/src/systems): se registran en el mundo al crearlo
-const SYSTEMS = ['emotes', 'mentor', 'album', 'combo', 'cosmetics', 'amistad'].map((id) => require(path.join(SRC, 'systems', `${id}.js`)));
+const SYSTEMS = ['emotes', 'mentor', 'album', 'combo', 'cosmetics', 'amistad', 'viajes'].map((id) => require(path.join(SRC, 'systems', `${id}.js`)));
 const C = Sim.cmd;
 
 const PORT = +process.env.PORT || 8080;
@@ -58,6 +58,11 @@ Sim.loadGuilds(world, DB.loadGuilds());
 for (const g of [...world.guilds.values()]) for (const m of [...g.members]) if (!DB.hasName(m.name)) Sim.forgetMember(world, m.name);
 if (world.guildsDirty) DB.saveGuilds(Sim.exportGuilds(world));
 world.guildsDirty = false;
+// Mercado entre jugadores; las publicaciones de personajes que ya no existen se retiran
+Sim.loadMarket(world, DB.loadMarket());
+for (const l of [...world.market.list]) if (!DB.hasName(l.sellerName)) Sim.marketForget(world, l.sellerName);
+if (world.marketDirty) DB.saveMarket(Sim.exportMarket(world));
+world.marketDirty = false;
 Sim.drainEvents(world);
 const mobsById = new Map(world.mobs.map((m) => [m.id, m]));
 const clients = new Set();
@@ -94,7 +99,7 @@ function broadcastChat(msg) {
 function charData(ch) {
   const d = Data.migrateCharacter(ch.cls, ch.data || {}).data;
   const base = Sim.newCharacter(ch.name, d.cls, ch.sex);
-  const pos = d.pos && Number.isFinite(+d.pos.x) && Number.isFinite(+d.pos.z) && Math.hypot(d.pos.x, d.pos.z) < 185 ? { x: +d.pos.x, z: +d.pos.z } : base.pos;
+  const pos = d.pos && Number.isFinite(+d.pos.x) && Number.isFinite(+d.pos.z) && Math.hypot(d.pos.x, d.pos.z) < Terrain.WORLD_LIMIT - 2 ? { x: +d.pos.x, z: +d.pos.z } : base.pos;
   return {
     ...base,
     level: int(d.level, 1, Data.MAX_LEVEL, 1),
@@ -124,7 +129,7 @@ function savePlayer(c) {
 // ---------- Estado que se envía a cada jugador ----------
 
 function playerRow(q) {
-  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0, q.gemsOn && Sim.countItem(q, 'gema_poder') > 0 ? 1 : 0, q.pet ? q.pet.type : 0, q.mounted || 0, Sim.pvpState(q), Sim.guildTag(world, q), COSMETICS.look(q)];
+  return [q.id, r2(q.pos.x), r2(q.pos.y), r2(q.pos.z), r2(q.facing), q.moving ? 1 : 0, q.dead ? 1 : 0, Math.round(q.hp), q.stats.maxHp, q.level, q.cls, q.name, q.equip.weapon, q.equip.armor, q.leap ? 1 : 0, q.sex, q.party || 0, q.swimming ? 1 : 0, q.stage, q.branch || 0, q.gemsOn && Sim.countItem(q, 'gema_poder') > 0 ? 1 : 0, q.pet ? q.pet.type : 0, q.mounted || 0, Sim.pvpState(q), Sim.guildTag(world, q), COSMETICS.look(q), Sim.isProtected(q) ? 1 : 0];
 }
 
 function mobRow(m) {
@@ -230,6 +235,11 @@ function routeEvents(events) {
       for (const c of clients) if (c.p && (ev.to === c.p.id || ev.ent === c.p)) c.invDirty = true;
     }
     if (ev.type === 'levelUp') for (const c of clients) if (c.p === ev.ent) savePlayer(c);
+    // La ventana del mercado de quien compró, vendió o retiró se actualiza sola
+    if (ev.type === 'market') {
+      for (const c of clients) if (c.p && c.p.id === ev.to && c.marketQ) sendMarket(c);
+      continue;
+    }
     const w = wire(ev);
     if (ev.to) {
       for (const c of clients) if (c.p && c.p.id === ev.to) push(c, w);
@@ -306,7 +316,10 @@ function onAccount(c, msg) {
       if (c.p) return;
       const gone = DB.getChar(c.acc, str(msg.id, 20));
       const r = DB.deleteChar(c.acc, str(msg.id, 20));
-      if (r.ok && gone) Sim.forgetMember(world, gone.name);
+      if (r.ok && gone) {
+        Sim.forgetMember(world, gone.name);
+        Sim.marketForget(world, gone.name);
+      }
       if (!r.ok) return send(c, { t: 'charError', msg: r.error });
       return send(c, { t: 'chars', chars: DB.listChars(c.acc) });
     }
@@ -540,7 +553,34 @@ function onCommand(c, msg) {
     }
     case 'report':
       return onReport(c, p, msg);
+    // Mercado entre jugadores: ver (con búsqueda y categoría), publicar, comprar y retirar
+    case 'market':
+      c.marketQ = { q: str(msg.q, 30), cat: str(msg.cat, 12), page: int(msg.page, 0, 999, 0), sort: msg.sort === 'new' ? 'new' : 'price' };
+      return sendMarket(c);
+    case 'marketSell':
+      C.marketSell(world, p, int(msg.i, 0, 29, -1), int(msg.q, 1, 9999, 0), int(msg.price, 0, Data.MARKET.maxPrice + 1, 0));
+      return;
+    case 'marketBuy':
+      if (typeof msg.id === 'string') C.marketBuy(world, p, str(msg.id, 20), int(msg.q, 1, 9999, 1));
+      return;
+    case 'marketCancel':
+      if (typeof msg.id === 'string') C.marketCancel(world, p, str(msg.id, 20));
+      return;
   }
+}
+
+function sendMarket(c) {
+  if (c.p) send(c, { t: 'market', ...Sim.marketView(world, c.p, c.marketQ || {}) });
+}
+
+// El mercado y los personajes que cambiaron con él se guardan juntos (una sola escritura del
+// archivo de la base de datos): así un objeto nunca queda a la vez en el mercado y en la mochila.
+function saveMarket() {
+  if (!world.marketDirty) return;
+  world.marketDirty = false;
+  for (const c of clients) if (c.p && world.marketSave.has(c.p.id)) savePlayer(c);
+  world.marketSave.clear();
+  DB.saveMarket(Sim.exportMarket(world));
 }
 
 // ---------- Red ----------
@@ -659,6 +699,7 @@ setInterval(() => {
       world.guildsDirty = false;
       DB.saveGuilds(Sim.exportGuilds(world));
     }
+    saveMarket();
     if (frame % SNAP_EVERY === 0) for (const c of clients) if (c.p) snapshot(c);
     if (frame % SAVE_EVERY === 0) for (const c of clients) savePlayer(c);
   } catch (e) {
@@ -669,6 +710,7 @@ setInterval(() => {
 // Al apagar (despliegue nuevo), guardar a todos
 function shutdown() {
   for (const c of clients) savePlayer(c);
+  DB.saveMarket(Sim.exportMarket(world));
   DB.flush();
   process.exit(0);
 }

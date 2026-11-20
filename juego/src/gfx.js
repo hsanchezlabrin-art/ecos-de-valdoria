@@ -282,7 +282,7 @@
   // ---------- Mapa de alturas y del suelo (para el pasto y el agua) ----------
   // Un texel por vértice del terreno: así el pasto y la orilla coinciden con el suelo dibujado.
 
-  const SEG = 200;
+  const SEG = 340; // vértices por lado del terreno (mundo de 760 m: uno cada ~2,2 m)
   const TEX = SEG + 1;
   const H_MIN = -20;
   const H_RANGE = 70;
@@ -385,7 +385,12 @@
       if (zone.id === 'valle') rock = Math.max(rock, w * 0.8);
       if (zone.id === 'minas') rock = Math.max(rock, w * 0.6);
       if (zone.id === 'minas' || zone.id === 'ciudadela') dirt = Math.max(dirt, w * 0.6);
+      // Tierras lejanas: nieve y arena se pintan sobre la textura de tierra (con el color de la zona)
+      if (['nevada', 'tundra', 'desierto', 'oasis', 'eclipse'].includes(zone.id)) dirt = Math.max(dirt, w * 0.85);
+      if (zone.id === 'canon') rock = Math.max(rock, w * 0.7);
     }
+    const bm = V.Terrain.biome(x, z);
+    dirt = Math.max(dirt, Math.max(bm.snow, bm.sand) * 0.85);
     rock = Math.min(1, rock);
     dirt = Math.min(1 - rock, dirt);
     return [Math.max(0, 1 - dirt - rock), dirt, rock];
@@ -405,14 +410,16 @@
   function grassDensityAt(x, z, h) {
     if (h < WATER_Y + 0.25 || (h > 9 && h < 18)) return 0;
     const d = Math.hypot(x, z);
-    if (d > 182) return 0;
+    if (d > V.Terrain.EDGE - 4) return 0;
     let dens = ss(10, 16, d) * ss(1.6, 3.6, pathDist(x, z));
     const zone = V.Data.ZONES.find((zn) => zn.id !== 'aldea' && Math.hypot(x - zn.x, z - zn.z) < zn.r * 1.25);
     if (zone) {
       const w = 1 - ss(zone.r * 0.5, zone.r * 1.2, Math.hypot(x - zone.x, z - zone.z));
-      const keep = { praderas: 1, bosque: 0.75, minas: 0.1, ciudadela: 0.2, valle: 0.05, islas: 0.9 }[zone.id];
+      const keep = { praderas: 1, bosque: 0.75, minas: 0.1, ciudadela: 0.2, valle: 0.05, islas: 0.9, nevada: 0.05, tundra: 0.05, pantano: 0.8, desierto: 0, oasis: 0.3, canon: 0.05, eclipse: 0.3 }[zone.id];
       dens *= 1 - w * (1 - (keep == null ? 1 : keep));
     }
+    const bm = V.Terrain.biome(x, z);
+    dens *= 1 - Math.max(bm.snow, bm.sand) * 0.9;
     const L = layout();
     for (const o of L.near(x, z)) if (Math.hypot(x - o.x, z - o.z) < o.r + 0.6) return 0;
     return Math.max(0, Math.min(1, dens));
@@ -1314,6 +1321,7 @@
 
   V.Gfx = {
     PRESETS,
+    SEG,
     get quality() {
       return quality;
     },

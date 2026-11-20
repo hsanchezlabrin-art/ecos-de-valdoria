@@ -17,7 +17,7 @@ const RESERVED = ['orlen', 'ilwen', 'brisa', 'tharmok', 'admin', 'gm', 'sistema'
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 const now = () => Date.now();
 
-let db = { accounts: {}, chars: {}, names: {}, nextChar: 1, guilds: [] };
+let db = { accounts: {}, chars: {}, names: {}, nextChar: 1, guilds: [], market: null };
 try {
   db = { ...db, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) };
 } catch {
@@ -247,4 +247,12 @@ function saveGuilds(list) {
 }
 const hasName = (name) => own(db.names, String(name || '').toLowerCase());
 
-module.exports = { loadGuilds, saveGuilds, hasName, register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, listAccounts, deleteAccount, migrateChars, setMute, flush: () => persist(true), MAX_CHARS, DIR };
+// Mercado entre jugadores: publicaciones y oro pendiente de los vendedores desconectados. Se guarda en
+// el mismo archivo que los personajes (una sola escritura atómica con los dos).
+const loadMarket = () => (db.market && typeof db.market === 'object' ? db.market : null);
+function saveMarket(m) {
+  db.market = m;
+  persist();
+}
+
+module.exports = { loadGuilds, saveGuilds, loadMarket, saveMarket, hasName, register, login, resume, logout, listChars, createChar, deleteChar, getChar, saveChar, nameAvailable, counts, listAccounts, deleteAccount, migrateChars, setMute, flush: () => persist(true), MAX_CHARS, DIR };

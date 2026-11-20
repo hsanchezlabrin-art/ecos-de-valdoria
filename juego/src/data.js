@@ -19,8 +19,9 @@
     V.Data = factory();
   }
 })(function () {
-  const MAX_LEVEL = 50;
-  const xpToNext = (lvl) => Math.floor(42 * Math.pow(lvl, 1.85) + 18);
+  const MAX_LEVEL = 80;
+  // Experiencia para subir de nivel: desde el 50 la curva se empina (como el final de Lineage 2)
+  const xpToNext = (lvl) => Math.floor((42 * Math.pow(lvl, 1.85) + 18) * (lvl > 50 ? 1 + (lvl - 50) * 0.08 : 1));
   const CRIT_MULT = 1.8;
   const MOVE_SPEED = 7.2;
   const SEXES = { m: 'Hombre', f: 'Mujer' };
@@ -34,6 +35,8 @@
     GRADE_PURPLE_GOLD: 'morado',
     GRADE_GOLD_DIAMOND: 'dorado',
     GRADE_RAINBOW_CELESTIAL: 'arcoiris',
+    GRADE_COMET_SILVER: 'cometa',
+    GRADE_AURORA_ETERNAL: 'aurora',
   };
   // lvl: nivel mínimo · stage: cambio de clase necesario · look: color de armadura
   const GRADES = {
@@ -43,8 +46,10 @@
     morado: { id: 'GRADE_PURPLE_GOLD', name: 'Oro Morado', color: '#c895ff', lvl: 20, stage: 1, atk: 34, def: 22, hp: 150, price: 1500, look: 0x8a55c8 },
     dorado: { id: 'GRADE_GOLD_DIAMOND', name: 'Diamante Dorado', color: '#ffc44d', lvl: 25, stage: 2, atk: 52, def: 32, hp: 230, price: 3800, look: 0xe0b040 },
     arcoiris: { id: 'GRADE_RAINBOW_CELESTIAL', name: 'Arcoíris Celestial', color: '#ff8adf', lvl: 40, stage: 3, atk: 80, def: 46, hp: 340, price: 9500, look: 0xf0e0ff, rainbow: true },
+    cometa: { id: 'GRADE_COMET_SILVER', name: 'Cometa Plateado', color: '#9fe8ff', lvl: 55, stage: 3, atk: 112, def: 63, hp: 470, price: 26000, look: 0xc8f0ff },
+    aurora: { id: 'GRADE_AURORA_ETERNAL', name: 'Aurora Eterna', color: '#7dffc0', lvl: 70, stage: 3, atk: 150, def: 84, hp: 640, price: 62000, look: 0xb8ffe0 },
   };
-  const GRADE_ORDER = ['madera', 'cobre', 'azul', 'morado', 'dorado', 'arcoiris'];
+  const GRADE_ORDER = ['madera', 'cobre', 'azul', 'morado', 'dorado', 'arcoiris', 'cometa', 'aurora'];
   const gradeIndex = (g) => GRADE_ORDER.indexOf(g);
 
   // Colores de rareza (los grados más los objetos sin grado)
@@ -401,10 +406,10 @@
   }
   const passiveFor = (cls, stage, branch) => (stage >= 2 && branch && arch(cls).branches[branch] ? arch(cls).branches[branch].passive : null);
   // Niveles de habilidad (estilo Lineage 2): cada habilidad sube de nivel solo, cada 5 niveles del
-  // personaje desde que se desbloquea, hasta Nv 8 (o lo que alcance antes del nivel máximo). Cada
+  // personaje desde que se desbloquea, hasta Nv 12 (o lo que alcance antes del nivel máximo). Cada
   // nivel: +6% de poder (daño, curación y escudos) y +5% de maná.
   const SKILL_LVL_EVERY = 5;
-  const SKILL_MAX_LVL = 8;
+  const SKILL_MAX_LVL = 12;
   const SKILL_POWER_PER = 0.06;
   const SKILL_MP_PER = 0.05;
   const skillMaxLevel = (s) => (s.locked ? 0 : Math.min(SKILL_MAX_LVL, 1 + Math.floor((MAX_LEVEL - s.lvl) / SKILL_LVL_EVERY)));
@@ -454,6 +459,28 @@
     chip_automata: { name: 'Chip del Mega-Autómata', type: 'junk', price: 220, stack: true, glyph: '▣', rarity: 'azul', desc: 'Trofeo de La Fábrica Descontrolada. Se vende caro.' },
     colmillo_ignis: { name: 'Colmillo de Ignis', type: 'junk', price: 420, stack: true, glyph: '◣', rarity: 'morado', desc: 'Trofeo del Dragón Dormilón. Se vende muy caro.' },
     polvo_arcoiris: { name: 'Polvo de Arcoíris', type: 'material', price: 60, stack: true, glyph: '✧', rarity: 'arcoiris', desc: 'Material celestial: el Herrero Celestial de la Ciudadela lo cambia por equipo Dorado y Arcoíris.' },
+    // Tierras lejanas (niveles 40–80)
+    copo_eterno: { name: 'Copo Eterno', type: 'junk', price: 95, stack: true, glyph: '❄', rarity: 'refinado', desc: 'Nunca se derrite. Se vende en el mercado.' },
+    bufanda: { name: 'Bufanda de Muñeco', type: 'junk', price: 105, stack: true, glyph: '≋', rarity: 'refinado', desc: 'Calentita. Se vende en el mercado.' },
+    cuerno_yeti: { name: 'Cuerno de Yeti', type: 'junk', price: 118, stack: true, glyph: '◣', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    corona_escarcha: { name: 'Corona de Escarcha', type: 'junk', price: 700, stack: true, glyph: '♛', rarity: 'dorado', desc: 'Trofeo de la Reina de la Escarcha. Se vende muy caro.' },
+    anca_rana: { name: 'Lengua de Rana', type: 'junk', price: 125, stack: true, glyph: '∿', rarity: 'refinado', desc: 'Pegajosa. Se vende en el mercado.' },
+    frasco_luz: { name: 'Frasco de Luciérnagas', type: 'junk', price: 135, stack: true, glyph: '✺', rarity: 'refinado', desc: 'Ilumina la noche. Se vende en el mercado.' },
+    petalo_glotona: { name: 'Pétalo Glotón', type: 'junk', price: 145, stack: true, glyph: '✿', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    escama_hidra: { name: 'Escama de Hidra', type: 'junk', price: 850, stack: true, glyph: '◈', rarity: 'dorado', desc: 'Trofeo de la Hidra del Pantano. Se vende muy caro.' },
+    caparazon_oro: { name: 'Caparazón Dorado', type: 'junk', price: 155, stack: true, glyph: '⬢', rarity: 'refinado', desc: 'Brilla al sol. Se vende en el mercado.' },
+    venda_momia: { name: 'Venda Antigua', type: 'junk', price: 165, stack: true, glyph: '≡', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    espina_cactus: { name: 'Espina de Cactus', type: 'junk', price: 175, stack: true, glyph: '✶', rarity: 'refinado', desc: 'Pincha un poquito. Se vende en el mercado.' },
+    ojo_esfinge: { name: 'Ojo de la Esfinge', type: 'junk', price: 1000, stack: true, glyph: '◉', rarity: 'dorado', desc: 'Trofeo de la Gran Esfinge de Arena. Se vende muy caro.' },
+    cristal_prisma: { name: 'Cristal Prismático', type: 'junk', price: 190, stack: true, glyph: '◆', rarity: 'refinado', desc: 'Descompone la luz. Se vende en el mercado.' },
+    escama_prisma: { name: 'Escama de Dragoncito', type: 'junk', price: 205, stack: true, glyph: '◈', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    chispa_prisma: { name: 'Chispa Prismática', type: 'junk', price: 220, stack: true, glyph: '✦', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    nucleo_coloso: { name: 'Núcleo del Coloso', type: 'junk', price: 1200, stack: true, glyph: '❂', rarity: 'cometa', desc: 'Trofeo del Coloso Prismático. Se vende muy caro.' },
+    emblema_sombra: { name: 'Emblema Sombrío', type: 'junk', price: 235, stack: true, glyph: '⛉', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    ala_lunar: { name: 'Ala Lunar', type: 'junk', price: 250, stack: true, glyph: '☾', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    piedra_lunar: { name: 'Piedra Lunar', type: 'junk', price: 270, stack: true, glyph: '●', rarity: 'refinado', desc: 'Se vende en el mercado.' },
+    corona_eclipse: { name: 'Corona del Eclipse', type: 'junk', price: 1600, stack: true, glyph: '♛', rarity: 'aurora', desc: 'Trofeo del Rey del Eclipse. Se vende carísimo.' },
+    fragmento_aurora: { name: 'Fragmento de Aurora', type: 'material', price: 150, stack: true, glyph: '✧', rarity: 'aurora', desc: 'Material boreal: la Herrera de la Aurora, en el Oasis del Sol, lo cambia por equipo Aurora Eterna.' },
   };
 
   // Armas por raza y grado: [tipo, nombre, descripción]
@@ -465,6 +492,8 @@
       ['hammer', 'Martillo de Amatista', 'La amatista retumba en cada golpe.'],
       ['hammer', 'Martillo de Diamante Estelar', 'Brilla como una estrella al chocar.'],
       ['hammer', 'Martillo Celestial', 'Deja una estela de arcoíris al moverse.'],
+      ['hammer', 'Martillo de Cometa', 'Cae como una estrella fugaz.'],
+      ['hammer', 'Martillo de la Aurora', 'Pinta el cielo de verde y violeta.'],
     ],
     elfo: [
       ['bow', 'Arco de Rama', 'Una rama flexible y una cuerda de lino.'],
@@ -473,6 +502,8 @@
       ['bow', 'Arco Compuesto de Amatista', 'Capas de madera y amatista encantada.'],
       ['bow', 'Arco de Diamante Estelar', 'Sus flechas dejan polvo de estrellas.'],
       ['bow', 'Arco Celestial del Alba', 'Dispara flechas de luz de arcoíris.'],
+      ['bow', 'Arco de Cometa', 'Sus flechas dejan una cola plateada.'],
+      ['bow', 'Arco de la Aurora', 'Dispara flechas de luz boreal.'],
     ],
     gnomo: [
       ['wand', 'Vara de Rama', 'Una ramita con una chispa en la punta.'],
@@ -481,6 +512,8 @@
       ['launcher', 'Lanzapociones de Amatista', 'Dispara frascos burbujeantes.'],
       ['crystalstaff', 'Báculo de Diamante Estelar', 'Un diamante gira en su punta.'],
       ['crystalstaff', 'Báculo Prismático Celestial', 'Descompone la luz en todos los colores.'],
+      ['crystalstaff', 'Báculo de Cometa', 'Un cometa diminuto gira en su punta.'],
+      ['crystalstaff', 'Báculo de la Aurora', 'De su cristal salen ondas de luz boreal.'],
     ],
     hada: [
       ['scepter', 'Cetro de Rama', 'Una ramita con una estrellita.'],
@@ -489,6 +522,8 @@
       ['book', 'Libro Rúnico Morado', 'Las runas cantan al abrirlo.'],
       ['scepter', 'Cetro Estrella de Diamante', 'Una estrella de diamante late en la punta.'],
       ['bell', 'Campana Celestial', 'Su sonido se escucha en todo el cielo.'],
+      ['scepter', 'Cetro de Cometa', 'Una estrella fugaz late en la punta.'],
+      ['bell', 'Campana de la Aurora', 'Suena como el cielo del norte.'],
     ],
     lagarto: [
       ['longsword', 'Espada de Madera', 'Para entrenar… y para pelear de verdad.'],
@@ -497,19 +532,22 @@
       ['dualswords', 'Espadas Dobles de Amatista', 'Un par de hojas moradas muy rápidas.'],
       ['longsword', 'Espada de Diamante Estelar', 'Corta el aire con un silbido.'],
       ['longsword', 'Hoja Celestial del Dragón', 'Arde con fuego de arcoíris.'],
+      ['longsword', 'Espada de Cometa', 'Corta con un destello plateado.'],
+      ['longsword', 'Hoja de la Aurora', 'Brilla con luz verde y violeta.'],
     ],
   };
   // Martillos a dos manos (solo Oso Berserker): +35% de ataque
   const TWO_HANDED = [
     ['dorado', 'gran_martillo_tronador', 'Gran Martillo Tronador', 'Hace temblar la tierra.'],
     ['arcoiris', 'martillo_coloso', 'Martillo del Coloso', 'Solo un coloso puede levantarlo.'],
+    ['aurora', 'martillo_boreal', 'Gran Martillo Boreal', 'Retumba como un trueno del norte.'],
   ];
   const ARMOR_NAMES = {
-    HEAVY_PLATE: ['Peto de Tablas', 'Armadura de Cobre', 'Armadura de Cristal Azul', 'Armadura de Oro Encantado', 'Coraza de Diamante con Capa', 'Armadura Legendaria del Titán'],
-    MEDIUM_SCALE: ['Escamas de Corteza', 'Cota de Escamas de Cobre', 'Escamas de Cristal Azul', 'Escamas de Oro Encantado', 'Escamas de Diamante con Capa', 'Escamas Celestiales del Dragón'],
-    LIGHT_LEATHER: ['Chaleco de Hojas', 'Armadura de Cuero', 'Cuero de Cristal Azul', 'Cuero de Oro Encantado', 'Capa de Diamante del Explorador', 'Atuendo Celestial del Viento'],
-    CLOTH_ROBE: ['Ropa de Tela Simple', 'Túnica de Cobre', 'Túnica de Cristal Azul', 'Túnica de Oro Encantado', 'Túnica de Diamante con Capa', 'Túnica Prismática Celestial'],
-    SACRED_ROBE: ['Vestido de Pétalos', 'Hábito de Cobre', 'Vestiduras de Cristal Azul', 'Vestiduras de Oro Encantado', 'Manto Sagrado de Diamante', 'Manto Celestial de las Estrellas'],
+    HEAVY_PLATE: ['Peto de Tablas', 'Armadura de Cobre', 'Armadura de Cristal Azul', 'Armadura de Oro Encantado', 'Coraza de Diamante con Capa', 'Armadura Legendaria del Titán', 'Armadura de Cometa', 'Armadura de la Aurora'],
+    MEDIUM_SCALE: ['Escamas de Corteza', 'Cota de Escamas de Cobre', 'Escamas de Cristal Azul', 'Escamas de Oro Encantado', 'Escamas de Diamante con Capa', 'Escamas Celestiales del Dragón', 'Escamas de Cometa', 'Escamas de la Aurora'],
+    LIGHT_LEATHER: ['Chaleco de Hojas', 'Armadura de Cuero', 'Cuero de Cristal Azul', 'Cuero de Oro Encantado', 'Capa de Diamante del Explorador', 'Atuendo Celestial del Viento', 'Cuero de Cometa', 'Atuendo de la Aurora'],
+    CLOTH_ROBE: ['Ropa de Tela Simple', 'Túnica de Cobre', 'Túnica de Cristal Azul', 'Túnica de Oro Encantado', 'Túnica de Diamante con Capa', 'Túnica Prismática Celestial', 'Túnica de Cometa', 'Túnica de la Aurora'],
+    SACRED_ROBE: ['Vestido de Pétalos', 'Hábito de Cobre', 'Vestiduras de Cristal Azul', 'Vestiduras de Oro Encantado', 'Manto Sagrado de Diamante', 'Manto Celestial de las Estrellas', 'Manto de Cometa', 'Manto de la Aurora'],
   };
 
   const WEAPON_TIERS = {}; // raza → ids de arma por grado (madera … arcoiris)
@@ -609,6 +647,14 @@
     { id: 'ciudadela', name: 'Ciudadela de Gludio-Cubo', lvl: '15+', x: -100, z: -60, r: 28, safe: true, hub: true, ground: 1, tint: [0.66, 0.64, 0.58], desc: 'Gran ciudad blanca de techos de colores. Mercader de grados altos, Herrero Celestial, Maestra de Clase, gremios, establo y portales.' },
     { id: 'valle', name: 'Valle de los Dragones Dormidos', lvl: '20–30', x: 110, z: -78, r: 34, ground: 1.5, trees: 0.06, treeType: 'dead', tint: [0.38, 0.26, 0.2], desc: 'Montañas volcánicas con lava de gelatina naranja y géiseres que te lanzan por los aires. Aquí duerme Ignis.' },
     { id: 'islas', name: 'Islas Flotantes del Cielo', lvl: '30–40+', x: 70, z: 118, r: 34, ground: 24, trees: 0.08, treeType: 'round', tint: [0.55, 0.75, 0.45], desc: 'Ruinas antiguas sobre las nubes, con puentes de arcoíris. Se llega por el portal de la Ciudadela. Hogar del Gran Guardián Celestial.' },
+    // Tierras lejanas (desde la v0.31): dos aldeas nuevas y cinco zonas para los niveles 40–80
+    { id: 'nevada', name: 'Villa Nevada', lvl: '40+', x: -60, z: 235, r: 22, safe: true, hub: true, village: true, ground: 1.6, tint: [0.86, 0.9, 0.96], snow: true, desc: 'Aldea de cabañas nevadas al norte. Zona segura con mercader, sanadora, portal y subastador. Puerta de la Tundra.' },
+    { id: 'tundra', name: 'Tundra de los Muñecos de Nieve', lvl: '40–48', x: -185, z: 170, r: 36, ground: 2, trees: 0.12, treeType: 'snowpine', tint: [0.84, 0.88, 0.95], snow: true, desc: 'Llanuras nevadas con pinos blancos. Muñecos de nieve gruñones, pingüinos patinadores y yetis. Aquí reina la Reina de la Escarcha.' },
+    { id: 'pantano', name: 'Pantano de las Luciérnagas', lvl: '48–56', x: -268, z: 15, r: 36, ground: 0.5, trees: 0.14, treeType: 'dead', tint: [0.24, 0.34, 0.2], desc: 'Charcos verdes y luciérnagas gigantes. Ranas saltarinas y plantas glotonas. En el fondo duerme la Hidra del Pantano.' },
+    { id: 'desierto', name: 'Desierto de las Dunas Doradas', lvl: '56–64', x: -175, z: -210, r: 38, ground: 1.2, trees: 0.05, treeType: 'cactus', tint: [0.86, 0.72, 0.42], desc: 'Dunas, cactus y pirámides de bloques. Escarabajos dorados y momias dormilonas. La Gran Esfinge de Arena vigila su tesoro.' },
+    { id: 'oasis', name: 'Oasis del Sol', lvl: '56+', x: 0, z: -258, r: 22, safe: true, hub: true, village: true, ground: 1, tint: [0.8, 0.7, 0.45], desc: 'Aldea de palmeras junto a un lago en el sur. Zona segura con mercader, sanador, la Herrera de la Aurora, portal y subastador.' },
+    { id: 'canon', name: 'Cañón de Cristal Prismático', lvl: '64–72', x: 170, z: -205, r: 36, ground: 3, trees: 0, treeType: 'none', tint: [0.52, 0.42, 0.6], desc: 'Paredes de roca violeta llenas de cristales de colores. Gólems de cristal y dragoncitos prisma. Aquí brilla el Coloso Prismático.' },
+    { id: 'eclipse', name: 'Ruinas del Eclipse', lvl: '72–80', x: 262, z: -40, r: 38, ground: 1.5, trees: 0.05, treeType: 'dead', tint: [0.3, 0.26, 0.4], desc: 'Ruinas bajo un cielo de luna eterna. Caballeros sombra y gárgolas lunares. El Rey del Eclipse espera a los héroes de nivel 80.' },
   ];
 
   // Arenas de jefes: botones de la Fábrica, rocas para esconderse de Ignis
@@ -617,6 +663,11 @@
     fabrica: { name: 'La Fábrica Descontrolada', x: 30, z: -108, r: 12, plates: ring(30, -108, 8.5, 3, Math.PI / 2) },
     ignis: { name: 'Nido de Ignis', x: 124, z: -88, r: 15, shelters: ring(124, -88, 9, 5, 0.3) },
     guardian: { name: 'Templo Estelar', x: 76, z: 128, r: 13 },
+    escarcha: { name: 'Palacio de Hielo', x: -196, z: 182, r: 13 },
+    charca: { name: 'Charca de la Hidra', x: -280, z: 22, r: 14 },
+    piramide: { name: 'Patio de la Pirámide', x: -186, z: -222, r: 14 },
+    espejo: { name: 'Salón de los Espejos', x: 178, z: -216, r: 13 },
+    eclipse: { name: 'Altar del Eclipse', x: 276, z: -44, r: 15 },
   };
 
   // kind: forma del modelo (quad, hum, mush, crab, bug, bat, slime, orb)
@@ -735,14 +786,132 @@
       mech: { type: 'stars', every: 8, count: 6, r: 3.5, delay: 1.8, dmg: 0.35, adds: { key: 'elemental', count: 3, at: 0.5 } },
       drops: [['polvo_arcoiris', 1, [8, 15]], ['gema_poder', 1, [40, 60]], ['@w:dorado', 0.5], ['@a:dorado', 0.5], ['@w:arcoiris', 0.15], ['@a:arcoiris', 0.15], ['pocion_vida', 1], ['pocion_mana', 1]],
     },
+    // 7. Tundra de los Muñecos de Nieve (40–48)
+    muneco_nieve: {
+      name: 'Muñeco de Nieve Gruñón', kind: 'hum', lvl: [40, 43], zone: 'tundra', count: 10,
+      skin: 0xf4f8ff, body: 0xeef4fc, legs: 0xdfe8f4, hat: 0x2a2c34, glow: 0x9fd8ff, scale: 1.2, weapon: false, aggressive: true, speed: 4.6,
+      onHit: { slow: 2.5, chance: 0.25 },
+      drops: [['bufanda', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [12, 20]], ['@w:arcoiris', 0.012], ['@a:arcoiris', 0.012], ['polvo_arcoiris', 0.08]],
+    },
+    pinguino: {
+      name: 'Pingüino Patinador', kind: 'hum', lvl: [42, 45], zone: 'tundra', count: 10,
+      skin: 0x2a2c34, body: 0xf4f0e6, legs: 0x2a2c34, scale: 0.8, weapon: false, aggressive: true, speed: 6.6,
+      drops: [['copo_eterno', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [12, 20]], ['@w:arcoiris', 0.012], ['@a:arcoiris', 0.012], ['polvo_arcoiris', 0.08]],
+    },
+    yeti: {
+      name: 'Yeti Cúbico', kind: 'quad', lvl: [45, 48], zone: 'tundra', count: 9,
+      color: 0xf4f6fa, head: 0x9fb4c8, wool: true, scale: 1.45, aggressive: true, speed: 5.2,
+      drops: [['cuerno_yeti', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [14, 22]], ['@w:arcoiris', 0.015], ['@a:arcoiris', 0.015], ['polvo_arcoiris', 0.1]],
+    },
+    reina_escarcha: {
+      name: 'Reina de la Escarcha', kind: 'hum', lvl: [48, 48], zone: 'tundra', count: 1, boss: true, raid: true, respawn: 900, hpMult: 30,
+      at: { x: -196, z: 182 }, halo: true, skin: 0xdff4ff, body: 0x9fd8ff, legs: 0x6fa8d8, cape: 0xeef8ff, glow: 0xbfeaff, weaponColor: 0xdff4ff, scale: 2.9, aggressive: true, speed: 4.4,
+      mech: { type: 'freeze', every: 11, warn: 2.6, dmg: 0.35, stun: 3, r: 24 },
+      drops: [['corona_escarcha', 1, [1, 2]], ['polvo_arcoiris', 1, [6, 12]], ['gema_poder', 1, [45, 65]], ['@w:arcoiris', 0.35], ['@a:arcoiris', 0.35], ['@w:cometa', 0.08], ['@a:cometa', 0.08], ['pocion_vida', 1], ['pocion_mana', 1]],
+    },
+    // 8. Pantano de las Luciérnagas (48–56)
+    rana: {
+      name: 'Rana Cubo Saltarina', kind: 'slime', lvl: [48, 51], zone: 'pantano', count: 10,
+      color: 0x5ab04a, scale: 1.25, aggressive: true, speed: 5.6,
+      onHit: { poison: { pct: 0.3, dur: 4 }, chance: 0.3 },
+      drops: [['anca_rana', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [14, 22]], ['@w:arcoiris', 0.015], ['@a:arcoiris', 0.015], ['polvo_arcoiris', 0.1]],
+    },
+    luciernaga: {
+      name: 'Luciérnaga Gigante', kind: 'orb', lvl: [50, 53], zone: 'pantano', count: 10,
+      color: 0xd8ff6a, scale: 0.9, aggressive: true, speed: 6,
+      drops: [['frasco_luz', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [14, 22]], ['@w:arcoiris', 0.015], ['@a:arcoiris', 0.015], ['polvo_arcoiris', 0.1]],
+    },
+    glotona: {
+      name: 'Planta Glotona', kind: 'mush', lvl: [53, 56], zone: 'pantano', count: 9,
+      color: 0xd84a8a, body: 0x4f8a34, scale: 1.4, aggressive: true, speed: 3.6,
+      onHit: { slow: 2, chance: 0.3 },
+      drops: [['petalo_glotona', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [16, 24]], ['@w:cometa', 0.01], ['@a:cometa', 0.01], ['polvo_arcoiris', 0.12]],
+    },
+    hidra: {
+      name: 'Hidra del Pantano', kind: 'quad', lvl: [56, 56], zone: 'pantano', count: 1, boss: true, raid: true, respawn: 900, hpMult: 32,
+      at: { x: -280, z: 22 }, color: 0x3f7a5a, dragon: true, tail: true, scale: 3.1, aggressive: true, speed: 4.2,
+      mech: { type: 'puddles', every: 9, count: 4, r: 3.2, delay: 1.5, life: 9, dps: 0.06, poison: { pct: 0.35, dur: 4 } },
+      drops: [['escama_hidra', 1, [1, 2]], ['polvo_arcoiris', 1, [8, 14]], ['gema_poder', 1, [50, 70]], ['@w:cometa', 0.3], ['@a:cometa', 0.3], ['fragmento_aurora', 0.5, [1, 2]], ['pocion_vida', 1], ['pocion_mana', 1]],
+    },
+    // 9. Desierto de las Dunas Doradas (56–64)
+    escarabajo: {
+      name: 'Escarabajo Dorado', kind: 'bug', lvl: [56, 59], zone: 'desierto', count: 10,
+      color: 0xe0b040, stripe: 0x5a3d22, scale: 1.1, aggressive: true, speed: 6,
+      drops: [['caparazon_oro', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [16, 24]], ['@w:cometa', 0.012], ['@a:cometa', 0.012], ['fragmento_aurora', 0.02]],
+    },
+    momia: {
+      name: 'Momia Dormilona', kind: 'hum', lvl: [59, 62], zone: 'desierto', count: 10,
+      skin: 0xe8dcc0, body: 0xd8ccb0, legs: 0xc8bca0, glow: 0x7fe0b0, scale: 1.15, weapon: false, aggressive: true, speed: 4.4,
+      onHit: { slow: 2.5, chance: 0.25 },
+      drops: [['venda_momia', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [16, 24]], ['@w:cometa', 0.012], ['@a:cometa', 0.012], ['fragmento_aurora', 0.02]],
+    },
+    cactus: {
+      name: 'Cactus Saltarín', kind: 'mush', lvl: [61, 64], zone: 'desierto', count: 9,
+      color: 0x4f9a3a, body: 0x6ab04a, scale: 1.2, aggressive: true, speed: 5,
+      onHit: { poison: { pct: 0.3, dur: 4 }, chance: 0.25 },
+      drops: [['espina_cactus', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [18, 26]], ['@w:cometa', 0.015], ['@a:cometa', 0.015], ['fragmento_aurora', 0.03]],
+    },
+    esfinge: {
+      name: 'Gran Esfinge de Arena', kind: 'quad', lvl: [64, 64], zone: 'desierto', count: 1, boss: true, raid: true, respawn: 900, hpMult: 34,
+      at: { x: -186, z: -222 }, color: 0xd9b25f, head: 0x3a6ad8, mane: true, maneColor: 0x3a6ad8, wings: true, scale: 3.2, aggressive: true, speed: 4.4,
+      mech: { type: 'vortex', every: 13, warn: 2.4, dur: 3.5, pull: 4.5, r: 22, core: 5, dps: 0.12 },
+      drops: [['ojo_esfinge', 1, [1, 2]], ['gema_poder', 1, [55, 75]], ['@w:cometa', 0.4], ['@a:cometa', 0.4], ['@w:aurora', 0.06], ['@a:aurora', 0.06], ['fragmento_aurora', 1, [2, 3]], ['pocion_vida', 1], ['pocion_mana', 1]],
+    },
+    // 10. Cañón de Cristal Prismático (64–72)
+    golem_cristal: {
+      name: 'Gólem de Cristal', kind: 'hum', lvl: [64, 67], zone: 'canon', count: 10,
+      skin: 0xb98cff, body: 0x8a6ad8, legs: 0x6a4ab0, glow: 0xe0c0ff, scale: 1.4, weapon: false, aggressive: true, speed: 4.4,
+      drops: [['cristal_prisma', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [18, 26]], ['@w:cometa', 0.015], ['@a:cometa', 0.015], ['fragmento_aurora', 0.04]],
+    },
+    dragoncito: {
+      name: 'Dragoncito Prisma', kind: 'quad', lvl: [67, 70], zone: 'canon', count: 10,
+      color: 0x7fd0ff, wings: true, tail: true, scale: 1.1, aggressive: true, speed: 6.2,
+      onHit: { burn: { pct: 0.3, dur: 4 }, chance: 0.25 },
+      drops: [['escama_prisma', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [18, 28]], ['@w:cometa', 0.015], ['@a:cometa', 0.015], ['fragmento_aurora', 0.05]],
+    },
+    espiritu_prisma: {
+      name: 'Espíritu Prismático', kind: 'orb', lvl: [69, 72], zone: 'canon', count: 9,
+      color: 0xff9ad5, scale: 1.15, aggressive: true, speed: 5.4,
+      drops: [['chispa_prisma', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [20, 30]], ['@w:aurora', 0.006], ['@a:aurora', 0.006], ['fragmento_aurora', 0.06]],
+    },
+    coloso: {
+      name: 'Coloso Prismático', kind: 'hum', lvl: [72, 72], zone: 'canon', count: 1, boss: true, raid: true, respawn: 900, hpMult: 36,
+      at: { x: 178, z: -216 }, robot: true, skin: 0xd8c0ff, body: 0x8a6ad8, legs: 0x5a4ab0, glow: 0xff9ad5, scale: 3.1, weapon: false, aggressive: true, speed: 4.2,
+      mech: { type: 'mirror', every: 12, warn: 1.6, dur: 4, reflect: 0.08, count: 5, r: 3, delay: 1.6, dmg: 0.3 },
+      drops: [['nucleo_coloso', 1, [1, 2]], ['gema_poder', 1, [60, 80]], ['@w:cometa', 0.4], ['@a:cometa', 0.4], ['@w:aurora', 0.1], ['@a:aurora', 0.1], ['fragmento_aurora', 1, [3, 4]], ['pocion_vida', 1], ['pocion_mana', 1]],
+    },
+    // 11. Ruinas del Eclipse (72–80)
+    caballero_sombra: {
+      name: 'Caballero Sombra', kind: 'hum', lvl: [72, 75], zone: 'eclipse', count: 10,
+      skin: 0x3a3450, body: 0x2a2440, legs: 0x1f1a30, cape: 0x5a3a8a, glow: 0xb98cff, weaponColor: 0x8a6ad8, scale: 1.2, aggressive: true, speed: 5.4,
+      drops: [['emblema_sombra', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [20, 30]], ['@w:aurora', 0.008], ['@a:aurora', 0.008], ['fragmento_aurora', 0.07]],
+    },
+    murcielago_luna: {
+      name: 'Murciélago Lunar', kind: 'bat', lvl: [74, 77], zone: 'eclipse', count: 10,
+      color: 0x4a4a6a, glow: 0xeef0ff, scale: 1.1, aggressive: true, speed: 6.4,
+      onHit: { slow: 2, chance: 0.25 },
+      drops: [['ala_lunar', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [20, 30]], ['@w:aurora', 0.008], ['@a:aurora', 0.008], ['fragmento_aurora', 0.08]],
+    },
+    gargola: {
+      name: 'Gárgola Lunar', kind: 'quad', lvl: [77, 80], zone: 'eclipse', count: 9,
+      color: 0x6a6a7a, wings: true, beak: true, scale: 1.4, aggressive: true, speed: 5.6,
+      drops: [['piedra_lunar', 0.45], ['pocion_vida', 0.3], ['pocion_mana', 0.25], ['gema_poder', 0.5, [22, 32]], ['@w:aurora', 0.01], ['@a:aurora', 0.01], ['fragmento_aurora', 0.1]],
+    },
+    rey_eclipse: {
+      name: 'Rey del Eclipse', kind: 'hum', lvl: [80, 80], zone: 'eclipse', count: 1, boss: true, raid: true, respawn: 1200, hpMult: 42,
+      at: { x: 276, z: -44 }, crown: 0xffd36b, skin: 0x2a2440, body: 0x1f1a30, legs: 0x151022, cape: 0x8a55c8, glow: 0xffe08a, weaponColor: 0xffe08a, scale: 3.3, aggressive: true, speed: 4.6,
+      mech: { type: 'eclipse', every: 15, warn: 3.2, dmg: 0.6, safe: 4.5, adds: { key: 'caballero_sombra', count: 3, at: 0.5 } },
+      drops: [['corona_eclipse', 1, [1, 2]], ['gema_poder', 1, [70, 100]], ['@w:aurora', 0.35], ['@a:aurora', 0.35], ['fragmento_aurora', 1, [5, 8]], ['pocion_vida', 1], ['pocion_mana', 1]],
+    },
   };
   // Altura de cada forma de monstruo (para nombres, proyectiles y selección)
   const MOB_H = { quad: 1.5, hum: 2.5, mush: 1.3, crab: 0.9, bug: 1.8, bat: 2.2, slime: 1.1, orb: 2 };
   const mobHeight = (def) => (MOB_H[def.kind] || 1.5) * (def.scale || 1);
   // Nivel de monstruo más alto (sin jefes) y jefe más fuerte: lo usan las misiones de cambio de clase
   const TOP_MOB_LVL = Math.max(...Object.values(MOBS).filter((m) => !m.boss).map((m) => m.lvl[1]));
+  // Jefe de la misión de la Ascensión Maestra: el más fuerte que no pasa del nivel 40 (esa etapa)
   const TOP_BOSS = Object.entries(MOBS)
-    .filter(([, m]) => m.boss)
+    .filter(([, m]) => m.boss && m.lvl[1] <= 40)
     .sort((a, b) => b[1].lvl[1] - a[1].lvl[1])[0][0];
   // Misión del cambio a la etapa `stage`: monstruos de al menos este nivel (o el jefe)
   function questFor(stage) {
@@ -895,6 +1064,23 @@
         return list.map((x) => ({ ...x, currency: 'polvo_arcoiris' }));
       },
     },
+    // Tierras lejanas
+    nilo: { name: 'Mercader Nilo', items: (cls) => ['pocion_vida', 'pocion_mana', 'gema_poder', ...gearOf(cls, ['dorado', 'cometa'])].map((id) => ({ id, price: ITEMS[id].price })) },
+    safira: { name: 'Mercader Safira', items: (cls) => ['pocion_vida', 'pocion_mana', 'gema_poder', ...gearOf(cls, ['cometa'])].map((id) => ({ id, price: ITEMS[id].price })) },
+    aurora: {
+      name: 'Herrera de la Aurora',
+      currency: 'fragmento_aurora',
+      items: (cls) => {
+        const list = [
+          { id: weaponFor(cls, 'cometa'), price: 6 },
+          { id: armorFor(cls, 'cometa'), price: 6 },
+          { id: weaponFor(cls, 'aurora'), price: 18 },
+          { id: armorFor(cls, 'aurora'), price: 20 },
+        ];
+        if (cls === 'oso') list.push({ id: 'martillo_boreal', price: 24 });
+        return list.map((x) => ({ ...x, currency: 'fragmento_aurora' }));
+      },
+    },
   };
   const shopItems = (shop, cls) => (SHOPS[shop] ? SHOPS[shop].items(cls) : []);
   const shopFor = (cls) => shopItems('orlen', cls).map((x) => x.id);
@@ -977,7 +1163,104 @@
       id: 'portal_ciudadela', role: 'travel', to: 'portal_islas', prop: 'portal', portalColor: 0xffd36b, name: 'Portal a la Ciudadela', title: 'Transporte', x: 60, z: 99,
       desc: 'Vuelve a la Ciudadela de Gludio-Cubo.',
     },
+    // Red de portales (uno en cada aldea) y subastadores del mercado entre jugadores
+    {
+      id: 'portal_aldea', role: 'portal', prop: 'portal', portalColor: 0x7dffc0, name: 'Portal de los Viajeros', title: 'Red de portales', x: -1.5, z: -10,
+      desc: 'Te lleva a cualquier aldea o zona que ya hayas visitado, a cambio de un poco de oro.',
+    },
+    {
+      id: 'subasta_aldea', role: 'market', name: 'Subastadora Rita', title: 'Mercado de Aventureros', x: 9.5, z: -1,
+      look: { skin: 0xe6bf9a, body: 0xd9b25f, legs: 0x5a3d22, hair: 0x9a4a22, longHair: true, female: true, robe: true, weapon: false },
+      desc: 'Pon a la venta tus objetos al precio que quieras y compra lo que venden otros aventureros (tecla U).',
+    },
+    {
+      id: 'portal_red_ciudadela', role: 'portal', prop: 'portal', portalColor: 0x7dffc0, name: 'Portal de los Viajeros', title: 'Red de portales', x: -91, z: -71,
+      desc: 'Te lleva a cualquier aldea o zona que ya hayas visitado, a cambio de un poco de oro.',
+    },
+    {
+      id: 'subasta_ciudadela', role: 'market', name: 'Subastador Gaspar', title: 'Mercado de Aventureros', x: -111, z: -51,
+      look: { skin: 0xd9a77e, body: 0xd9b25f, legs: 0x3a2e40, hair: 0x2a1c12, beard: true, robe: true, weapon: false },
+      desc: 'Pon a la venta tus objetos al precio que quieras y compra lo que venden otros aventureros (tecla U).',
+    },
+    // Villa Nevada
+    {
+      id: 'nilo', role: 'shop', shop: 'nilo', name: 'Mercader Nilo', title: 'Comerciante de Villa Nevada', x: -53.9, z: 238.5,
+      look: { skin: 0xe8c4a2, body: 0x3a6ad8, legs: 0x2a2c55, hair: 0xe6e0d6, beard: true, cape: 0xeef4fc, weapon: false },
+      desc: 'Vende pociones, gemas y equipo de grados Diamante Dorado y Cometa Plateado.',
+    },
+    {
+      id: 'sanadora_nevada', role: 'heal', name: 'Sanadora Nieves', title: 'Sacerdotisa', x: -66.1, z: 238.5,
+      look: { skin: 0xf0d8c0, body: 0xeef4fc, legs: 0xcfd8e6, hair: 0xffffff, longHair: true, female: true, robe: true, weapon: false },
+      desc: 'Restaura tu vida y tu maná, gratis, fuera de combate.',
+    },
+    {
+      id: 'guia_nevada', role: 'guide', name: 'Explorador Bruno', title: 'Guía de las Tierras Lejanas', x: -63.5, z: 229,
+      look: { skin: 0xc99a74, body: 0x8a5a34, legs: 0x3b3127, hair: 0x2a1c12, cape: 0xd84a3a, weaponType: 'sword' },
+      desc: 'Te recomienda a qué zona ir según tu nivel.',
+    },
+    {
+      id: 'portal_nevada', role: 'portal', prop: 'portal', portalColor: 0x7dffc0, name: 'Portal de los Viajeros', title: 'Red de portales', x: -60, z: 244,
+      desc: 'Te lleva a cualquier aldea o zona que ya hayas visitado, a cambio de un poco de oro.',
+    },
+    {
+      id: 'subasta_nevada', role: 'market', name: 'Subastadora Olga', title: 'Mercado de Aventureros', x: -53.9, z: 231.5,
+      look: { skin: 0xf0d8c0, body: 0xd9b25f, legs: 0x3a2e40, hair: 0xbfb8ab, longHair: true, female: true, robe: true, weapon: false },
+      desc: 'Pon a la venta tus objetos al precio que quieras y compra lo que venden otros aventureros (tecla U).',
+    },
+    // Oasis del Sol
+    {
+      id: 'safira', role: 'shop', shop: 'safira', name: 'Mercader Safira', title: 'Comerciante del Oasis', x: -4.5, z: -252.6,
+      look: { skin: 0xb07850, body: 0xd84a3a, legs: 0xf2c13a, hair: 0x1a1210, longHair: true, female: true, robe: true, weapon: false },
+      desc: 'Vende pociones, gemas y equipo de grado Cometa Plateado.',
+    },
+    {
+      id: 'sanador_oasis', role: 'heal', name: 'Sanador Amir', title: 'Clérigo del Oasis', x: -5.4, z: -262.5,
+      look: { skin: 0xb07850, body: 0xf4f0e6, legs: 0xe0d8c6, hair: 0x1a1210, beard: true, robe: true, weapon: false },
+      desc: 'Restaura tu vida y tu maná, gratis, fuera de combate.',
+    },
+    {
+      id: 'herrera', role: 'shop', shop: 'aurora', name: 'Herrera de la Aurora', title: 'Forja Boreal', x: 5.4, z: -262.5,
+      look: { skin: 0xc99a74, body: 0x3a8a6a, legs: 0x2a3a34, hair: 0x7dffc0, longHair: true, female: true, weapon: false },
+      desc: 'Cambia Fragmentos de Aurora (los sueltan los monstruos y jefes de las tierras lejanas) por equipo Cometa Plateado y Aurora Eterna.',
+    },
+    {
+      id: 'portal_oasis', role: 'portal', prop: 'portal', portalColor: 0x7dffc0, name: 'Portal de los Viajeros', title: 'Red de portales', x: 0, z: -265,
+      desc: 'Te lleva a cualquier aldea o zona que ya hayas visitado, a cambio de un poco de oro.',
+    },
+    {
+      id: 'subasta_oasis', role: 'market', name: 'Subastador Omar', title: 'Mercado de Aventureros', x: 4.9, z: -253,
+      look: { skin: 0xb07850, body: 0xd9b25f, legs: 0x5a3d22, hair: 0x1a1210, beard: true, robe: true, weapon: false },
+      desc: 'Pon a la venta tus objetos al precio que quieras y compra lo que venden otros aventureros (tecla U).',
+    },
   ];
+
+  // ---------- Red de portales ----------
+  // Destinos del Portal de los Viajeros: aldeas y zonas. Solo aparecen las que el jugador ya visitó
+  // (las guarda el sistema «viajes» en p.ext.viajes). price: oro que cuesta el viaje.
+  const PORTAL_DESTS = [
+    { id: 'aldea', price: 100 },
+    { id: 'ciudadela', price: 200 },
+    { id: 'nevada', price: 800 },
+    { id: 'oasis', price: 1200 },
+    { id: 'praderas', price: 50 },
+    { id: 'bosque', price: 100 },
+    { id: 'minas', price: 200 },
+    { id: 'valle', price: 400 },
+    { id: 'islas', price: 600 },
+    { id: 'tundra', price: 900 },
+    { id: 'pantano', price: 1100 },
+    { id: 'desierto', price: 1400 },
+    { id: 'canon', price: 1700 },
+    { id: 'eclipse', price: 2000 },
+  ];
+  const portalDest = (id) => PORTAL_DESTS.find((d) => d.id === id) || null;
+
+  // ---------- Mercado entre jugadores ----------
+  // maxListings: publicaciones a la vez por personaje · maxPrice: precio máximo por unidad ·
+  // tax: impuesto que se descuenta al vendedor · minLvl: nivel mínimo para vender
+  const MARKET = { maxListings: 10, maxPrice: 9999999, tax: 0.05, minLvl: 5, maxTotal: 4000, pageSize: 40 };
+  // Protección al reaparecer: segundos en que nadie puede atacarte (se pierde si atacas)
+  const SPAWN_PROTECT = 6;
 
   // Aspecto según raza y sexo
   function lookFor(cls, sex) {
@@ -1029,7 +1312,7 @@
     ARCHETYPES, ARCHETYPE_IDS, CLASSES, CLASS_IDS, isArchetype, STAGES, PROGRESSION,
     raceName, className, skillsFor, passiveFor, skillLock, skillLevel, skillMaxLevel, skillPower, skillMp, skillNextAt, SKILL_LVL_EVERY, SKILL_POWER_PER, SKILL_MP_PER, lookFor, playerBaseStats, mobStats,
     ITEMS, WEAPON_TIERS, ARMOR_TIERS, weaponFor, armorFor, startGear, equipProblem,
-    ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT,
+    ZONES, MOBS, TOP_MOB_LVL, TOP_BOSS, questFor, resolveDrop, shopFor, sellPrice, NPCS, GEM_MULT, PORTAL_DESTS, portalDest, MARKET, SPAWN_PROTECT,
     ARENAS, SHOPS, shopItems, MOB_H, mobHeight, PHRASES,
     GUILD_LVL, GUILD_COST, GUILD_MAX, GUILD_RANKS, GUILD_EMBLEMS, GUILD_COLORS,
     EMOTES, EMOTE_CD, MENTOR, FRIEND_SHOP, friendItem, albumData, COMBO_TAGS, COMBOS, comboFor,

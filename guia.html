@@ -44,6 +44,8 @@
     <a href="#zonas">Zonas y monstruos</a>
     <a href="#equipo">Equipo y objetos</a>
     <a href="#npcs">Personajes de la aldea</a>
+    <a href="#portales">Red de portales</a>
+    <a href="#mercado">Mercado</a>
     <a href="#grupos">Grupos</a>
     <a href="#gremios">Gremios</a>
     <a href="#pvp">PvP y PK</a>
@@ -126,19 +128,27 @@
 
     <section id="niveles">
       <h2>Niveles y experiencia</h2>
-      <p>Ganas experiencia al derrotar monstruos. Los que están 3 o más niveles por encima de ti dan un 20% extra; los que están 4 o más por debajo dan mucho menos. El nivel máximo es <strong>50</strong>. Al subir de nivel recuperas toda la vida y el maná, y aumentan tus estadísticas. Si caes, no pierdes experiencia ni objetos: despiertas en un lugar seguro cerca.</p>
+      <p>Ganas experiencia al derrotar monstruos. Los que están 3 o más niveles por encima de ti dan un 20% extra; los que están 4 o más por debajo dan mucho menos. El nivel máximo es <strong>80</strong>; desde el nivel 50 cada nivel pide bastante más experiencia. Al subir de nivel recuperas toda la vida y el maná, y aumentan tus estadísticas. Si caes, no pierdes experiencia ni objetos: despiertas en un lugar seguro cerca (en las tierras lejanas, en la aldea más cercana) y quedas <strong>protegido 6 segundos</strong>: ni monstruos, ni jefes, ni otros jugadores pueden atacarte, y lo ves con una burbuja dorada. La protección se termina antes si atacas.</p>
       <div id="guideLevels"></div>
     </section>
 
     <section id="zonas">
       <h2>Zonas y monstruos</h2>
-      <p>Los monstruos reaparecen unos segundos después de morir (los jefes tardan de 5 a 15 minutos). Si te alejas mucho de su zona dejan de perseguirte y vuelven a su sitio. Nunca te siguen dentro de la aldea.</p>
+      <p>Los monstruos reaparecen unos segundos después de morir (los jefes tardan de 5 a 20 minutos). Si te alejas mucho de su zona dejan de perseguirte y vuelven a su sitio. Nunca te siguen dentro de las aldeas.</p>
+      <p>Más allá de las tierras del centro están las <strong>tierras lejanas</strong> (niveles 40 a 80), con dos aldeas nuevas, <strong>Villa Nevada</strong> al norte y el <strong>Oasis del Sol</strong> al sur, unidas por caminos con la Aldea de los Bloques y la Ciudadela. Cada zona nueva tiene un jefe con su propia mecánica:</p>
+      <ul class="plain">
+        <li><strong>Reina de la Escarcha</strong> (Tundra, 48): «¡Muévete o te congelas!». Quien esté quieto al terminar la ventisca queda congelado.</li>
+        <li><strong>Hidra del Pantano</strong> (Pantano, 56): escupe charcos venenosos que se quedan en el suelo un rato. No los pises.</li>
+        <li><strong>Gran Esfinge de Arena</strong> (Desierto, 64): un remolino te arrastra hacia ella y en el centro hace mucho daño. ¡Corre en contra!</li>
+        <li><strong>Coloso Prismático</strong> (Cañón, 72): estrellas en el suelo y un Escudo Espejo que devuelve los golpes: deja de atacar mientras brilla.</li>
+        <li><strong>Rey del Eclipse</strong> (Ruinas, 80): todo se oscurece y solo se salva quien está dentro del círculo de luz. A la mitad de su vida llama a sus caballeros.</li>
+      </ul>
       <div id="guideZones"></div>
     </section>
 
     <section id="equipo">
       <h2>Equipo y objetos</h2>
-      <p>Haz clic en un objeto del inventario para equiparlo o usarlo, y en tu equipo para quitártelo. El equipo tiene seis grados: <span class="rar" style="color:#b9b2a4">Madera</span> (nivel 1), <span class="rar" style="color:#8fd37a">Cobre</span> (5), <span class="rar" style="color:#74aaff">Cristal Azul</span> (10, con el Despertar), <span class="rar" style="color:#c895ff">Oro Morado</span> (20), <span class="rar" style="color:#ffc44d">Diamante Dorado</span> (25, con la Especialización) y <span class="rar" style="color:#ff8adf">Arcoíris Celestial</span> (40, con la Ascensión). Cuando un monstruo suelta un arma o armadura, siempre es para tu raza. En grupo, cada jugador recibe su propio botín.</p>
+      <p>Haz clic en un objeto del inventario para equiparlo o usarlo, y en tu equipo para quitártelo. El equipo tiene ocho grados: <span class="rar" style="color:#b9b2a4">Madera</span> (nivel 1), <span class="rar" style="color:#8fd37a">Cobre</span> (5), <span class="rar" style="color:#74aaff">Cristal Azul</span> (10, con el Despertar), <span class="rar" style="color:#c895ff">Oro Morado</span> (20), <span class="rar" style="color:#ffc44d">Diamante Dorado</span> (25, con la Especialización), <span class="rar" style="color:#ff8adf">Arcoíris Celestial</span> (40, con la Ascensión), <span class="rar" style="color:#9fe8ff">Cometa Plateado</span> (55) y <span class="rar" style="color:#7dffc0">Aurora Eterna</span> (70). Cuando un monstruo suelta un arma o armadura, siempre es para tu raza. En grupo, cada jugador recibe su propio botín.</p>
       <h3>Armas por raza</h3>
       <div id="guideWeapons"></div>
       <h3>Armaduras por tipo</h3>
@@ -153,6 +163,28 @@
       <div class="npcs" id="guideNpcs"></div>
     </section>
 
+
+    <section id="portales">
+      <h2>Red de portales</h2>
+      <p>En cada aldea (la Aldea de los Bloques, la Ciudadela, Villa Nevada y el Oasis del Sol) hay un <strong>Portal de los Viajeros</strong>. Háblale para abrir la lista de destinos:</p>
+      <ul class="plain">
+        <li>Solo aparecen las aldeas y zonas que <strong>ya visitaste caminando</strong> al menos una vez.</li>
+        <li>Cada viaje cuesta <strong>oro</strong> según el destino (más lejos, más caro).</li>
+        <li>No se puede viajar <strong>en pleno combate</strong>.</li>
+      </ul>
+    </section>
+
+    <section id="mercado">
+      <h2>Mercado de Aventureros</h2>
+      <p>Compra lo que venden otros jugadores y pon tus cosas a la venta al precio que quieras. Ábrelo con <kbd>U</kbd> o hablando con un <strong>Subastador</strong> en cualquier aldea:</p>
+      <ul class="plain">
+        <li><strong>Comprar</strong>: busca por nombre, filtra por tipo (equipo, consumibles, otros) y ordena por precio. Con varias unidades eliges cuántas.</li>
+        <li><strong>Vender</strong>: elige un objeto de tu mochila, la cantidad y el precio por unidad. El objeto sale de tu mochila al publicarlo; si lo retiras, vuelve.</li>
+        <li>Cuando alguien compra, recibes el oro al instante (menos un <strong>5% de impuesto</strong>). Si no estás conectado, te llega al entrar.</li>
+        <li>Hasta <strong>10 publicaciones</strong> a la vez, desde el nivel 5. Los objetos de misión (como el Huevo de Mascota) no se venden.</li>
+        <li>Comprar, vender y retirar solo se puede dentro de una aldea; mirar, desde cualquier sitio.</li>
+      </ul>
+    </section>
 
     <section id="grupos">
       <h2>Grupos</h2>
@@ -196,6 +228,7 @@
       <ul class="plain">
         <li><strong>Inventario</strong> (<kbd>I</kbd>): pestañas Todo, Equipo, Consumibles, Misión y Otros; tu oro, los espacios usados y la opción <strong>Destruir</strong>.</li>
         <li><strong>Misiones</strong> (<kbd>J</kbd>): tu misión de cambio de clase y su progreso.</li>
+        <li><strong>Mercado</strong> (<kbd>U</kbd>): comprar y vender con otros jugadores.</li>
         <li><strong>Estado</strong> (<kbd>C</kbd>): estadísticas a la izquierda y habilidades a la derecha.</li>
         <li><strong>Configuración</strong> (<kbd>O</kbd>, también en la pantalla de inicio): calidad gráfica, visibilidad de personajes, distancia de visión, límite de FPS, sombras, brillo, gamma, contraste, saturación y volumen.</li>
         <li>Los avisos importantes (subidas de nivel, misiones, falta de maná) aparecen en el centro de la pantalla.</li>

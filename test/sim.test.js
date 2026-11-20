@@ -69,9 +69,9 @@ const ok = (cond, msg) => {
   }
   ok(Data.CLASS_IDS.every((c) => Data.CLASSES[c].skills.length === 5 && Object.keys(Data.CLASSES[c].branches).length === 2), 'cada raza tiene 5 habilidades y 2 ramas');
   ok(Data.CLASS_IDS.every((c) => Data.skillsFor(c, 0).length === 6 && Data.skillsFor(c, 0).filter((s) => s.lvl === 1).length === 3), 'en el nivel 1 hay 3 habilidades y la barra tiene 6 casillas');
-  ok(Data.CLASS_IDS.every((c) => Data.WEAPON_TIERS[c].length === 6 && Data.WEAPON_TIERS[c].every((id) => Data.ITEMS[id] && Data.ITEMS[id].cls === c && Data.CLASSES[c].weaponTypes.includes(Data.ITEMS[id].weaponType))), 'cada raza tiene un arma de su tipo por grado');
-  ok(Object.values(Data.ARMOR_TIERS).every((ids) => ids.length === 6 && ids.every((id) => Data.ITEMS[id])), 'cada tipo de armadura tiene los 6 grados');
-  ok(Data.MAX_LEVEL === 50, 'el nivel máximo es 50');
+  ok(Data.CLASS_IDS.every((c) => Data.WEAPON_TIERS[c].length === 8 && Data.WEAPON_TIERS[c].every((id) => Data.ITEMS[id] && Data.ITEMS[id].cls === c && Data.CLASSES[c].weaponTypes.includes(Data.ITEMS[id].weaponType))), 'cada raza tiene un arma de su tipo por grado');
+  ok(Object.values(Data.ARMOR_TIERS).every((ids) => ids.length === 8 && ids.every((id) => Data.ITEMS[id])), 'cada tipo de armadura tiene los 8 grados');
+  ok(Data.MAX_LEVEL === 80, 'el nivel máximo es 80');
 }
 
 // 1) Cada raza caza en una zona de su nivel
@@ -218,7 +218,9 @@ for (const cls of Data.CLASS_IDS) {
   p.level = sk.lvl + Data.SKILL_LVL_EVERY;
   ok(Data.skillLevel(p, sk) === 2, `sube a Nv 2 a los ${Data.SKILL_LVL_EVERY} niveles`);
   p.level = 50;
-  ok(Data.skillLevel(p, sk) === Data.skillMaxLevel(sk) && Data.skillMaxLevel(sk) === 8, 'llega como máximo a Nv 8');
+  ok(Data.skillLevel(p, sk) === 10, 'en el nivel 50 una habilidad del nivel 1 va en Nv 10');
+  p.level = 80;
+  ok(Data.skillLevel(p, sk) === Data.skillMaxLevel(sk) && Data.skillMaxLevel(sk) === 12, 'llega como máximo a Nv 12 (nivel máximo 80)');
   const ult = p.skills.find((s) => s.ultimate);
   p.level = 1;
   ok(!ult || Data.skillLevel(p, ult) === 0, 'una habilidad bloqueada no tiene nivel');
@@ -1093,7 +1095,7 @@ for (const cls of Data.CLASS_IDS) {
   const w = Sim.createWorld();
   Sim.spawnMobs(w);
   const ids = Data.ZONES.map((z) => z.id).join(',');
-  ok(ids === 'aldea,praderas,bosque,minas,ciudadela,valle,islas', 'el mundo tiene las 6 zonas del documento más la aldea');
+  ok(ids.startsWith('aldea,praderas,bosque,minas,ciudadela,valle,islas,'), 'el mundo conserva las 6 zonas del documento y la aldea (más las tierras lejanas)');
   ok(Data.TOP_BOSS === 'guardian' && ['rey_tronco', 'mega_automata', 'ignis', 'guardian'].every((k) => Data.MOBS[k].boss), 'hay 4 jefes y el Gran Guardián es el de la Ascensión');
   ok(w.mobs.every((m) => !Terrain.inSafe(m.pos)), 'ningún monstruo aparece en la aldea ni en la Ciudadela');
   const isl = Data.ZONES.find((z) => z.id === 'islas');
@@ -1187,6 +1189,296 @@ for (const cls of Data.CLASS_IDS) {
   gd.hp = gd.maxHp * 0.49;
   run(w, 0.5, () => (gg.hp = gg.stats.maxHp));
   ok(w.mobs.filter((m) => m.temp).length === 3, 'el Gran Guardián Celestial llama 3 refuerzos a la mitad de su vida');
+}
+
+// 15) v0.31: nivel máximo 80, tierras lejanas, red de portales, protección al reaparecer,
+//     destello de las gemas y mercado entre jugadores
+{
+  // Nivel 80 y progresión
+  ok(Data.xpToNext(60) > Data.xpToNext(50) * 1.5 && Data.xpToNext(79) > 0, 'la experiencia por nivel se empina después del 50');
+  const w = Sim.createWorld();
+  const Viajes = require('../juego/src/systems/viajes.js');
+  Sim.useSystem(w, Viajes);
+  Sim.spawnMobs(w);
+  const vet = Sim.addPlayer(w, { ...Sim.newCharacter('Veterana', 'lagarto', 'f'), level: 79, stage: 3, branch: 'a' });
+  vet.xp = Data.xpToNext(79) - 1;
+  const lvlMob = w.mobs.find((m) => m.key === 'gargola');
+  run(w, 0.05);
+  vet.xp += 10;
+  // gainXp interno: se usa matando un monstruo de su nivel
+  lvlMob.hp = 1;
+  vet.pos.x = lvlMob.pos.x + 1.5;
+  vet.pos.z = lvlMob.pos.z;
+  C.setTarget(w, vet, lvlMob);
+  C.attack(w, vet);
+  run(w, 2, () => (vet.hp = vet.stats.maxHp));
+  ok(vet.level === 80, 'se puede llegar al nivel 80');
+  vet.xp = 0;
+  const xp0 = vet.xp;
+  const m2 = w.mobs.find((m) => m.key === 'gargola' && !m.dead && m !== lvlMob);
+  m2.hp = 1;
+  vet.pos.x = m2.pos.x + 1.5;
+  vet.pos.z = m2.pos.z;
+  C.setTarget(w, vet, m2);
+  C.attack(w, vet);
+  run(w, 2, () => (vet.hp = vet.stats.maxHp));
+  ok(vet.level === 80 && vet.xp === xp0, 'en el nivel 80 ya no se gana experiencia (es el máximo)');
+  ok(Data.equipProblem({ cls: 'lagarto', level: 69, stage: 3 }, Data.ITEMS[Data.weaponFor('lagarto', 'aurora')]) && !Data.equipProblem({ cls: 'lagarto', level: 70, stage: 3 }, Data.ITEMS[Data.weaponFor('lagarto', 'aurora')]), 'el grado Aurora Eterna pide nivel 70');
+  ok(Data.MOBS.rey_eclipse.lvl[1] === 80 && Data.ZONES.filter((z) => z.lvl && /^(4|5|6|7)\d–/.test(z.lvl)).length === 5, 'hay 5 zonas nuevas de los niveles 40 a 80 y su último jefe es nivel 80');
+  const newBosses = ['reina_escarcha', 'hidra', 'esfinge', 'coloso', 'rey_eclipse'];
+  ok(newBosses.every((k) => Data.MOBS[k].boss && Data.MOBS[k].mech && w.mobs.some((m) => m.key === k)), 'los 5 jefes nuevos aparecen y tienen su mecánica');
+  ok(new Set(newBosses.map((k) => Data.MOBS[k].mech.type)).size === 5, 'cada jefe nuevo tiene una mecánica distinta');
+  ok(Data.TOP_BOSS === 'guardian', 'la Ascensión Maestra sigue pidiendo al Gran Guardián (no a los jefes nuevos)');
+
+  // Mundo más grande, aldeas nuevas seguras y conectadas por caminos
+  ok(Terrain.WORLD_LIMIT >= 320, 'el mundo es mucho más grande (radio 326)');
+  for (const id of ['nevada', 'oasis']) {
+    const z = Data.ZONES.find((x) => x.id === id);
+    ok(z.safe && Terrain.inSafe(z) && ['shop', 'heal', 'portal', 'market'].every((r) => Data.NPCS.some((n) => n.role === r && Terrain.zoneAt(n) && Terrain.zoneAt(n).id === id)), `${z.name} es zona segura con mercader, sanador, portal y subastador`);
+    ok(Terrain.pathDist(z.x, z.z) < 1, `un camino llega a ${z.name}`);
+  }
+  ok(w.mobs.every((m) => !Terrain.inSafe(m.pos)), 'ningún monstruo aparece dentro de las aldeas nuevas');
+  // Los caminos no cruzan aguas profundas: todo se puede recorrer a pie
+  let deep = 0;
+  for (const r of Terrain.ROADS) {
+    const len = Math.hypot(r[2] - r[0], r[3] - r[1]);
+    for (let k = 0; k <= len; k += 2) if (Terrain.waterDepth(r[0] + ((r[2] - r[0]) * k) / len, r[1] + ((r[3] - r[1]) * k) / len) > Terrain.SWIM_DEPTH) deep++;
+  }
+  ok(deep === 0, 'los caminos entre aldeas no cruzan aguas profundas');
+
+  // Red de portales
+  const pa = Data.NPCS.find((n) => n.id === 'portal_aldea');
+  const tr = Sim.addPlayer(w, { ...Sim.newCharacter('Viajero', 'elfo'), level: 45, stage: 3, branch: 'a', gold: 5000, pos: { x: pa.x + 1, z: pa.z + 1 } });
+  run(w, 0.1);
+  ok(tr.ext.viajes.known.includes('aldea') && !tr.ext.viajes.known.includes('nevada'), 'al empezar solo se conoce la aldea');
+  C.talkTo(w, tr, 'portal_aldea');
+  const ev = Sim.drainEvents(w);
+  ok(ev.some((e) => e.type === 'openPortal' && e.to === tr.id), 'hablar con el portal abre la ventana de destinos');
+  Sim.systemCommand(w, tr, 'viajes', 'go', 'nevada');
+  ok(Terrain.zoneAt(tr.pos).id === 'aldea' && tr.gold === 5000, 'no se puede viajar a un lugar que no conoces (y no cobra)');
+  // Visitar Villa Nevada caminando la agrega a la lista
+  const nv = Data.ZONES.find((z) => z.id === 'nevada');
+  tr.pos.x = nv.x;
+  tr.pos.z = nv.z + 4;
+  run(w, 0.1);
+  ok(tr.ext.viajes.known.includes('nevada'), 'al llegar a Villa Nevada se aprende como destino');
+  tr.pos.x = pa.x + 1;
+  tr.pos.z = pa.z + 1;
+  run(w, 0.1);
+  tr.combatT = 5;
+  Sim.systemCommand(w, tr, 'viajes', 'go', 'nevada');
+  ok(Terrain.zoneAt(tr.pos).id === 'aldea' && tr.gold === 5000, 'en combate no se puede usar el portal');
+  tr.combatT = 0;
+  tr.gold = 100;
+  Sim.systemCommand(w, tr, 'viajes', 'go', 'nevada');
+  ok(Terrain.zoneAt(tr.pos).id === 'aldea' && tr.gold === 100, 'sin oro suficiente no se viaja');
+  tr.gold = 5000;
+  Sim.systemCommand(w, tr, 'viajes', 'go', 'nevada');
+  ok(Terrain.zoneAt(tr.pos).id === 'nevada' && tr.gold === 5000 - Data.portalDest('nevada').price, `el viaje a Villa Nevada cobra ${Data.portalDest('nevada').price} de oro`);
+  Sim.systemCommand(w, tr, 'viajes', 'go', 'aldea');
+  ok(Terrain.zoneAt(tr.pos).id === 'aldea', 'desde el portal de Villa Nevada se vuelve a la aldea');
+  tr.pos.x = 40;
+  tr.pos.z = 40;
+  const g1 = tr.gold;
+  Sim.systemCommand(w, tr, 'viajes', 'go', 'nevada');
+  ok(tr.gold === g1 && Math.hypot(tr.pos.x - 40, tr.pos.z - 40) < 1, 'lejos de un portal no se puede viajar');
+  ok(Data.PORTAL_DESTS.every((d) => Viajes.arrival(d.id) && Terrain.waterDepth(Viajes.arrival(d.id).x, Viajes.arrival(d.id).z) < Terrain.SWIM_DEPTH), 'todos los destinos tienen un punto de llegada en tierra firme');
+
+  // Protección al reaparecer
+  const vz = Data.ZONES.find((z) => z.id === 'tundra');
+  const dead = Sim.addPlayer(w, { ...Sim.newCharacter('Caida', 'hada', 'f'), level: 44, stage: 3, branch: 'a', pos: { x: vz.x, z: vz.z } });
+  dead.hp = 1;
+  const snow = w.mobs.find((m) => m.key === 'muneco_nieve' && !m.dead);
+  snow.aggro = dead;
+  snow.pos.x = dead.pos.x + 1;
+  snow.pos.z = dead.pos.z;
+  run(w, 3);
+  ok(dead.dead, 'un muñeco de nieve derrota a la jugadora');
+  C.respawn(w, dead);
+  ok(!dead.dead && dead.protT > 0 && Sim.isProtected(dead), 'al reaparecer queda protegida unos segundos');
+  ok(Terrain.zoneAt(dead.pos) && Terrain.zoneAt(dead.pos).id === 'nevada', 'en las tierras lejanas se reaparece en la aldea más cercana (Villa Nevada)');
+  ok(Sim.buffList(dead).some((b) => b.name === 'Protección al reaparecer'), 'la protección se ve en la lista de efectos');
+  // Ni monstruos, ni jefes, ni jugadores pueden dañarla mientras dura
+  dead.pos.x = snow.pos.x + 1;
+  dead.pos.z = snow.pos.z;
+  const hpP = dead.hp;
+  snow.aggro = dead;
+  snow.state = 'idle';
+  snow.atkTimer = 0;
+  run(w, 1.5);
+  ok(dead.hp >= hpP && snow.aggro !== dead, 'los monstruos no la atacan ni la persiguen mientras está protegida');
+  const queen = w.mobs.find((m) => m.key === 'reina_escarcha');
+  const ph = dead.hp;
+  Sim.drainEvents(w);
+  // bossHit también la ignora (se prueba con la ventisca de la Reina más abajo)
+  const pk = Sim.addPlayer(w, { ...Sim.newCharacter('Malvado', 'oso'), level: 50, pos: { x: dead.pos.x + 1.5, z: dead.pos.z } });
+  C.setTarget(w, pk, dead);
+  C.attack(w, pk, true);
+  run(w, 1.5, () => (dead.protT = Math.max(dead.protT, 1)));
+  ok(dead.hp >= ph && !dead.dead, 'otro jugador no puede atacarla mientras está protegida (aunque fuerce el ataque)');
+  // Se pierde si ataca
+  const prey = w.mobs.find((m) => m.key === 'pinguino' && !m.dead);
+  dead.pos.x = prey.pos.x + 1.5;
+  dead.pos.z = prey.pos.z;
+  C.setTarget(w, dead, prey);
+  C.attack(w, dead);
+  run(w, 1.5);
+  ok(dead.protT === 0 && !Sim.isProtected(dead), 'la protección se pierde al atacar');
+  // Y se acaba sola a los pocos segundos
+  const late = Sim.addPlayer(w, { ...Sim.newCharacter('Tardia', 'gnomo'), level: 20 });
+  late.dead = true;
+  late.diedAt = { x: 0, z: 0 };
+  C.respawn(w, late);
+  run(w, Data.SPAWN_PROTECT + 0.5);
+  ok(late.protT === 0, `la protección dura ${Data.SPAWN_PROTECT} segundos`);
+
+  // Destello de las Gemas de Poder: un evento por golpe con gema, anclado a quien golpea
+  const gm = Sim.addPlayer(w, { ...Sim.newCharacter('Gemas', 'lagarto'), level: 20, gemsOn: true });
+  gm.inv.push({ id: 'gema_poder', qty: 5 });
+  const gems0 = Sim.countItem(gm, 'gema_poder');
+  const tgt = w.mobs.find((m) => m.key === 'hongo' && !m.dead);
+  tgt.maxHp = tgt.hp = 1e6;
+  gm.pos.x = tgt.pos.x + 1.5;
+  gm.pos.z = tgt.pos.z;
+  C.setTarget(w, gm, tgt);
+  C.attack(w, gm);
+  Sim.drainEvents(w);
+  let flashes = 0;
+  run(w, 3, () => (flashes += Sim.drainEvents(w).filter((e) => e.type === 'gemFlash' && e.ent === gm).length));
+  ok(flashes >= 2 && flashes === gems0 - Sim.countItem(gm, 'gema_poder'), 'cada golpe con Gema de Poder lanza un destello (uno por gema gastada)');
+  gm.gemsOn = false;
+  flashes = 0;
+  run(w, 2, () => (flashes += Sim.drainEvents(w).filter((e) => e.type === 'gemFlash').length));
+  ok(flashes === 0, 'sin gemas activas no hay destello');
+
+  // Jefes nuevos: Reina (muévete o te congelas), Hidra (charcos), Esfinge (remolino),
+  // Coloso (escudo espejo) y Rey del Eclipse (círculo de luz)
+  const still = Sim.addPlayer(w, { ...Sim.newCharacter('Quieta', 'oso', 'f'), level: 48, stage: 3, branch: 'a', pos: { x: queen.pos.x + 6, z: queen.pos.z } });
+  const mover = Sim.addPlayer(w, { ...Sim.newCharacter('Movil', 'oso'), level: 48, stage: 3, branch: 'a', pos: { x: queen.pos.x - 6, z: queen.pos.z } });
+  const prot = Sim.addPlayer(w, { ...Sim.newCharacter('Protegido', 'oso'), level: 48, stage: 3, branch: 'a', pos: { x: queen.pos.x, z: queen.pos.z + 6 } });
+  queen.aggro = still;
+  queen.mechT = 0.05;
+  const hs = still.hp;
+  const hm = mover.hp;
+  run(w, Data.MOBS.reina_escarcha.mech.warn + 0.3, () => {
+    C.setMoveDir(w, mover, { x: 0, z: 1 });
+    prot.protT = 1;
+    still.hp = Math.max(still.hp, 1);
+  });
+  C.setMoveDir(w, mover, null);
+  ok(still.debuffs.root && hs > still.hp, 'la Reina de la Escarcha congela a quien se queda quieto');
+  ok(!mover.debuffs.root, 'quien se mueve durante la ventisca se salva');
+  ok(prot.hp === prot.stats.maxHp && !prot.debuffs.root, 'las mecánicas de los jefes no dañan a quien acaba de reaparecer');
+
+  const hyd = w.mobs.find((m) => m.key === 'hidra');
+  const swamp = Sim.addPlayer(w, { ...Sim.newCharacter('Pantano', 'oso'), level: 56, stage: 3, branch: 'a', pos: { x: hyd.pos.x + 7, z: hyd.pos.z } });
+  hyd.aggro = swamp;
+  hyd.mechT = 0.05;
+  run(w, Data.MOBS.hidra.mech.delay + 0.2, () => (swamp.hp = swamp.stats.maxHp));
+  ok(hyd.puddles.length === Data.MOBS.hidra.mech.count, 'la Hidra escupe charcos que se quedan en el suelo');
+  const hpS = (swamp.hp = swamp.stats.maxHp);
+  run(w, 2.2);
+  ok(swamp.hp < hpS && swamp.debuffs.poison, 'pisar un charco de la Hidra hace daño y envenena');
+
+  const sph = w.mobs.find((m) => m.key === 'esfinge');
+  const sand = Sim.addPlayer(w, { ...Sim.newCharacter('Arena', 'oso'), level: 64, stage: 3, branch: 'a', pos: { x: sph.pos.x + 12, z: sph.pos.z } });
+  sph.aggro = sand;
+  sph.mechT = 0.05;
+  run(w, Data.MOBS.esfinge.mech.warn + 0.2, () => (sand.hp = sand.stats.maxHp));
+  const d0 = Math.hypot(sand.pos.x - sph.pos.x, sand.pos.z - sph.pos.z);
+  run(w, 1.5, () => (sand.hp = sand.stats.maxHp));
+  ok(Math.hypot(sand.pos.x - sph.pos.x, sand.pos.z - sph.pos.z) < d0 - 3, 'el remolino de la Esfinge arrastra a los jugadores hacia ella');
+
+  const col = w.mobs.find((m) => m.key === 'coloso');
+  const hit = Sim.addPlayer(w, { ...Sim.newCharacter('Espejo', 'lagarto'), level: 72, stage: 3, branch: 'a', pos: { x: col.pos.x + 3, z: col.pos.z } });
+  col.mirrorT = 3;
+  const hpC = col.hp;
+  const hpH = hit.hp;
+  C.setTarget(w, hit, col);
+  C.attack(w, hit);
+  run(w, 1.5);
+  ok(col.hp === hpC && hit.hp < hpH, 'el Escudo Espejo del Coloso devuelve el daño a quien le pega');
+
+  const rey = w.mobs.find((m) => m.key === 'rey_eclipse');
+  const lit = Sim.addPlayer(w, { ...Sim.newCharacter('Luz', 'oso'), level: 80, stage: 3, branch: 'a', pos: { x: rey.pos.x + 8, z: rey.pos.z } });
+  const dark = Sim.addPlayer(w, { ...Sim.newCharacter('Sombra', 'oso'), level: 80, stage: 3, branch: 'a', pos: { x: rey.pos.x - 8, z: rey.pos.z } });
+  rey.aggro = lit;
+  rey.mechT = 0.05;
+  Sim.drainEvents(w);
+  run(w, 0.1);
+  const tg = Sim.drainEvents(w).find((e) => e.type === 'telegraph');
+  lit.pos.x = tg.at.x;
+  lit.pos.z = tg.at.z;
+  const hL = (lit.hp = lit.stats.maxHp);
+  const hD = (dark.hp = dark.stats.maxHp);
+  run(w, Data.MOBS.rey_eclipse.mech.warn + 0.2, () => {
+    lit.pos.x = tg.at.x;
+    lit.pos.z = tg.at.z;
+  });
+  ok(lit.hp > hL * 0.8 && dark.hp < hD * 0.6 && hL - lit.hp < (hD - dark.hp) / 3, 'en el Eclipse solo se salva quien está dentro del círculo de luz');
+}
+
+// 16) Mercado entre jugadores
+{
+  const w = Sim.createWorld();
+  Sim.spawnMobs(w);
+  const seller = Sim.addPlayer(w, { ...Sim.newCharacter('Vendedora', 'elfo', 'f'), level: 20, gold: 100, pos: { x: 2, z: 2 } });
+  const buyer = Sim.addPlayer(w, { ...Sim.newCharacter('Comprador', 'oso'), level: 20, gold: 10000, pos: { x: -2, z: 2 } });
+  seller.inv.push({ id: 'polvo_arcoiris', qty: 10 }, { id: Data.weaponFor('elfo', 'morado'), qty: 1 });
+  const idx = (p, id) => p.inv.findIndex((s) => s.id === id);
+  const eggI = idx(seller, 'huevo_mascota');
+  if (eggI < 0) seller.inv.push({ id: 'huevo_mascota', qty: 1 });
+  C.marketSell(w, seller, idx(seller, 'huevo_mascota'), 1, 50);
+  ok(w.market.list.length === 0 && idx(seller, 'huevo_mascota') >= 0, 'los objetos de misión (el Huevo) no se pueden vender');
+  C.marketSell(w, seller, idx(seller, 'polvo_arcoiris'), 6, Data.MARKET.maxPrice + 1);
+  ok(w.market.list.length === 0, 'hay un precio máximo por unidad');
+  C.marketSell(w, seller, idx(seller, 'polvo_arcoiris'), 11, 100);
+  ok(w.market.list.length === 0 && Sim.countItem(seller, 'polvo_arcoiris') === 10, 'no se puede publicar más cantidad de la que tienes');
+  const l1 = C.marketSell(w, seller, idx(seller, 'polvo_arcoiris'), 6, 100);
+  ok(l1 && w.market.list.length === 1 && Sim.countItem(seller, 'polvo_arcoiris') === 4, 'publicar saca el objeto de la mochila (no se duplica)');
+  ok(w.marketDirty && w.marketSave.has(seller.id), 'el servidor guarda el mercado junto con el personaje que publicó');
+  const far = Sim.addPlayer(w, { ...Sim.newCharacter('Lejos', 'gnomo'), level: 20, gold: 5000, pos: { x: 52, z: 18 } });
+  C.marketBuy(w, far, l1.id, 1);
+  ok(far.gold === 5000 && w.market.list[0].qty === 6, 'fuera de una aldea no se puede comprar');
+  C.marketBuy(w, seller, l1.id, 1);
+  ok(w.market.list[0].qty === 6, 'no puedes comprar tus propias publicaciones');
+  const view = Sim.marketView(w, buyer, { cat: 'other' });
+  ok(view.items.length === 1 && view.items[0].seller === 'Vendedora', 'el comprador lo ve en la categoría Otros');
+  ok(Sim.marketView(w, buyer, { cat: 'equip' }).items.length === 0 && Sim.marketView(w, buyer, { q: 'arcoíris' }).items.length === 1 && Sim.marketView(w, buyer, { q: 'zzz' }).items.length === 0, 'se puede filtrar por categoría y buscar por nombre');
+  const s0 = seller.gold;
+  C.marketBuy(w, buyer, l1.id, 2);
+  ok(Sim.countItem(buyer, 'polvo_arcoiris') === 2 && buyer.gold === 10000 - 200 && w.market.list[0].qty === 4, 'comprar 2 de 6: se cobra y se recibe solo eso');
+  ok(seller.gold === s0 + 200 - Math.floor(200 * Data.MARKET.tax), `la vendedora conectada cobra al instante (menos el ${Math.round(Data.MARKET.tax * 100)}% de impuesto)`);
+  buyer.gold = 50;
+  C.marketBuy(w, buyer, l1.id, 4);
+  ok(w.market.list[0].qty === 4 && buyer.gold === 50, 'sin oro suficiente no se compra');
+  buyer.gold = 10000;
+  // Retirar: el objeto vuelve a la mochila
+  const l2 = C.marketSell(w, seller, idx(seller, Data.weaponFor('elfo', 'morado')), 1, 3000);
+  ok(l2 && idx(seller, Data.weaponFor('elfo', 'morado')) < 0, 'se publica un arma');
+  C.marketCancel(w, buyer, l2.id);
+  ok(w.market.list.some((l) => l.id === l2.id), 'nadie más puede retirar tu publicación');
+  C.marketCancel(w, seller, l2.id);
+  ok(!w.market.list.some((l) => l.id === l2.id) && idx(seller, Data.weaponFor('elfo', 'morado')) >= 0, 'al retirarla el arma vuelve a la mochila');
+  C.marketCancel(w, seller, l2.id);
+  ok(Sim.countItem(seller, Data.weaponFor('elfo', 'morado')) === 1, 'retirarla dos veces no la duplica');
+  // Límite de publicaciones
+  seller.inv.push({ id: 'pocion_vida', qty: 50 });
+  for (let i = 0; i < Data.MARKET.maxListings + 2; i++) C.marketSell(w, seller, idx(seller, 'pocion_vida'), 1, 10);
+  ok(w.market.list.filter((l) => l.seller === 'vendedora').length === Data.MARKET.maxListings, `cada personaje puede tener hasta ${Data.MARKET.maxListings} publicaciones`);
+  // Vendedora desconectada: el oro la espera y llega al entrar
+  const saved = Sim.serialize(seller);
+  Sim.removePlayer(w, seller.id);
+  C.marketBuy(w, buyer, l1.id, 4);
+  ok(!w.market.list.some((l) => l.id === l1.id) && w.market.pay.vendedora.gold === 400 - Math.floor(400 * Data.MARKET.tax), 'si la vendedora no está conectada, su oro queda guardado');
+  // El mercado se guarda y se carga (como lo hace el servidor)
+  const w2 = Sim.createWorld();
+  Sim.loadMarket(w2, JSON.parse(JSON.stringify(Sim.exportMarket(w))));
+  ok(w2.market.list.length === w.market.list.length && w2.market.pay.vendedora.gold === w.market.pay.vendedora.gold, 'el mercado se exporta y se vuelve a cargar igual');
+  const back = Sim.addPlayer(w2, saved);
+  ok(back.gold === saved.gold + w.market.pay.vendedora.gold && !w2.market.pay.vendedora && w2.marketSave.has(back.id), 'al volver a entrar cobra lo que vendió mientras no estaba');
+  Sim.marketForget(w2, 'Vendedora');
+  ok(!w2.market.list.some((l) => l.seller === 'vendedora'), 'si se borra el personaje, sus publicaciones desaparecen');
 }
 
 console.log(`\nSimulación OK: ${checks} comprobaciones superadas.`);

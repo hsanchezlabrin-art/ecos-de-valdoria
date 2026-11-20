@@ -59,6 +59,8 @@ function initUI() {
     guild: $('guildPanel'),
     album: $('albumPanel'),
     friend: $('friendPanel'),
+    portal: $('portalPanel'),
+    market: $('marketPanel'),
   };
   E.hud.hidden = false;
   E.pName.textContent = G.player.name;
@@ -83,6 +85,7 @@ function initUI() {
   $('btnGuild').onclick = () => togglePanel('guild');
   $('btnAlbum').onclick = () => togglePanel('album');
   $('btnFriend').onclick = () => togglePanel('friend');
+  $('btnMarket').onclick = () => toggleMarket();
   $('btnEmotes').onclick = () => toggleEmotes();
   buildEmoteWheel();
   $('btnGuildInv').onclick = () => G.playerSel && V.Game.guild.invite(G.playerSel.id);
@@ -732,7 +735,7 @@ function closeAll() {
     $('emoteWheel').hidden = true;
     return true;
   }
-  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help', 'quests', 'guild', 'album', 'friend']) {
+  for (const k of ['master', 'drop', 'map', 'stats', 'shop', 'inv', 'help', 'quests', 'guild', 'album', 'friend', 'portal', 'market']) {
     if (!E[k].hidden) {
       E[k].hidden = true;
       closed = true;
@@ -985,6 +988,8 @@ function refreshPanels() {
   if (!E.guild.hidden) renderGuild();
   if (!E.album.hidden) renderAlbum();
   if (!E.friend.hidden) renderFriend();
+  if (!E.portal.hidden) renderPortal();
+  if (!E.market.hidden) renderMarket();
   if (!E.shop.hidden) {
     const list = $('shopList');
     list.innerHTML = '';
@@ -1032,10 +1037,10 @@ function drawMinimap() {
   c.fillRect(0, 0, W, W);
   c.strokeStyle = 'rgba(176,146,98,.55)';
   c.lineWidth = 3;
-  for (const { x, z } of G.world.zones) {
+  for (const r of V.Terrain.ROADS) {
     c.beginPath();
-    c.moveTo(tx(0), tz(0));
-    c.lineTo(tx(x), tz(z));
+    c.moveTo(tx(r[0]), tz(r[1]));
+    c.lineTo(tx(r[2]), tz(r[3]));
     c.stroke();
   }
   for (const z of G.world.zones) {
@@ -1225,6 +1230,9 @@ function updateUI() {
     if (shopOpen() && (!sn || Math.hypot(p.pos.x - sn.root.position.x, p.pos.z - sn.root.position.z) > 8)) {
       togglePanel('shop', false);
     }
+    // El portal se cierra al alejarse de él
+    const pn = portalNpc && G.world.npcs.find((n) => n.id === portalNpc);
+    if (!E.portal.hidden && (!pn || Math.hypot(p.pos.x - pn.root.position.x, p.pos.z - pn.root.position.z) > 8)) togglePanel('portal', false);
   }
 }
 
@@ -1557,6 +1565,318 @@ function extChanged() {
   if (E && !E.stats.hidden) renderStats();
   if (E && !E.album.hidden) renderAlbum();
   if (E && !E.friend.hidden) renderFriend();
+  if (E && !E.portal.hidden) renderPortal();
+}
+
+const mk = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+const fmt = (n) => Math.round(n).toLocaleString('es');
+
+// ---------- Red de portales (Portal de los Viajeros) ----------
+// Solo aparecen los destinos que el jugador ya visitó; el servidor valida todo al viajar.
+
+let portalNpc = null;
+function openPortal(npcId) {
+  portalNpc = npcId;
+  $('portalBody').dataset.key = '';
+  togglePanel('portal', true);
+}
+
+function renderPortal() {
+  const p = G.player;
+  const known = (p.ext && p.ext.viajes && p.ext.viajes.known) || ['aldea'];
+  const npc = V.Data.NPCS.find((n) => n.id === portalNpc);
+  const here = npc ? zoneAt(npc) : null;
+  const box = $('portalBody');
+  const key = `${known.join(',')}|${p.gold}|${here ? here.id : ''}|${p.combatT > 0 ? 1 : 0}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = '';
+  const head = mk('div', 'pt-head');
+  head.append(mk('strong', '', `● ${fmt(p.gold)} oro`), mk('small', '', 'Elige a dónde viajar. Solo aparecen los lugares que ya visitaste caminando. No se puede viajar en pleno combate.'));
+  box.append(head);
+  const dests = V.Data.PORTAL_DESTS.filter((d) => known.includes(d.id));
+  for (const [title, villages] of [['Aldeas', true], ['Zonas de caza', false]]) {
+    const list = dests.filter((d) => {
+      const z = V.Data.ZONES.find((zz) => zz.id === d.id);
+      return z && !!(z.safe || z.id === 'aldea') === villages;
+    });
+    if (!list.length) continue;
+    const sec = mk('section', 'al-sec');
+    sec.append(mk('h3', '', title));
+    const ul = mk('ul', 'pt-list');
+    for (const d of list) {
+      const z = V.Data.ZONES.find((zz) => zz.id === d.id);
+      const li = mk('li', '');
+      const info = mk('div', '');
+      info.append(mk('strong', '', z.name), mk('small', '', z.safe || z.id === 'aldea' ? 'Zona segura' : `Nivel ${z.lvl}`));
+      const isHere = here && here.id === d.id;
+      const b = mk('button', 'buy', isHere ? 'Estás aquí' : `Viajar · ${fmt(d.price)} oro`);
+      b.type = 'button';
+      b.disabled = isHere || p.gold < d.price || p.combatT > 0;
+      if (!isHere && p.gold < d.price) b.title = `Te faltan ${fmt(d.price - p.gold)} de oro`;
+      b.onclick = () => {
+        V.Game.travel(d.id);
+        togglePanel('portal', false);
+      };
+      li.append(info, b);
+      ul.append(li);
+    }
+    sec.append(ul);
+    box.append(sec);
+  }
+  box.append(mk('p', 'hint', `Conoces ${dests.length} de ${V.Data.PORTAL_DESTS.length} destinos. Explora para descubrir más.`));
+}
+
+// ---------- Mercado entre jugadores (tecla U o un Subastador) ----------
+// Los datos llegan del servidor (UI.marketData). Comprar, vender y retirar solo se puede dentro de
+// una aldea; mirar, desde cualquier sitio.
+
+const market = { tab: 'buy', q: '', cat: '', sort: 'price', page: 0, data: null, sel: null, qty: 1, price: 0 };
+function toggleMarket(force) {
+  const open = force === undefined ? E.market.hidden : force;
+  togglePanel('market', open);
+  if (open) queryMarket();
+}
+function openMarket() {
+  toggleMarket(true);
+}
+function queryMarket() {
+  V.Game.market.query({ q: market.q, cat: market.cat, page: market.page, sort: market.sort });
+}
+function marketData(d) {
+  market.data = d;
+  market.page = d.page;
+  if (E && !E.market.hidden) renderMarket(true);
+}
+
+function itemIcon(id, qty) {
+  const it = ITEMS[id];
+  const ic = mk('span', 'mk-ic', it.glyph);
+  ic.style.setProperty('--r', RARITY[it.rarity] ? RARITY[it.rarity].color : '#cfc6b2');
+  if (qty > 1) ic.append(mk('i', '', String(qty)));
+  return ic;
+}
+
+function renderMarket(force) {
+  const p = G.player;
+  const box = $('marketBody');
+  const d = market.data;
+  const key = `${market.tab}|${JSON.stringify(d)}|${market.sel}|${p.gold}|${JSON.stringify(p.inv)}`;
+  if (!force && box.dataset.key === key) return;
+  // No se redibuja mientras se escribe en un campo del mercado (se perdería el foco)
+  if (!force && box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
+  box.dataset.key = key;
+  box.innerHTML = '';
+  const safe = V.Terrain.inSafe(p.pos);
+  const tabs = mk('div', 'inv-tabs');
+  for (const [id, label] of [['buy', 'Comprar'], ['sell', 'Vender'], ['mine', `Mis ventas${d ? ` (${d.mine.length}/${d.max})` : ''}`]]) {
+    const b = mk('button', id === market.tab ? 'on' : '', label);
+    b.type = 'button';
+    b.onclick = () => {
+      market.tab = id;
+      market.sel = null;
+      renderMarket(true);
+    };
+    tabs.append(b);
+  }
+  box.append(tabs);
+  const info = mk('p', 'mk-info');
+  info.append(mk('b', '', `● ${fmt(p.gold)} oro`), document.createTextNode(safe ? ' · Estás en una aldea: puedes comprar y vender.' : ' · Solo puedes mirar: para comprar o vender entra en una aldea.'));
+  box.append(info);
+  if (!d) {
+    box.append(mk('p', 'muted', 'Cargando el mercado…'));
+    return;
+  }
+
+  if (market.tab === 'buy') {
+    const bar = mk('div', 'mk-bar');
+    const search = mk('input', '');
+    search.type = 'search';
+    search.placeholder = 'Buscar objeto o vendedor';
+    search.value = market.q;
+    search.maxLength = 30;
+    let timer = null;
+    search.addEventListener('keydown', (e) => e.stopPropagation());
+    search.oninput = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        market.q = search.value;
+        market.page = 0;
+        queryMarket();
+      }, 300);
+    };
+    const cat = mk('select', '');
+    for (const [id, label] of [['', 'Todo'], ['equip', 'Equipo'], ['consumable', 'Consumibles'], ['other', 'Otros']]) {
+      const o = mk('option', '', label);
+      o.value = id;
+      cat.append(o);
+    }
+    cat.value = market.cat;
+    cat.onchange = () => {
+      market.cat = cat.value;
+      market.page = 0;
+      queryMarket();
+    };
+    const sort = mk('select', '');
+    for (const [id, label] of [['price', 'Más baratos'], ['new', 'Más nuevos']]) {
+      const o = mk('option', '', label);
+      o.value = id;
+      sort.append(o);
+    }
+    sort.value = market.sort;
+    sort.onchange = () => {
+      market.sort = sort.value;
+      queryMarket();
+    };
+    bar.append(search, cat, sort);
+    box.append(bar);
+    if (!d.items.length) box.append(mk('p', 'muted', market.q || market.cat ? 'No hay nada a la venta con ese filtro.' : 'Todavía nadie vende nada. ¡Sé el primero!'));
+    const ul = mk('ul', 'mk-list');
+    for (const l of d.items) {
+      const it = ITEMS[l.item];
+      const li = mk('li', '');
+      const txt = mk('div', '');
+      const nm = mk('strong', '', it.name);
+      nm.style.color = RARITY[it.rarity] ? RARITY[it.rarity].color : '';
+      txt.append(nm, mk('small', '', `${l.qty > 1 ? `${l.qty} unidades · ` : ''}${fmt(l.price)} oro${l.qty > 1 ? ' c/u' : ''} · vende ${l.seller}`));
+      const act = mk('div', 'mk-act');
+      let qty = 1;
+      if (l.qty > 1 && it.stack) {
+        const n = mk('input', 'mk-num');
+        n.type = 'number';
+        n.min = 1;
+        n.max = l.qty;
+        n.value = 1;
+        n.addEventListener('keydown', (e) => e.stopPropagation());
+        n.oninput = () => {
+          qty = Math.max(1, Math.min(l.qty, Math.floor(+n.value) || 1));
+          b.dataset.label = `Comprar · ${fmt(l.price * qty)}`;
+          if (!b.classList.contains('ask')) b.textContent = b.dataset.label;
+          b.disabled = !safe || p.gold < l.price * qty;
+        };
+        act.append(n);
+      }
+      const b = mk('button', 'buy', `Comprar · ${fmt(l.price)}`);
+      b.type = 'button';
+      b.disabled = !safe || p.gold < l.price;
+      confirmBtn(b, '¿Seguro? Toca otra vez', () => V.Game.market.buy(l.id, qty));
+      act.append(b);
+      li.append(itemIcon(l.item, l.qty), txt, act);
+      ul.append(li);
+    }
+    box.append(ul);
+    if (d.pages > 1) {
+      const pg = mk('div', 'mk-pages');
+      const prev = mk('button', 'btn', '‹');
+      prev.disabled = d.page <= 0;
+      prev.onclick = () => {
+        market.page = d.page - 1;
+        queryMarket();
+      };
+      const next = mk('button', 'btn', '›');
+      next.disabled = d.page >= d.pages - 1;
+      next.onclick = () => {
+        market.page = d.page + 1;
+        queryMarket();
+      };
+      pg.append(prev, mk('span', '', `Página ${d.page + 1} de ${d.pages}`), next);
+      box.append(pg);
+    }
+    return;
+  }
+
+  if (market.tab === 'mine') {
+    if (!d.mine.length) box.append(mk('p', 'muted', 'No tienes nada a la venta. Ve a «Vender» para publicar un objeto.'));
+    const ul = mk('ul', 'mk-list');
+    for (const l of d.mine) {
+      const it = ITEMS[l.item];
+      const li = mk('li', '');
+      const txt = mk('div', '');
+      txt.append(mk('strong', '', it.name), mk('small', '', `${l.qty > 1 ? `${l.qty} unidades · ` : ''}${fmt(l.price)} oro${l.qty > 1 ? ' c/u' : ''}`));
+      const b = mk('button', 'buy', 'Retirar');
+      b.type = 'button';
+      b.disabled = !safe;
+      b.onclick = () => V.Game.market.cancel(l.id);
+      li.append(itemIcon(l.item, l.qty), txt, b);
+      ul.append(li);
+    }
+    box.append(ul);
+    box.append(mk('p', 'hint', `Cuando alguien compra, recibes el oro al instante (menos un ${Math.round(d.tax * 100)}% de impuesto), aunque no estés conectado: te llega al entrar.`));
+    return;
+  }
+
+  // Vender: elegir un objeto de la mochila, la cantidad y el precio por unidad
+  const grid = mk('div', 'mk-inv');
+  p.inv.forEach((s, i) => {
+    const it = ITEMS[s.id];
+    if (!it || V.Data.isKeyItem(it)) return;
+    const b = mk('button', `mk-slot${market.sel === i ? ' on' : ''}`);
+    b.type = 'button';
+    b.title = it.name;
+    b.append(itemIcon(s.id, s.qty));
+    b.onclick = () => {
+      market.sel = i;
+      market.qty = s.qty;
+      market.price = Math.max(1, sellPrice(it) * 2);
+      renderMarket(true);
+    };
+    grid.append(b);
+  });
+  if (!grid.children.length) box.append(mk('p', 'muted', 'No tienes objetos que se puedan vender (los de misión no se venden).'));
+  box.append(grid);
+  const s = market.sel != null ? p.inv[market.sel] : null;
+  if (!s) {
+    box.append(mk('p', 'hint', 'Toca un objeto de tu mochila para ponerlo a la venta. Sale de tu mochila al publicarlo y vuelve si lo retiras.'));
+    return;
+  }
+  const it = ITEMS[s.id];
+  const form = mk('div', 'mk-form');
+  const nm = mk('strong', '', it.name);
+  nm.style.color = RARITY[it.rarity] ? RARITY[it.rarity].color : '';
+  form.append(nm, mk('small', '', `El mercader te daría ${fmt(sellPrice(it))} oro por unidad.`));
+  const row = (label, input) => {
+    const l = mk('label', 'mk-row');
+    l.append(mk('span', '', label), input);
+    form.append(l);
+    return input;
+  };
+  const num = (val, min, max) => {
+    const n = mk('input', 'mk-num');
+    n.type = 'number';
+    n.min = min;
+    n.max = max;
+    n.value = val;
+    n.addEventListener('keydown', (e) => e.stopPropagation());
+    return n;
+  };
+  const qtyIn = s.qty > 1 ? row(`Cantidad (tienes ${s.qty})`, num(Math.min(market.qty, s.qty), 1, s.qty)) : null;
+  const priceIn = row('Precio por unidad (oro)', num(market.price, 1, d.maxPrice));
+  const total = mk('p', 'mk-total');
+  const pub = mk('button', 'buy', 'Publicar');
+  pub.type = 'button';
+  const upd = () => {
+    market.qty = qtyIn ? Math.max(1, Math.min(s.qty, Math.floor(+qtyIn.value) || 1)) : 1;
+    market.price = Math.max(1, Math.min(d.maxPrice, Math.floor(+priceIn.value) || 1));
+    const t = market.qty * market.price;
+    total.textContent = `Si se vende todo recibes ${fmt(t - Math.floor(t * d.tax))} oro (impuesto ${Math.round(d.tax * 100)}%).`;
+    pub.disabled = !safe || d.mine.length >= d.max;
+  };
+  if (qtyIn) qtyIn.oninput = upd;
+  priceIn.oninput = upd;
+  upd();
+  pub.onclick = () => {
+    upd();
+    V.Game.market.sell(market.sel, market.qty, market.price);
+    market.sel = null;
+  };
+  form.append(total, pub);
+  if (d.mine.length >= d.max) form.append(mk('small', 'warn', `Ya tienes ${d.max} publicaciones: retira alguna para publicar otra.`));
+  box.append(form);
 }
 
 // ---------- Tienda de Amistad y aspecto (tecla B) ----------
@@ -2281,12 +2601,12 @@ function bindBigMap() {
     'wheel',
     (e) => {
       e.preventDefault();
-      mapView.scale = Math.min(8, Math.max(0.9, mapView.scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+      mapView.scale = Math.min(8, Math.max(0.45, mapView.scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
     },
     { passive: false }
   );
   $('mapIn').onclick = () => (mapView.scale = Math.min(8, mapView.scale * 1.3));
-  $('mapOut').onclick = () => (mapView.scale = Math.max(0.9, mapView.scale / 1.3));
+  $('mapOut').onclick = () => (mapView.scale = Math.max(0.45, mapView.scale / 1.3));
   $('mapCenter').onclick = () => (mapView.center = null);
 }
 
@@ -2304,14 +2624,14 @@ function drawBigMap() {
   // Borde del mundo
   c.fillStyle = '#26301f';
   c.beginPath();
-  c.arc(tx(0), tz(0), 188 * s, 0, Math.PI * 2);
+  c.arc(tx(0), tz(0), V.Terrain.WORLD_LIMIT * s, 0, Math.PI * 2);
   c.fill();
   c.strokeStyle = 'rgba(176,146,98,.6)';
   c.lineWidth = Math.max(2, 3 * s * 0.6);
-  for (const { x, z } of G.world.zones) {
+  for (const r of V.Terrain.ROADS) {
     c.beginPath();
-    c.moveTo(tx(0), tz(0));
-    c.lineTo(tx(x), tz(z));
+    c.moveTo(tx(r[0]), tz(r[1]));
+    c.lineTo(tx(r[2]), tz(r[3]));
     c.stroke();
   }
   for (const z of G.world.zones) {
@@ -2380,7 +2700,7 @@ function drawBigMap() {
 V.UI = {
   initUI, notify, createNameplate, refreshNameplate, addPlayerPlate, removePlayerPlate, chat, focusChat,
   floatText, log, logLoot, banner, showDeath, showInvite, openDrops, openGuild, guildChanged, showGuildInvite, toggleEmotes, showEmote, showComboTag, extChanged,
-  togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI, openTrade,
+  togglePanel, shopOpen, openShop, closeAll, refreshPanels, updateUI, openTrade, openPortal, openMarket, toggleMarket, marketData,
   classChanged, openMaster, refreshMaster, openHatch,
 };
 })();

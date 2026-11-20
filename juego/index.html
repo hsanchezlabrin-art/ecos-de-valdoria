@@ -564,6 +564,43 @@
   .fr-pot small { color: var(--muted); }
   .np .np-title { display: block; font: 700 11px var(--body); letter-spacing: 0; text-align: center; color: #ffd36b; }
   body.touch #friendPanel { width: min(720px, calc(100vw / var(--ui) - 24px)); }
+  /* Red de portales */
+  #portalPanel { width: 440px; }
+  #portalBody { display: grid; gap: 10px; }
+  .pt-head { display: grid; gap: 4px; }
+  .pt-head strong { color: var(--gold); font: 700 16px var(--display); }
+  .pt-head small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+  .pt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .pt-list li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 7px 8px; border: 1px solid #23211d; border-radius: 2px; }
+  .pt-list strong { display: block; font-size: 14px; }
+  .pt-list small { color: var(--muted); font-size: 12px; }
+  /* Mercado entre jugadores */
+  #marketPanel { width: 560px; height: min(660px, calc(100% - 40px)); }
+  #marketBody { display: grid; gap: 10px; align-content: start; }
+  .mk-info { margin: 0; font-size: 12px; color: var(--muted); }
+  .mk-info b { color: var(--gold); }
+  .mk-bar { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; }
+  .mk-bar input, .mk-bar select, .mk-num { min-width: 0; padding: 6px 8px; font: 14px var(--body); color: var(--parch); background: #0b0d10; border: 1px solid var(--edge-soft); border-radius: 2px; }
+  .mk-num { width: 110px; }
+  .mk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .mk-list li { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 10px; padding: 6px; border: 1px solid #23211d; border-radius: 2px; }
+  .mk-list strong { display: block; font-size: 14px; }
+  .mk-list small { color: var(--muted); font-size: 12px; }
+  .mk-act { display: flex; gap: 6px; align-items: center; }
+  .mk-act .mk-num { width: 64px; }
+  .mk-ic { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 4px; font: 700 20px var(--display); color: var(--r, #cfc6b2); background: #15181d; border: 1px solid var(--r, #3a3a3a); }
+  .mk-ic i { position: absolute; right: 2px; bottom: 0; font: 700 11px var(--body); font-style: normal; color: #fff; text-shadow: 0 1px 2px #000; }
+  .mk-inv { display: grid; grid-template-columns: repeat(auto-fill, 48px); gap: 6px; }
+  .mk-slot { padding: 0; background: none; border: 1px solid transparent; border-radius: 4px; }
+  .mk-slot.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+  .mk-form { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--edge-soft); border-radius: 2px; }
+  .mk-form > small { color: var(--muted); }
+  .mk-form .warn { color: #ff9a7a; }
+  .mk-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
+  .mk-total { margin: 0; font-size: 13px; color: var(--gold); }
+  .mk-pages { display: flex; gap: 10px; align-items: center; justify-content: center; font-size: 13px; }
+  body.touch #marketPanel, body.touch #portalPanel { width: min(620px, calc(100vw / var(--ui) - 24px)); }
+  @media (max-width: 560px) { .mk-bar { grid-template-columns: 1fr 1fr; } .mk-bar input { grid-column: 1 / -1; } .mk-list li { grid-template-columns: 44px 1fr; } .mk-list li > :last-child { grid-column: 1 / -1; justify-self: end; } }
   /* Gremio */
   .np .np-guild { display: block; font: 600 11px var(--body); letter-spacing: 0; text-align: center; opacity: .95; }
   #guildPanel { width: 420px; }
@@ -836,7 +873,7 @@
   .panel { max-width: calc(100vw - var(--sl) - var(--sr) - 24px); max-height: calc(100% - 24px - var(--st) - var(--sb)); margin-top: calc((var(--st) - var(--sb)) / 2); }
   body.touch .panel { max-width: calc(100vw / var(--ui) - var(--sl) - var(--sr) - 24px); }
   /* Ventanas que antes quedaban pegadas al borde izquierdo */
-  #albumPanel, #friendPanel, #guildPanel, #questPanel { left: calc(12px + var(--sl)); }
+  #albumPanel, #friendPanel, #guildPanel, #questPanel, #portalPanel, #marketPanel { left: calc(12px + var(--sl)); }
   /* Ventanas centradas: se desplazan hacia el lado donde no hay muesca */
   #helpPanel, #tradePanel, #dropPanel, #hatchPanel, #masterPanel, #mapPanel, #setPanel, #invitePanel, #guildInvitePanel { margin-left: calc((var(--sl) - var(--sr)) / 2); }
   #invPanel { right: calc(12px + var(--sr)); }
@@ -919,6 +956,7 @@
     <button id="btnGuild" data-icon="⚑">Gremio <kbd>G</kbd></button>
     <button id="btnAlbum" data-icon="📖">Álbum <kbd>K</kbd></button>
     <button id="btnFriend" data-icon="💗">Amistad <kbd>B</kbd></button>
+    <button id="btnMarket" data-icon="⚖">Mercado <kbd>U</kbd></button>
     <button id="btnMap" data-icon="⌖">Mapa <kbd>M</kbd></button>
     <button id="btnHelp" data-icon="?">Controles <kbd>H</kbd></button>
     <button id="btnGfx" data-icon="⚙">Ajustes <kbd>O</kbd></button>
@@ -986,6 +1024,16 @@
   <section class="panel" id="friendPanel" hidden>
     <header><h2>Tienda de Amistad</h2><button class="x" data-close="friend" aria-label="Cerrar">✕</button></header>
     <div id="friendBody"></div>
+  </section>
+
+  <section class="panel" id="portalPanel" hidden>
+    <header><h2>Portal de los Viajeros</h2><button class="x" data-close="portal" aria-label="Cerrar">✕</button></header>
+    <div id="portalBody"></div>
+  </section>
+
+  <section class="panel" id="marketPanel" hidden>
+    <header><h2>Mercado de Aventureros</h2><button class="x" data-close="market" aria-label="Cerrar">✕</button></header>
+    <div id="marketBody"></div>
   </section>
 
   <section class="panel" id="guildPanel" hidden>
@@ -1078,6 +1126,7 @@
       <dt>Enter</dt><dd>Chat. Empieza con # para hablar solo con tu grupo, con @ para tu gremio, o escribe /invitar Nombre</dd>
       <dt>T</dt><dd>Gestos: saludar, aplaudir, animar, bailar, celebrar y sentarse (también el botón 😊 junto al chat)</dd>
       <dt>B</dt><dd>Tienda de Amistad: pociones cosméticas, estelas, títulos y tu aspecto</dd>
+      <dt>U</dt><dd>Mercado de Aventureros: compra y vende con otros jugadores (dentro de una aldea)</dd>
       <dt>K</dt><dd>Álbum: criaturas, tierras, botín y gestos que descubriste, y premios por completar colecciones</dd>
       <dt>G</dt><dd>Gremio: miembros, invitar y mensaje del gremio. Se funda con el Maestro del Gremio en la Ciudadela (nivel 15 y 1.000 de oro)</dd>
       <dt>Esc</dt><dd>Cerrar ventanas o soltar el objetivo</dd>

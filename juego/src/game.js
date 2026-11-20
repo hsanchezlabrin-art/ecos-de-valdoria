@@ -137,6 +137,9 @@
       case 'kicked':
         net.kicked = msg.msg;
         break;
+      case 'market':
+        UI.marketData(msg);
+        break;
     }
   }
 
@@ -249,6 +252,11 @@
     }
     if (ent.model) G.scene.remove(ent.model.root);
     ent.model = null;
+    // Burbujas y remolinos que viven en la escena
+    const v = ent.view;
+    if (v && v.bubble) G.scene.remove(v.bubble);
+    if (v && v.vortex) G.scene.remove(v.vortex);
+    if (v) v.bubble = v.vortex = null;
   }
 
   function applyEquip(p) {
@@ -368,6 +376,7 @@
       q.pvpState = row[23] || 0; // 0 blanco · 1 morado (atacó hace poco) · 2 rojo (PK)
       q.guildTag = row[24] || ''; // "emblema|color|nombre" del gremio
       setLook(q, row[25]);
+      q.protected = !!row[26]; // protección al reaparecer
       if (q !== P) q.stage = row[18] || 0;
       q.riding = false;
       if (q.equip.weapon !== row[12] || q.equip.armor !== row[13]) {
@@ -732,6 +741,35 @@
       case 'openShop':
         if (mine(ev)) UI.openShop(ev.shop || 'orlen');
         break;
+      case 'openPortal':
+        if (mine(ev)) UI.openPortal(ev.npc);
+        break;
+      case 'openMarket':
+        if (mine(ev)) UI.openMarket();
+        break;
+      case 'gemFlash':
+        if (ev.ent && ev.ent.model) spawnGemFlash(ev.ent);
+        break;
+      case 'protect':
+        if (ev.ent) {
+          ev.ent.protected = !!ev.on;
+          if (ev.on) spawnRing(ev.ent.pos, 0xffe08a, 2.2, 0.8);
+        }
+        break;
+      case 'frost':
+        spawnZone(ev.at, ev.r, 0xbfeaff, 1.2);
+        spawnRing(ev.at, 0xdff4ff, ev.r, 0.9);
+        break;
+      case 'vortex':
+        if (ev.ent) ev.ent.vortexUntil = G.time + ev.dur;
+        break;
+      case 'mirror':
+        if (ev.ent) ev.ent.mirrorUntil = G.time + ev.dur;
+        break;
+      case 'eclipse':
+        spawnZone(ev.at, 26, 0x2a1f4a, 0.9);
+        spawnRing(ev.at, 0xfff0a0, ev.r, 0.9);
+        break;
       case 'telegraph':
         spawnTelegraph(ev.at, ev.r, ev.dur, ev.color);
         break;
@@ -836,6 +874,7 @@
         if (mine(ev)) UI.showDeath(true);
         break;
       case 'playerRespawn':
+        ev.ent.seen = false; // aparece directo en el punto de reaparición (sin deslizarse por el mapa)
         if (ev.ent.view) {
           ev.ent.view.deathK = 0;
           animateDeath(ev.ent.model, 0);
@@ -1631,7 +1670,166 @@
   }
 
 
+  // ---------- Destello de las Gemas de Poder ----------
+  // Como el destello de los soulshots de Lineage 2: un estallido de luz azul y violeta con rayos de
+  // colores y un anillo, que nace en la mano que sujeta el arma y la sigue mientras dura (0,45 s).
+  // Pequeño y breve a propósito (sin destellos de pantalla completa).
+  const gemTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.25, 'rgba(200,220,255,0.9)');
+    grd.addColorStop(0.55, 'rgba(140,110,255,0.35)');
+    grd.addColorStop(1, 'rgba(120,80,255,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  })();
+  const rayTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 8;
+    const g = c.getContext('2d');
+    const grd = g.createLinearGradient(0, 0, 64, 0);
+    grd.addColorStop(0, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.35, 'rgba(255,255,255,0.7)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 64, 8);
+    const v = g.createLinearGradient(0, 0, 0, 8);
+    v.addColorStop(0, 'rgba(0,0,0,1)');
+    v.addColorStop(0.5, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,0,1)');
+    g.globalCompositeOperation = 'destination-out';
+    g.fillStyle = v;
+    g.fillRect(0, 0, 64, 8);
+    return new THREE.CanvasTexture(c);
+  })();
+  const rayGeo = new THREE.PlaneGeometry(1, 0.09).translate(0.5, 0, 0);
+  const gemRingGeo = new THREE.RingGeometry(0.92, 1, 40);
+  const flashes = [];
+  const _anchor = new THREE.Vector3();
+  const addMat = (o) => ({ transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, ...o });
+
+  // Punto donde el arma se une con la mano (el origen del arma está en la palma)
+  function gemAnchor(ent, out) {
+    const m = ent.model;
+    if (m && m.weapon && m.weapon.parent) {
+      m.weapon.updateWorldMatrix(true, false);
+      return m.weapon.getWorldPosition(out);
+    }
+    if (m && m.rArm) {
+      m.rArm.updateWorldMatrix(true, false);
+      return m.rArm.localToWorld(out.set(0, -0.8, 0));
+    }
+    return out.set(ent.pos.x, ent.pos.y + (ent.height || 2.5) * 0.55, ent.pos.z);
+  }
+
+  function spawnGemFlash(ent) {
+    if (ent.view && ent.view.culled) return;
+    const root = new THREE.Group();
+    root.renderOrder = 20;
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial(addMat({ map: gemTex, color: 0x5a3ab0, opacity: 0.5 })));
+    const core = new THREE.Sprite(new THREE.SpriteMaterial(addMat({ map: gemTex, color: 0x8fb0e8, opacity: 0.8 })));
+    root.add(glow, core);
+    // Plano que mira a la cámara: rayos y anillo
+    const face = new THREE.Group();
+    root.add(face);
+    const rays = [];
+    const n = 14;
+    for (let i = 0; i < n; i++) {
+      const hue = Math.random() < 0.5 ? 0.62 + Math.random() * 0.14 : Math.random(); // azul-violeta o arcoíris
+      const m = new THREE.Mesh(rayGeo, new THREE.MeshBasicMaterial(addMat({ map: rayTex, color: new THREE.Color().setHSL(hue, 0.85, 0.55), opacity: 0.8, side: THREE.DoubleSide })));
+      m.rotation.z = (i / n) * Math.PI * 2 + Math.random() * 0.35;
+      m.userData.len = 1.1 + Math.random() * 1.6;
+      face.add(m);
+      rays.push(m);
+    }
+    const ringM = new THREE.Mesh(gemRingGeo, new THREE.MeshBasicMaterial(addMat({ color: 0x9fbce0, opacity: 0.7, side: THREE.DoubleSide })));
+    face.add(ringM);
+    root.traverse((o) => (o.renderOrder = 20));
+    G.scene.add(root);
+    flashes.push({ ent, root, face, glow, core, rays, ring: ringM, t: 0, life: 0.5 });
+  }
+
+  function updateFlashes(dt) {
+    for (let i = flashes.length - 1; i >= 0; i--) {
+      const f = flashes[i];
+      f.t += dt;
+      const k = Math.min(1, f.t / f.life);
+      if (k >= 1 || !f.ent.model) {
+        G.scene.remove(f.root);
+        f.root.traverse((o) => o.material && o.material.dispose());
+        flashes.splice(i, 1);
+        continue;
+      }
+      gemAnchor(f.ent, _anchor);
+      f.root.position.copy(_anchor);
+      f.face.quaternion.copy(G.camera.quaternion);
+      // Con la cámara muy cerca se achica: nunca llega a tapar la pantalla
+      f.root.scale.setScalar(Math.min(1, Math.max(0.25, G.camera.position.distanceTo(_anchor) / 9)));
+      const fade = 1 - k * k;
+      const pop = Math.sin(Math.min(1, k * 2.2) * Math.PI * 0.5); // crece rápido y se queda
+      f.core.scale.setScalar(0.5 + pop * 0.9);
+      f.core.material.opacity = 0.8 * fade;
+      f.glow.scale.setScalar(1.2 + pop * 1.8);
+      f.glow.material.opacity = 0.5 * fade;
+      for (const r of f.rays) {
+        r.scale.set(r.userData.len * (0.3 + pop * 0.9), 1 + pop * 0.6, 1);
+        r.material.opacity = 0.8 * fade;
+      }
+      f.ring.scale.setScalar(0.4 + k * 1.4);
+      f.ring.material.opacity = 0.7 * (1 - k);
+    }
+  }
+
+  // Burbujas de estado: protección al reaparecer (jugadores), Escudo Espejo y remolino (jefes)
+  function stateBubbles(ent, dt) {
+    const v = ent.view;
+    const want = ent.kind === 'player' ? !!ent.protected && !ent.dead : ent.mirrorUntil > G.time && !ent.dead;
+    if (want && !v.bubble) {
+      const color = ent.kind === 'player' ? 0xffd36b : 0xffb8e8;
+      const geo = new THREE.IcosahedronGeometry(ent.kind === 'player' ? 1.35 : ent.height * 0.62, 1);
+      v.bubble = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14, depthWrite: false }));
+      v.bubble.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false, wireframe: true })));
+      // Va en la escena (no dentro del modelo): así no le afecta la escala de cada raza
+      G.scene.add(v.bubble);
+    }
+    if (v.bubble) {
+      v.bubble.visible = want && !(v.culled || ent.hidden);
+      if (v.bubble.visible) {
+        v.bubble.position.set(ent.pos.x, ent.pos.y + (ent.kind === 'player' ? 1.2 : ent.height * 0.5), ent.pos.z);
+        v.bubble.material.opacity = (ent.kind === 'player' ? 0.12 : 0.2) + Math.sin(G.time * 5) * 0.05;
+        v.bubble.children[0].material.opacity = 0.45 + Math.sin(G.time * 5) * 0.15;
+        v.bubble.rotation.y += dt * 0.8;
+      }
+    }
+    // Remolino de arena de la Esfinge: anillos que giran a su alrededor
+    const spin = ent.vortexUntil > G.time && !ent.dead;
+    if (spin && !v.vortex) {
+      v.vortex = new THREE.Group();
+      for (let i = 0; i < 3; i++) {
+        const r = new THREE.Mesh(new THREE.TorusGeometry(4 + i * 5, 0.25, 4, 28), new THREE.MeshBasicMaterial({ color: 0xe0c070, transparent: true, opacity: 0.5, depthWrite: false }));
+        r.rotation.x = Math.PI / 2;
+        r.position.y = 0.4 + i * 0.3;
+        v.vortex.add(r);
+      }
+      G.scene.add(v.vortex);
+    }
+    if (v.vortex) {
+      v.vortex.visible = spin;
+      if (spin) {
+        v.vortex.position.set(ent.pos.x, ent.pos.y, ent.pos.z);
+        v.vortex.rotation.y -= dt * 4;
+        v.vortex.children.forEach((r, i) => r.scale.setScalar(1 - ((G.time * 0.6 + i * 0.33) % 1) * 0.3));
+      }
+    }
+  }
+
   function updateEffects(dt) {
+    updateFlashes(dt);
     for (let i = props.length - 1; i >= 0; i--) {
       const pr = props[i];
       pr.t += dt;
@@ -1841,6 +2039,7 @@
     }
     root.position.set(ent.pos.x, ent.pos.y, ent.pos.z);
     root.rotation.y = ent.facing;
+    if (ent.kind === 'player' || (ent.def && ent.def.mech)) stateBubbles(ent, dt);
     // Saltito de los monstruos atrapados en un combo
     if (v.hopT > 0) {
       v.hopT = Math.max(0, v.hopT - dt);
@@ -1966,6 +2165,14 @@
     setTarget, attackTarget, targetNearest, moveTo, talkTo, selectNpc, selectPlayer, useSkill, countItem, usePotion,
     clickInventory, useItem, sellItem, destroyItem, unequip, buyItem, respawnPlayer, update, sendChat, sendPhrase, report, classQuest, toggleGems, hatch, toggleMount,
     invite, inviteByName, answerInvite, leaveParty, kickFromParty, guild, emote, sysCmd,
+    // Mercado entre jugadores (el servidor valida todo)
+    market: {
+      query: (f = {}) => send({ t: 'market', q: f.q || '', cat: f.cat || '', page: f.page || 0, sort: f.sort || 'price' }),
+      sell: (i, q, price) => send({ t: 'marketSell', i, q, price }),
+      buy: (id, q = 1) => send({ t: 'marketBuy', id, q }),
+      cancel: (id) => send({ t: 'marketCancel', id }),
+    },
+    travel: (id) => sysCmd('viajes', 'go', id),
     get online() {
       return true;
     },

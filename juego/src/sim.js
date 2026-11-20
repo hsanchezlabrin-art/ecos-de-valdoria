@@ -19,6 +19,8 @@
   const { ARENAS, shopItems, SHOPS, mobHeight } = Data;
   const { PETS, isPet, PET_LVL, MOUNT_LVL, MOUNT_SPEED, PET_FETCH_R, mountKind, petName } = Data;
   const { GUILD_LVL, GUILD_COST, GUILD_MAX, GUILD_RANKS, GUILD_EMBLEMS, GUILD_COLORS } = Data;
+  const { MARKET, SPAWN_PROTECT, isKeyItem, itemCategory } = Data;
+  const { nearestHome } = Terrain;
   const LOOT_LIFE = 30; // segundos: luego el botín llega solo a la mochila (nunca se pierde)
   const PICK_R = 1.8;
 
@@ -55,7 +57,11 @@
   // ---------- Mundo y eventos ----------
 
   function createWorld() {
-    return { time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map(), summons: [], loot: [], guilds: new Map(), guildsDirty: false, bus: createBus(), systems: [], api: null };
+    return {
+      time: 0, nextId: 1, players: new Map(), mobs: [], projectiles: [], timers: [], events: [], parties: new Map(), summons: [], loot: [], guilds: new Map(), guildsDirty: false, bus: createBus(), systems: [], api: null,
+      // Mercado entre jugadores (dato de mundo, como los gremios): el servidor lo guarda en disco
+      market: { nextId: 1, list: [], pay: {} }, marketDirty: false, marketSave: new Set(),
+    };
   }
 
   // ---------- Bus de eventos de dominio y sistemas (módulos desacoplados) ----------
@@ -110,6 +116,15 @@
       zoneAt,
       inSafe,
       dist: d2,
+      // Para la red de portales (sistema viajes)
+      inCombat: (p) => p.combatT > 0,
+      nearNpc: (p, role, r = TALK_R + 2) => NPCS.find((n) => n.role === role && d2(p.pos, n) <= r) || null,
+      spendGold: (p, n) => {
+        if (!(n >= 0) || p.gold < n) return false;
+        p.gold -= n;
+        return true;
+      },
+      teleport: (p, to, title) => teleportPlayer(w, p, to, title),
     };
     return w.api;
   }
@@ -258,6 +273,7 @@
       pk: Math.max(0, Math.floor(+data.pk) || 0),
       flagT: 0,
       force: false,
+      protT: 0, // protección al reaparecer (segundos)
       hp: 0,
       mp: 0,
     };
@@ -281,6 +297,7 @@
     p.hp = Math.min(data.hp ?? p.stats.maxHp, p.stats.maxHp);
     p.mp = Math.min(data.mp ?? p.stats.maxMp, p.stats.maxMp);
     if (p.hp <= 0) p.hp = Math.round(p.stats.maxHp * 0.7);
+    collectMarket(w, p); // oro de lo que vendió en el mercado mientras no estaba
     return p;
   }
 
@@ -480,6 +497,9 @@
     m.shieldDownT = 0;
     m.plateT = [0, 0, 0];
     m.addsDone = false;
+    m.puddles = [];
+    m.mirrorT = 0;
+    m.vortexT = 0;
     if (m.def.boss && w.time > 5 && (m.def.world || m.def.raid)) emit(w, { type: 'banner', to: null, title: `¡${m.def.name} despertó!`, sub: `${m.zone.name} · nivel ${m.lvl}${m.def.raid ? ' · ¡Lleva un grupo!' : ''}` });
     emit(w, { type: 'mobSpawn', ent: m });
   }
@@ -588,10 +608,26 @@
   const pvpState = (q) => (q.karma > 0 ? 2 : q.flagT > 0 ? 1 : 0);
   const sameParty = (a, b) => !!a.party && a.party === b.party;
 
+  // ---------- Protección al reaparecer ----------
+  // Unos segundos tras reaparecer o revivir nadie puede atacarte (ni monstruos, ni jefes, ni otros
+  // jugadores) y los monstruos no te persiguen. Se pierde antes si atacas.
+  const isProtected = (q) => !!q && q.kind === 'player' && q.protT > 0;
+  function protect(w, p) {
+    p.protT = SPAWN_PROTECT;
+    emit(w, { type: 'protect', ent: p, on: true, dur: SPAWN_PROTECT });
+  }
+  function endProtect(w, p, why) {
+    if (!(p.protT > 0)) return;
+    p.protT = 0;
+    emit(w, { type: 'protect', ent: p, on: false });
+    if (why) log(w, p, why, 'sys');
+  }
+
   // ¿Puede p atacar a q? Devuelve el motivo si no puede, o null. Sin forzar (Ctrl) solo se puede
   // atacar a jugadores morados o rojos.
   function pvpBlock(p, q, force) {
     if (!q || q === p || q.dead) return 'nada';
+    if (isProtected(q)) return `${q.name} acaba de reaparecer y está protegido unos segundos.`;
     if (inSafe(p.pos) || inSafe(q.pos)) return 'No se puede pelear contra otros jugadores en una zona segura.';
     if (p.level < PVP_MIN_LEVEL) return `Podrás pelear contra otros jugadores desde el nivel ${PVP_MIN_LEVEL}.`;
     if (q.level < PVP_MIN_LEVEL) return `${q.name} está protegido: los aventureros de nivel menor a ${PVP_MIN_LEVEL} no pueden ser atacados.`;
@@ -628,6 +664,7 @@
       }
       return;
     }
+    endProtect(w, p, 'Atacaste: tu protección al reaparecer terminó.');
     // Atacar a un jugador que no es PK deja tu nombre morado
     if (q.karma <= 0) {
       if (p.flagT <= 0 && p.karma <= 0) log(w, p, 'Atacaste a otro jugador: tu nombre queda morado durante 30 segundos y cualquiera puede atacarte.', 'warn');
@@ -689,6 +726,19 @@
   function damageMob(w, p, m, mult, opts = {}) {
     if (!m || m.dead) return;
     if (m.kind === 'player') return damagePlayer(w, p, m, mult, opts);
+    endProtect(w, p, 'Atacaste: tu protección al reaparecer terminó.');
+    // Escudo Espejo del Coloso Prismático: devuelve el golpe a quien ataca
+    if (m.mirrorT > 0) {
+      if ((m.mirrorMsgT || 0) <= w.time) {
+        m.mirrorMsgT = w.time + 0.8;
+        float(w, m, 'Espejo', 'mana', 0.3);
+      }
+      if ((p.mirrorHitT || 0) <= w.time) {
+        p.mirrorHitT = w.time + 0.5;
+        bossHit(w, m, p, m.def.mech.reflect);
+      }
+      return;
+    }
     if (m.def.mech && m.def.mech.type === 'plates' && !(m.shieldDownT > 0)) {
       if (!m.aggro || m.aggro.dead) m.aggro = p;
       if ((m.shieldMsgT || 0) <= w.time) {
@@ -879,6 +929,7 @@
   function mobHitsPlayer(w, m, p) {
     if (p.kind === 'summon') return hitSummon(w, m, p);
     if (p.dead || p.leap) return;
+    if (isProtected(p)) return dropAggro(m);
     // Esquivar (armadura ligera, Paso Veloz)
     if (Math.random() < Math.min(0.6, p.stats.evade + buffSum(p, 'evade'))) {
       float(w, p, 'Esquiva', 'mana');
@@ -1097,6 +1148,7 @@
   function killPlayer(w, p, cause, by = null) {
     p.hp = 0;
     p.flagT = 0;
+    p.protT = 0;
     p.force = false;
     p.dead = true;
     p.mounted = 0;
@@ -1117,15 +1169,23 @@
     emit(w, { type: 'playerDeath', to: p.id, ent: p });
   }
 
-  // Punto seguro cercano: en el camino entre la aldea y la zona donde caíste (fuera de ella)
+  // Punto seguro cercano: en el camino entre la aldea y la zona donde caíste (fuera de ella). En las
+  // tierras lejanas (y si ese punto no sirve) se despierta en la aldea más cercana.
   function safePointNear(pos) {
+    const home = (at) => {
+      const h = at ? nearestHome(at) : { x: SPAWN.x, z: SPAWN.z };
+      return { x: h.x, z: h.z };
+    };
     const z = pos && zoneAt(pos);
-    if (!z || z.safe) return { x: SPAWN.x, z: SPAWN.z };
+    if (!z) return home(pos);
+    if (z.safe) return z.id === 'aldea' ? { x: SPAWN.x, z: SPAWN.z } : home(z);
     const dist = Math.hypot(z.x, z.z);
+    if (dist > 175) return home(z);
     const k = Math.max(0, dist - z.r - 7) / dist;
     const pt = { x: z.x * k, z: z.z * k };
     collide(pt, PLAYER_R);
-    return waterDepth(pt.x, pt.z) > SWIM_DEPTH ? { x: SPAWN.x, z: SPAWN.z } : pt;
+    const other = zoneAt(pt);
+    return waterDepth(pt.x, pt.z) > SWIM_DEPTH || (other && !other.safe) ? home(pos) : pt;
   }
 
   function revivePlayer(w, p, at, pct) {
@@ -1138,6 +1198,8 @@
     p.mp = Math.max(p.mp, Math.round(p.stats.maxMp * pct));
     p.breath = BREATH_MAX;
     emit(w, { type: 'playerRespawn', to: p.id, ent: p });
+    for (const m of w.mobs) if (m.aggro === p) dropAggro(m);
+    protect(w, p);
   }
 
   // Sin castigo: no se pierde experiencia ni objetos al caer
@@ -1146,7 +1208,9 @@
     const at = safePointNear(p.diedAt);
     revivePlayer(w, p, at, 0.7);
     fire(w, 'player:respawn', { p });
-    log(w, p, at.x === SPAWN.x && at.z === SPAWN.z ? 'Despiertas en la aldea, sano y salvo.' : 'Despiertas en un lugar seguro, cerca de donde estabas.', 'sys');
+    const where = zoneAt(p.pos);
+    log(w, p, at.x === SPAWN.x && at.z === SPAWN.z ? 'Despiertas en la aldea, sano y salvo.' : where && where.safe ? `Despiertas en ${where.name}, sano y salvo.` : 'Despiertas en un lugar seguro, cerca de donde estabas.', 'sys');
+    log(w, p, `Estás protegido ${SPAWN_PROTECT} segundos: nadie puede atacarte (se termina si atacas).`, 'sys');
   }
 
   function gainXp(w, p, xp) {
@@ -1274,6 +1338,8 @@
     }
     removeAt(p, i, 1);
     emit(w, { type: 'inventory', to: p.id });
+    // Destello de la gema en la mano que sostiene el arma (lo ven todos los que estén cerca)
+    emit(w, { type: 'gemFlash', ent: p });
     return GEM_MULT;
   }
 
@@ -1434,6 +1500,176 @@
       return log(w, p, `${first}: «¿Quieres fundar un gremio? Necesitas nivel ${GUILD_LVL} y ${GUILD_COST.toLocaleString('es')} de oro.»`, 'npc');
     }
     if (npc.role === 'info') return log(w, p, `${npc.name}: «${npc.text}»`, 'npc');
+    if (npc.role === 'portal') {
+      emit(w, { type: 'openPortal', to: p.id, npc: npc.id });
+      return log(w, p, 'El portal brilla: elige a dónde quieres ir.', 'npc');
+    }
+    if (npc.role === 'market') {
+      emit(w, { type: 'openMarket', to: p.id });
+      return log(w, p, `${first}: «¡Bienvenido al Mercado de Aventureros! Compra lo que venden otros o pon tus cosas a la venta.»`, 'npc');
+    }
+  }
+
+  // Lleva a un jugador a otro punto del mapa (portales y vagonetas)
+  function teleportPlayer(w, p, to, title) {
+    p.pos.x = to.x;
+    p.pos.z = to.z;
+    collide(p.pos, PLAYER_R);
+    p.pos.y = groundY(p.pos.x, p.pos.z);
+    p.moveTarget = null;
+    p.moveDir = null;
+    p.autoAttack = false;
+    p.target = null;
+    p.interact = null;
+    dismount(w, p);
+    for (const m of w.mobs) if (m.aggro === p) dropAggro(m);
+    emit(w, { type: 'teleport', to: p.id, ent: p, title: title || (zoneAt(p.pos) ? zoneAt(p.pos).name : '') });
+  }
+
+  // ---------- Mercado entre jugadores ----------
+  // Cada publicación guarda el objeto (ya sacado del inventario del vendedor), la cantidad que queda
+  // y el precio por unidad. El oro de lo vendido llega al vendedor al instante si está conectado; si
+  // no, queda en market.pay hasta que entre. El servidor guarda el mercado y los personajes
+  // afectados en la misma escritura del disco (w.marketSave), así nada se duplica ni se pierde.
+  const marketTouch = (w, ...players) => {
+    w.marketDirty = true;
+    for (const q of players) if (q) w.marketSave.add(q.id);
+  };
+  const marketMine = (w, p) => w.market.list.filter((l) => l.seller === keyOf(p.name));
+  function marketBlock(w, p) {
+    if (p.dead) return 'No puedes usar el mercado ahora.';
+    if (!inSafe(p.pos)) return 'El mercado solo se usa dentro de una aldea (zona segura).';
+    return null;
+  }
+
+  function marketSell(w, p, index, qty, price) {
+    const why = marketBlock(w, p);
+    if (why) return log(w, p, why, 'warn');
+    if (p.level < MARKET.minLvl) return log(w, p, `Podrás vender en el mercado desde el nivel ${MARKET.minLvl}.`, 'warn');
+    const slot = p.inv[index];
+    if (!slot) return;
+    const it = ITEMS[slot.id];
+    if (!it || isKeyItem(it)) return log(w, p, `${it ? it.name : 'Ese objeto'} no se puede vender: es un objeto de misión.`, 'warn');
+    const n = Math.floor(Number(qty));
+    const pr = Math.floor(Number(price));
+    if (!(n >= 1) || n > slot.qty) return log(w, p, 'Cantidad no válida.', 'warn');
+    if (!(pr >= 1) || pr > MARKET.maxPrice) return log(w, p, `El precio debe estar entre 1 y ${MARKET.maxPrice.toLocaleString('es')} de oro por unidad.`, 'warn');
+    if (marketMine(w, p).length >= MARKET.maxListings) return log(w, p, `Puedes tener hasta ${MARKET.maxListings} publicaciones a la vez. Retira alguna primero.`, 'warn');
+    if (w.market.list.length >= MARKET.maxTotal) return log(w, p, 'El mercado está lleno. Prueba más tarde.', 'warn');
+    removeAt(p, index, n);
+    const l = { id: `L${w.market.nextId++}`, seller: keyOf(p.name), sellerName: p.name, item: slot.id, qty: n, price: pr, at: Date.now() };
+    w.market.list.push(l);
+    marketTouch(w, p);
+    emit(w, { type: 'inventory', to: p.id });
+    emit(w, { type: 'market', to: p.id });
+    log(w, p, `Pusiste a la venta ${it.name}${n > 1 ? ` ×${n}` : ''} a ${pr.toLocaleString('es')} de oro${n > 1 ? ' cada uno' : ''}.`, 'sys');
+    return l;
+  }
+
+  function marketBuy(w, p, id, qty = 1) {
+    const why = marketBlock(w, p);
+    if (why) return log(w, p, why, 'warn');
+    const l = w.market.list.find((x) => x.id === id);
+    if (!l) return log(w, p, 'Esa publicación ya no está (alguien la compró o la retiraron).', 'warn');
+    if (l.seller === keyOf(p.name)) return log(w, p, 'No puedes comprar tus propias publicaciones: retíralas si las quieres de vuelta.', 'warn');
+    const it = ITEMS[l.item];
+    const n = it.stack ? Math.floor(Number(qty)) : 1;
+    if (!(n >= 1) || n > l.qty) return log(w, p, 'Cantidad no válida.', 'warn');
+    const total = l.price * n;
+    if (p.gold < total) return log(w, p, `Te falta oro: cuesta ${total.toLocaleString('es')}.`, 'warn');
+    if (!addItem(p, l.item, n)) return log(w, p, 'No hay espacio en el inventario.', 'warn');
+    p.gold -= total;
+    l.qty -= n;
+    if (l.qty <= 0) w.market.list.splice(w.market.list.indexOf(l), 1);
+    // El vendedor cobra (menos el impuesto), aunque no esté conectado
+    const net = Math.max(0, total - Math.floor(total * MARKET.tax));
+    const seller = onlineByKey(w, l.seller);
+    if (seller) {
+      seller.gold = Math.min(1e9, seller.gold + net);
+      log(w, seller, `¡Vendiste ${it.name}${n > 1 ? ` ×${n}` : ''} en el mercado! Recibes ${net.toLocaleString('es')} de oro (impuesto ${Math.round(MARKET.tax * 100)}%).`, 'quest');
+      emit(w, { type: 'market', to: seller.id });
+    } else {
+      const pay = w.market.pay[l.seller] || (w.market.pay[l.seller] = { gold: 0, sales: [] });
+      pay.gold = Math.min(1e9, pay.gold + net);
+      pay.sales.push({ item: l.item, qty: n, gold: net });
+      if (pay.sales.length > 30) pay.sales.splice(0, pay.sales.length - 30);
+    }
+    marketTouch(w, p, seller);
+    emit(w, { type: 'loot', to: p.id, id: l.item, qty: n, verb: 'Compras en el mercado' });
+    emit(w, { type: 'inventory', to: p.id });
+    emit(w, { type: 'market', to: p.id });
+    return true;
+  }
+
+  function marketCancel(w, p, id) {
+    const why = marketBlock(w, p);
+    if (why) return log(w, p, why, 'warn');
+    const l = w.market.list.find((x) => x.id === id);
+    if (!l || l.seller !== keyOf(p.name)) return log(w, p, 'Esa publicación ya no está.', 'warn');
+    if (!addItem(p, l.item, l.qty)) return log(w, p, 'No hay espacio en el inventario para recuperarlo.', 'warn');
+    w.market.list.splice(w.market.list.indexOf(l), 1);
+    marketTouch(w, p);
+    log(w, p, `Retiraste ${ITEMS[l.item].name}${l.qty > 1 ? ` ×${l.qty}` : ''} del mercado.`, 'sys');
+    emit(w, { type: 'inventory', to: p.id });
+    emit(w, { type: 'market', to: p.id });
+    return true;
+  }
+
+  // Al entrar: cobra lo que vendió mientras no estaba
+  function collectMarket(w, p) {
+    const key = keyOf(p.name);
+    const pay = w.market.pay[key];
+    if (!pay) return;
+    delete w.market.pay[key];
+    p.gold = Math.min(1e9, p.gold + pay.gold);
+    marketTouch(w, p);
+    const what = pay.sales.slice(-4).map((s) => `${ITEMS[s.item] ? ITEMS[s.item].name : s.item}${s.qty > 1 ? ` ×${s.qty}` : ''}`).join(', ');
+    log(w, p, `Mientras no estabas vendiste en el mercado: ${what}${pay.sales.length > 4 ? '…' : ''}. Recibes ${pay.gold.toLocaleString('es')} de oro.`, 'quest');
+  }
+
+  // Lo que ve un jugador en la ventana del mercado. f: { q (texto), cat, page, sort }
+  function marketView(w, p, f = {}) {
+    const q = String(f.q || '').toLowerCase().trim().slice(0, 30);
+    const cat = ['equip', 'consumable', 'quest', 'other'].includes(f.cat) ? f.cat : '';
+    const me = keyOf(p.name);
+    let list = w.market.list.filter((l) => {
+      const it = ITEMS[l.item];
+      if (!it || l.seller === me) return false;
+      if (cat && itemCategory(it) !== cat) return false;
+      return !q || it.name.toLowerCase().includes(q) || l.sellerName.toLowerCase().includes(q);
+    });
+    list.sort(f.sort === 'new' ? (a, b) => b.at - a.at : (a, b) => a.price - b.price || a.at - b.at);
+    const pages = Math.max(1, Math.ceil(list.length / MARKET.pageSize));
+    const page = Math.max(0, Math.min(pages - 1, Math.floor(+f.page) || 0));
+    const row = (l) => ({ id: l.id, item: l.item, qty: l.qty, price: l.price, seller: l.sellerName });
+    return {
+      items: list.slice(page * MARKET.pageSize, (page + 1) * MARKET.pageSize).map(row),
+      total: list.length,
+      page,
+      pages,
+      mine: marketMine(w, p).map(row),
+      max: MARKET.maxListings,
+      tax: MARKET.tax,
+      maxPrice: MARKET.maxPrice,
+      gold: p.gold,
+    };
+  }
+
+  const exportMarket = (w) => ({ nextId: w.market.nextId, list: w.market.list.map((l) => ({ ...l })), pay: JSON.parse(JSON.stringify(w.market.pay)) });
+  function loadMarket(w, m) {
+    if (!m || typeof m !== 'object') return;
+    w.market.nextId = Math.max(1, Math.floor(+m.nextId) || 1);
+    w.market.list = (Array.isArray(m.list) ? m.list : []).filter((l) => l && ITEMS[l.item] && l.qty >= 1 && l.price >= 1 && typeof l.seller === 'string').map((l) => ({ ...l }));
+    w.market.pay = m.pay && typeof m.pay === 'object' ? m.pay : {};
+  }
+  // Personaje borrado: sus publicaciones y su oro pendiente desaparecen
+  function marketForget(w, name) {
+    const key = keyOf(name);
+    const before = w.market.list.length;
+    w.market.list = w.market.list.filter((l) => l.seller !== key);
+    const had = !!w.market.pay[key];
+    delete w.market.pay[key];
+    if (had || before !== w.market.list.length) w.marketDirty = true;
   }
 
   // ---------- Gremios ----------
@@ -1742,7 +1978,7 @@
         float(w, p, 'Resonancia', 'mana', 0.4);
       }
     }
-    // Gemas de Poder: solo en habilidades que hacen daño
+    // Gemas de Poder: solo en habilidades que hacen daño (useGem avisa del destello)
     const k = boost * pw * (base.mult || base.tick || base.shot ? useGem(w, p) : 1);
     const s =
       k === 1
@@ -2488,6 +2724,14 @@
     if (p.frenzy && (p.frenzyT -= dt) <= 0) p.frenzy = 0;
     p.combatT = Math.max(0, p.combatT - dt);
     p.atkTimer = Math.max(0, p.atkTimer - dt);
+    if (p.protT > 0) {
+      p.protT -= dt;
+      if (p.protT <= 0) {
+        p.protT = 0;
+        emit(w, { type: 'protect', ent: p, on: false });
+        log(w, p, 'Tu protección al reaparecer terminó.', 'sys');
+      }
+    }
     const zone = zoneAt(p.pos);
     if ((zone ? zone.id : null) !== p.zoneId) {
       p.zoneId = zone ? zone.id : null;
@@ -2638,6 +2882,7 @@
   }
 
   function startBasic(w, p) {
+    endProtect(w, p, 'Atacaste: tu protección al reaparecer terminó.');
     p.atkTimer = attackInterval(p);
     p.pendingHit = p.cdef.projectile ? 0.3 : 0.22;
     emit(w, { type: 'swing', ent: p });
@@ -2667,7 +2912,7 @@
 
   // Daño especial de un jefe (no se esquiva; la burbuja, los escudos y la reducción sí cuentan)
   function bossHit(w, m, p, pct) {
-    if (p.dead) return;
+    if (p.dead || isProtected(p)) return;
     if (p.bubble > 0) {
       p.bubble = 0;
       return float(w, p, 'Burbuja', 'mana');
@@ -2686,6 +2931,8 @@
   }
 
   const playersNear = (w, at, r) => [...w.players.values()].filter((p) => !p.dead && d2(p.pos, at) <= r);
+  // Jugadores que una mecánica puede dañar (sin los protegidos al reaparecer)
+  const targetsNear = (w, at, r) => playersNear(w, at, r).filter((p) => !isProtected(p));
 
   // Círculos marcados en el suelo que explotan al rato (raíces del Rey Tronco, estrellas del Guardián)
   function marks(w, m, mech, color, onHit) {
@@ -2702,7 +2949,7 @@
       later(w, mech.delay, () => {
         if (m.dead) return;
         ring(w, at, color, mech.r, 0.6);
-        for (const p of playersNear(w, at, mech.r)) onHit(p);
+        for (const p of targetsNear(w, at, mech.r)) onHit(p);
       });
     }
   }
@@ -2791,7 +3038,7 @@
       later(w, mech.warn, () => {
         if (m.dead) return;
         emit(w, { type: 'firewave', at, r: mech.r });
-        for (const p of playersNear(w, at, mech.r)) {
+        for (const p of targetsNear(w, at, mech.r)) {
           if (sheltered(m, p)) {
             float(w, p, '¡A salvo!', 'heal', 0.5);
             continue;
@@ -2800,6 +3047,130 @@
           if (!p.dead) p.debuffs.burn = { t: mech.burn.dur, perSec: m.atk * mech.burn.pct, tick: 1, src: m.def.name };
         }
       });
+    } else if (mech.type === 'freeze') {
+      // Reina de la Escarcha: «¡Muévete o te congelas!». Quien esté quieto al final queda congelado.
+      for (const p of playersNear(w, m.pos, mech.r + 6)) emit(w, { type: 'banner', to: p.id, title: '¡Ventisca de la Reina!', sub: '¡Muévete o te congelas!' });
+      emit(w, { type: 'telegraph', at: { x: m.pos.x, y: m.pos.y, z: m.pos.z }, r: mech.r, dur: mech.warn, color: 0x9fd8ff });
+      const at = { x: m.pos.x, z: m.pos.z };
+      later(w, mech.warn, () => {
+        if (m.dead) return;
+        emit(w, { type: 'frost', at: { x: at.x, y: heightAt(at.x, at.z), z: at.z }, r: mech.r });
+        for (const p of targetsNear(w, at, mech.r)) {
+          if (p.moving || p.leap) {
+            float(w, p, '¡A salvo!', 'heal', 0.5);
+            continue;
+          }
+          bossHit(w, m, p, mech.dmg);
+          if (!p.dead && !Object.values(p.buffs).some((b) => b.ccImmune)) {
+            p.debuffs.root = { t: mech.stun };
+            float(w, p, 'Congelado', 'stun', 0.5);
+          }
+        }
+      });
+    } else if (mech.type === 'puddles') {
+      // Hidra del Pantano: escupe charcos venenosos que quedan en el suelo un rato
+      const spots = playersNear(w, m.pos, 26).slice(0, mech.count).map((p) => ({ x: p.pos.x, z: p.pos.z }));
+      while (spots.length < mech.count) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 3 + Math.random() * 10;
+        spots.push({ x: m.pos.x + Math.cos(a) * r, z: m.pos.z + Math.sin(a) * r });
+      }
+      for (const at of spots) {
+        at.y = heightAt(at.x, at.z);
+        emit(w, { type: 'telegraph', at, r: mech.r, dur: mech.delay, color: 0x7fd04a });
+      }
+      later(w, mech.delay, () => {
+        if (m.dead) return;
+        for (const at of spots) {
+          m.puddles.push({ x: at.x, z: at.z, t: mech.life });
+          emit(w, { type: 'zone', at, r: mech.r, color: 0x7fd04a, dur: mech.life });
+          for (const p of targetsNear(w, at, mech.r)) bossHit(w, m, p, mech.dps * 3);
+        }
+      });
+    } else if (mech.type === 'vortex') {
+      // Gran Esfinge: remolino de arena que arrastra hacia ella; en el centro hace daño. ¡Corre!
+      for (const p of playersNear(w, m.pos, mech.r + 6)) emit(w, { type: 'banner', to: p.id, title: '¡Remolino de arena!', sub: 'Corre lejos de la Esfinge' });
+      emit(w, { type: 'telegraph', at: { x: m.pos.x, y: m.pos.y, z: m.pos.z }, r: mech.core, dur: mech.warn, color: 0xe0b040 });
+      m.stunT = Math.max(m.stunT, mech.warn + mech.dur); // se queda quieta mientras avisa y gira
+      later(w, mech.warn, () => {
+        if (m.dead) return;
+        m.vortexT = mech.dur;
+        emit(w, { type: 'vortex', ent: m, r: mech.r, dur: mech.dur });
+      });
+    } else if (mech.type === 'mirror') {
+      // Coloso Prismático: estrellas en el suelo y, después, Escudo Espejo (¡no le pegues!)
+      marks(w, m, mech, 0xff9ad5, (p) => bossHit(w, m, p, mech.dmg));
+      later(w, mech.warn, () => {
+        if (m.dead) return;
+        m.mirrorT = mech.dur;
+        emit(w, { type: 'mirror', ent: m, dur: mech.dur });
+        for (const p of playersNear(w, m.pos, 30)) emit(w, { type: 'banner', to: p.id, title: '¡Escudo Espejo!', sub: `No ataques al Coloso durante ${mech.dur} segundos` });
+      });
+    } else if (mech.type === 'eclipse') {
+      // Rey del Eclipse: todo se oscurece; solo se salvan los que estén dentro del círculo de luz
+      const a = Math.random() * Math.PI * 2;
+      const rr = 5 + Math.random() * 7;
+      const ar = ARENAS.eclipse;
+      const at = { x: ar.x + Math.cos(a) * rr, z: ar.z + Math.sin(a) * rr };
+      at.y = heightAt(at.x, at.z);
+      emit(w, { type: 'telegraph', at, r: mech.safe, dur: mech.warn, color: 0xfff0a0 });
+      for (const p of playersNear(w, m.pos, 30)) emit(w, { type: 'banner', to: p.id, title: '¡Eclipse!', sub: 'Corre al círculo de luz' });
+      later(w, mech.warn, () => {
+        if (m.dead) return;
+        emit(w, { type: 'eclipse', at, r: mech.safe });
+        for (const p of targetsNear(w, m.pos, 30)) {
+          if (d2(p.pos, at) <= mech.safe) {
+            float(w, p, '¡A salvo!', 'heal', 0.5);
+            continue;
+          }
+          bossHit(w, m, p, mech.dmg);
+        }
+      });
+    }
+  }
+
+  // Estados que duran varios pasos: charcos de la Hidra, remolino de la Esfinge y Escudo Espejo
+  function bossLasting(w, m, dt) {
+    const mech = m.def.mech;
+    if (m.mirrorT > 0 && (m.mirrorT -= dt) <= 0) {
+      m.mirrorT = 0;
+      float(w, m, 'Espejo roto', 'heal', 0.5);
+    }
+    if (m.puddles && m.puddles.length) {
+      m.puddleTick = (m.puddleTick || 0) - dt;
+      const tick = m.puddleTick <= 0;
+      if (tick) m.puddleTick = 1;
+      for (let i = m.puddles.length - 1; i >= 0; i--) {
+        const pd = m.puddles[i];
+        pd.t -= dt;
+        if (pd.t <= 0) {
+          m.puddles.splice(i, 1);
+          continue;
+        }
+        if (!tick) continue;
+        for (const p of targetsNear(w, pd, mech.r)) {
+          bossHit(w, m, p, mech.dps);
+          if (!p.dead) p.debuffs.poison = { t: mech.poison.dur, perSec: m.atk * mech.poison.pct, tick: 1, src: m.def.name };
+        }
+      }
+    }
+    if (m.vortexT > 0) {
+      m.vortexT -= dt;
+      m.vortexTick = (m.vortexTick || 0) - dt;
+      const tick = m.vortexTick <= 0;
+      if (tick) m.vortexTick = 1;
+      for (const p of targetsNear(w, m.pos, mech.r)) {
+        const dx = m.pos.x - p.pos.x;
+        const dz = m.pos.z - p.pos.z;
+        const len = Math.hypot(dx, dz) || 1;
+        if (len > 1.5 && !p.leap) {
+          const k = Math.min(len - 1.5, mech.pull * dt);
+          p.pos.x += (dx / len) * k;
+          p.pos.z += (dz / len) * k;
+          collide(p.pos, PLAYER_R);
+        }
+        if (tick && len <= mech.core) bossHit(w, m, p, mech.dps);
+      }
     }
   }
 
@@ -2851,7 +3222,10 @@
       if (d.left <= 0) m.dots.splice(i, 1);
     }
 
-    if (m.def.mech) bossMech(w, m, dt);
+    if (m.def.mech) {
+      bossMech(w, m, dt);
+      bossLasting(w, m, dt);
+    }
     if (m.remove) return;
 
     // Aturdido u oveja: no se mueve ni ataca
@@ -2863,9 +3237,9 @@
     const fromHome = d2(m.pos, m.spawn);
     if (m.state !== 'return') {
       const a = m.aggro;
-      if (a && (!aggroAlive(w, a) || fromHome > LEASH_R || inSafe(a.pos))) {
+      if (a && (!aggroAlive(w, a) || fromHome > LEASH_R || inSafe(a.pos) || isProtected(a))) {
         dropAggro(m);
-      } else if (!a && m.def.aggressive && near && nearD < AGGRO_R && !inSafe(near.pos) && m.lvl >= near.level - 8) {
+      } else if (!a && m.def.aggressive && near && nearD < AGGRO_R && !inSafe(near.pos) && !isProtected(near) && m.lvl >= near.level - 8) {
         m.aggro = near;
       }
     }
@@ -2910,7 +3284,12 @@
   }
 
   // Bonificaciones activas para mostrar en pantalla
-  const buffList = (p) => Object.entries(p.buffs).filter(([k]) => k !== 'dome').map(([, b]) => ({ name: b.name, t: Math.round(b.t * 10) / 10 })).concat(p.buffs.dome ? [{ name: 'Dentro de la cúpula', t: 0 }] : []);
+  const buffList = (p) =>
+    Object.entries(p.buffs)
+      .filter(([k]) => k !== 'dome')
+      .map(([, b]) => ({ name: b.name, t: Math.round(b.t * 10) / 10 }))
+      .concat(p.buffs.dome ? [{ name: 'Dentro de la cúpula', t: 0 }] : [])
+      .concat(p.protT > 0 ? [{ name: 'Protección al reaparecer', t: Math.round(p.protT * 10) / 10 }] : []);
   const DEBUFF_NAMES = { poison: 'Envenenado', burn: 'Quemado', slow: 'Lento', root: 'Enraizado' };
   const debuffList = (p) => Object.entries(p.debuffs).map(([k, d]) => ({ name: DEBUFF_NAMES[k] || k, t: Math.round(d.t * 10) / 10 }));
   const liveStats = (p) => ({
@@ -2954,10 +3333,16 @@
     exportGuilds,
     loadGuilds,
     forgetMember,
+    marketView,
+    exportMarket,
+    loadMarket,
+    marketForget,
+    isProtected,
     cmd: {
       setTarget, attack, targetNearest, moveTo, setMoveDir, talkTo, useSkill, usePotion, useItem, sellItem, destroyItem, buyItem, unequip, respawn,
       partyInvite, partyAnswer, partyLeave, partyKick, classQuest, setGems, hatchPet, toggleMount,
       guildCreate, guildInvite, guildAnswer, guildLeave, guildKick, guildRank, guildLeader, guildDisband, guildNotice,
+      marketSell, marketBuy, marketCancel,
     },
   };
 });

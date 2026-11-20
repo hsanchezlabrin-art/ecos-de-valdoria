@@ -608,6 +608,8 @@
       morado: [0xc79bff, 0x5a1fa0, 0.77],
       dorado: [0xffc46b, 0xb05a10, 0.99],
       arcoiris: [0xffe6ff, 0xd060c0, 1.1],
+      cometa: [0xe0f6ff, 0x3a9ad8, 1.15],
+      aurora: [0xc8ffe8, 0x20b080, 1.2],
     },
     hammer: {
       madera: [0x8a6a46, 0x000000, 0],
@@ -616,6 +618,8 @@
       morado: [0xb88cff, 0x5a1fa0, 0.72],
       dorado: [0xffc46b, 0xb05a10, 0.94],
       arcoiris: [0xffe6ff, 0xd060c0, 1.05],
+      cometa: [0xe0f6ff, 0x3a9ad8, 1.1],
+      aurora: [0xc8ffe8, 0x20b080, 1.15],
     },
     bow: {
       madera: [0x6b4a2e, 0x000000, 0],
@@ -624,6 +628,8 @@
       morado: [0xb88cff, 0x5a1fa0, 0.72],
       dorado: [0xffc46b, 0xb05a10, 0.94],
       arcoiris: [0xffe6ff, 0xd060c0, 1.05],
+      cometa: [0xe0f6ff, 0x3a9ad8, 1.1],
+      aurora: [0xc8ffe8, 0x20b080, 1.15],
     },
     staff: {
       madera: [0x9fe08a, 0x2f8a2a, 0.33],
@@ -632,6 +638,8 @@
       morado: [0xd09bff, 0x7a2ad0, 1.1],
       dorado: [0xffd27a, 0xd07a10, 1.32],
       arcoiris: [0xfff0ff, 0xe070d0, 1.4],
+      cometa: [0xe8f8ff, 0x4ab0ff, 1.45],
+      aurora: [0xd0ffee, 0x30d090, 1.5],
     },
   };
 
@@ -657,9 +665,9 @@
   }
 
   // ---------- Armaduras: piezas según grado y tipo ----------
-  const GRADE_IDX = { madera: 0, cobre: 1, azul: 2, morado: 3, dorado: 4, arcoiris: 5 };
-  const TRIM = { madera: 0x6b4a2e, cobre: 0xc8844a, azul: 0x5d8fd8, morado: 0x8a55c8, dorado: 0xe0b040, arcoiris: 0xffffff };
-  const GEM = { azul: 0x7fd0ff, morado: 0xd09bff, dorado: 0xffd27a, arcoiris: 0xffffff };
+  const GRADE_IDX = { madera: 0, cobre: 1, azul: 2, morado: 3, dorado: 4, arcoiris: 5, cometa: 6, aurora: 7 };
+  const TRIM = { madera: 0x6b4a2e, cobre: 0xc8844a, azul: 0x5d8fd8, morado: 0x8a55c8, dorado: 0xe0b040, arcoiris: 0xffffff, cometa: 0xcfeeff, aurora: 0x8affc8 };
+  const GEM = { azul: 0x7fd0ff, morado: 0xd09bff, dorado: 0xffd27a, arcoiris: 0xffffff, cometa: 0x9fe8ff, aurora: 0x7dffc0 };
 
   function setArmorLook(m, item) {
     if (m.torsoMat) m.torsoMat.color.setHex(item ? item.look : m.baseBody);
@@ -707,7 +715,7 @@
     if (gi >= 3) add(m.rig, part(box(0.12, 0.8, 0.02), trim, 0, 1.4, td / 2 + 0.01));
     // Diamante Dorado en adelante: capa (si el personaje no trae una propia)
     if (gi >= 4 && !m.hasCape) {
-      const capeM = mat(item.grade === 'arcoiris' ? 0xffffff : 0xb03a2a, { side: THREE.DoubleSide });
+      const capeM = mat({ arcoiris: 0xffffff, cometa: 0xd8e8f4, aurora: 0x3ab08a }[item.grade] || 0xb03a2a, { side: THREE.DoubleSide });
       add(m.rig, part(box(tw - 0.04, 1.25, 0.05), capeM, 0, 1.3, -td / 2 - 0.04));
       if (item.grade === 'arcoiris') m.armorRainbow.push(capeM);
     }

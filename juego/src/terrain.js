@@ -9,8 +9,11 @@
 })(function (Data) {
   const { ZONES, ARENAS } = Data;
 
-  const WORLD = 440;
-  const WORLD_LIMIT = 188;
+  // Desde la v0.31 el mundo tiene el triple de superficie (radio 188 → 326): el centro de siempre
+  // y, alrededor, las tierras lejanas (niveles 40–80) con dos aldeas nuevas.
+  const WORLD = 760;
+  const WORLD_LIMIT = 326;
+  const EDGE = WORLD_LIMIT - 20; // desde aquí suben las montañas del borde
   const VILLAGE_R = 22;
   const WATER_Y = -1.7;
 
@@ -41,9 +44,20 @@
     const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz)));
     return Math.hypot(px - (ax + dx * t), pz - (az + dz * t));
   }
+  // Caminos: de la aldea a cada zona del centro, y una red que une las aldeas nuevas con sus zonas
+  // (se puede llegar caminando a todas partes). [desde, hasta] por id de zona ('aldea' = el centro).
+  const ROAD_LINKS = [
+    ['bosque', 'nevada'], ['nevada', 'tundra'], ['tundra', 'pantano'], ['pantano', 'ciudadela'],
+    ['ciudadela', 'desierto'], ['desierto', 'oasis'], ['minas', 'oasis'], ['oasis', 'canon'], ['canon', 'eclipse'], ['eclipse', 'valle'],
+  ];
+  const zoneXZ = (id) => (id === 'aldea' ? { x: 0, z: 0 } : ZONES.find((z) => z.id === id));
+  const ROADS = [
+    ...OUTER_ZONES.filter((zn) => !zn.village && Math.hypot(zn.x, zn.z) < 170).map((zn) => [0, 0, zn.x, zn.z]),
+    ...ROAD_LINKS.map(([a, b]) => [zoneXZ(a).x, zoneXZ(a).z, zoneXZ(b).x, zoneXZ(b).z]),
+  ];
   function pathDist(x, z) {
     let d = Infinity;
-    for (const zn of OUTER_ZONES) d = Math.min(d, distSeg(x, z, 0, 0, zn.x, zn.z));
+    for (const r of ROADS) d = Math.min(d, distSeg(x, z, r[0], r[1], r[2], r[3]));
     return d;
   }
 
@@ -66,13 +80,19 @@
     if (pd < 6 && h < 6) h = lerp(h, Math.max(h * 0.4, 0.2), (1 - ss(2, 6, pd)) * 0.7);
     const d = Math.hypot(x, z);
     h *= ss(VILLAGE_R * 0.8, VILLAGE_R + 20, d);
-    h += Math.max(0, d - 168) * 0.6;
+    h += Math.max(0, d - EDGE) * 0.6;
     return h;
   }
 
+  // Clima de las tierras lejanas fuera de las zonas: nieve al norte, arena al sur (0..1)
+  const biome = (x, z) => ({ snow: ss(140, 178, z) * (1 - ss(30, 80, x)), sand: ss(165, 200, -z) });
+
   const inVillage = (p) => Math.hypot(p.x, p.z) < VILLAGE_R;
   const SAFE_ZONES = OUTER_ZONES.filter((z) => z.safe);
-  // Zonas seguras: la aldea y la Ciudadela (los monstruos no entran)
+  // Aldeas donde se puede reaparecer: la Aldea de los Bloques, la Ciudadela y las aldeas nuevas
+  const HOMES = [{ id: 'aldea', x: 0, z: 5 }, ...SAFE_ZONES.map((z) => ({ id: z.id, x: z.x, z: z.z + (z.hub ? 6 : 0) }))];
+  const nearestHome = (p) => HOMES.reduce((a, b) => (Math.hypot(p.x - b.x, p.z - b.z) < Math.hypot(p.x - a.x, p.z - a.z) ? b : a));
+  // Zonas seguras: las aldeas y la Ciudadela (los monstruos no entran)
   const inSafe = (p) => inVillage(p) || SAFE_ZONES.some((z) => Math.hypot(p.x - z.x, p.z - z.z) < z.r);
 
   function zoneAt(p) {
@@ -98,6 +118,7 @@
     const L = {
       trunks: [], pines: [], rounds: [], rocks: [], lava: [], houses: [], fires: [], obstacles: [],
       windmills: [], shrooms: [], crystals: [], rails: [], walls: [], cityHouses: [], geysers: [], jelly: [], clouds: [], islets: [], bridges: [], pillars: [],
+      cacti: [], palms: [], pyramids: [], ponds: [], fountains: [],
     };
     const block = (x, z, r) => L.obstacles.push({ x, z, r });
     const zoneById = (id) => ZONES.find((z) => z.id === id);
@@ -106,24 +127,46 @@
 
     // Vegetación
     const r = rng(42);
-    for (let i = 0; i < 5200; i++) {
-      const x = (r() - 0.5) * 2 * 182;
-      const z = (r() - 0.5) * 2 * 182;
+    const SPAN = WORLD_LIMIT - 6;
+    for (let i = 0; i < 16000; i++) {
+      const x = (r() - 0.5) * 2 * SPAN;
+      const z = (r() - 0.5) * 2 * SPAN;
       const d = Math.hypot(x, z);
-      if (d > 182 || d < VILLAGE_R + 5) continue;
+      if (d > SPAN || d < VILLAGE_R + 5) continue;
       if (pathDist(x, z) < 4 || inArena(x, z)) continue;
       const h = heightAt(x, z);
       if (h < WATER_Y + 0.2) continue;
       const zn = OUTER_ZONES.find((zz) => Math.hypot(x - zz.x, z - zz.z) < zz.r * 1.15);
       if (zn && zn.safe) continue;
-      let density = zn ? zn.trees : 0.16;
+      // Entre zonas, el bosque cambia con la tierra: nevado al norte, seco al sur
+      const bm = biome(x, z);
+      const snowy = !zn && bm.snow > 0.5;
+      const sandy = !zn && bm.sand > 0.5;
+      let density = zn ? zn.trees : sandy ? 0.04 : 0.16;
       if (zn && zn.treeType !== 'giant' && Math.hypot(x - zn.x, z - zn.z) < zn.r * 0.5) density *= 0.2;
-      if (d > 150) density = 0.45;
+      if (d > EDGE - 18) density = 0.45;
       if (r() > density) continue;
-      const type = zn ? zn.treeType : r() < 0.5 ? 'pine' : 'round';
+      const type = zn ? zn.treeType : snowy ? 'snowpine' : sandy ? (r() < 0.6 ? 'cactus' : 'palm') : r() < 0.5 ? 'pine' : 'round';
       const s = 0.8 + r() * 0.7;
       const rot = r() * Math.PI * 2;
       if (type === 'none') continue;
+      if (type === 'cactus') {
+        L.cacti.push({ x, y: h, z, s, rot, c: r() < 0.5 ? 0x4f9a3a : 0x5aa84a });
+        block(x, z, 0.35 * s);
+        continue;
+      }
+      if (type === 'palm') {
+        L.palms.push({ x, y: h, z, s, rot });
+        block(x, z, 0.3 * s);
+        continue;
+      }
+      if (type === 'snowpine') {
+        L.trunks.push({ x, y: h, z, s, rot, c: 0x4a3626, tall: 1 });
+        L.pines.push({ x, y: h + 2.0 * s, z, s: s * 1.25, rot, c: r() < 0.5 ? 0xe8f0f8 : 0xd8e6f0 });
+        L.pines.push({ x, y: h + 3.4 * s, z, s: s * 0.9, rot, c: 0xf4f8fc });
+        block(x, z, 0.3 * s + 0.12);
+        continue;
+      }
       if (type === 'giant') {
         // Árbol colosal del bosque: tronco enorme y copa muy ancha
         const g = 2.2 + r() * 1.2;
@@ -147,23 +190,24 @@
       block(x, z, 0.3 * s + 0.12);
     }
     // Rocas: solo las grandes bloquean el paso. Naranjas en las minas, oscuras en el valle.
-    for (let i = 0; i < 520; i++) {
-      const x = (r() - 0.5) * 2 * 182;
-      const z = (r() - 0.5) * 2 * 182;
+    const ROCK_C = { minas: 0xb5703f, valle: 0x2f2c2a, islas: 0xd8d4cc, tundra: 0xc8d4e0, desierto: 0xc8a46a, canon: 0x8a5aa8, eclipse: 0x4a4458, pantano: 0x4a5a3a };
+    for (let i = 0; i < 1550; i++) {
+      const x = (r() - 0.5) * 2 * SPAN;
+      const z = (r() - 0.5) * 2 * SPAN;
       const d = Math.hypot(x, z);
-      if (d < VILLAGE_R + 3 || pathDist(x, z) < 3 || inArena(x, z)) continue;
+      if (d > SPAN || d < VILLAGE_R + 3 || pathDist(x, z) < 3 || inArena(x, z)) continue;
       const zn = OUTER_ZONES.find((zz) => Math.hypot(x - zz.x, z - zz.z) < zz.r);
       if (zn && zn.safe) continue;
-      const big = zn && zn.id === 'minas';
-      const s = 0.4 + r() * (d > 150 || big ? 2.6 : 1.2);
-      const c = !zn ? 0x77716a : zn.id === 'minas' ? 0xb5703f : zn.id === 'valle' ? 0x2f2c2a : zn.id === 'islas' ? 0xd8d4cc : 0x77716a;
+      const big = zn && (zn.id === 'minas' || zn.id === 'canon');
+      const s = 0.4 + r() * (d > EDGE - 18 || big ? 2.6 : 1.2);
+      const c = (zn && ROCK_C[zn.id]) || 0x77716a;
       L.rocks.push({ x, y: heightAt(x, z), z, s, rot: r() * 6, c });
       if (s > 0.75) block(x, z, s * 0.85);
     }
 
     // ---------- Aldea de los Bloques: cabañas alrededor de la plaza, sin tapar los caminos ----------
     const rv = rng(5);
-    const pathAngles = OUTER_ZONES.map((zn) => Math.atan2(zn.z, zn.x));
+    const pathAngles = ROADS.filter((rd) => !rd[0] && !rd[1]).map((rd) => Math.atan2(rd[3], rd[2]));
     const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
     let placed = 0;
     for (let i = 0; i < 24 && placed < 8; i++) {
@@ -313,6 +357,124 @@
       block(x, z, 0.8);
     }
 
+    // ---------- Tierras lejanas ----------
+    // Aldeas nuevas: cabañas alrededor de la plaza (sin tapar los caminos que salen de ella)
+    const roadAngles = (zn) =>
+      ROADS.flatMap((rd) => {
+        if (Math.hypot(rd[0] - zn.x, rd[1] - zn.z) < 1) return [Math.atan2(rd[3] - zn.z, rd[2] - zn.x)];
+        if (Math.hypot(rd[2] - zn.x, rd[3] - zn.z) < 1) return [Math.atan2(rd[1] - zn.z, rd[0] - zn.x)];
+        return [];
+      });
+    const nearNpc = (x, z, d) => NPCS.some((n) => Math.hypot(x - n.x, z - n.z) < d);
+    for (const id of ['nevada', 'oasis']) {
+      const zn = zoneById(id);
+      const angles = roadAngles(zn);
+      const snow = id === 'nevada';
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + 0.2;
+        if (angles.some((pa) => angDiff(a, pa) < 0.42)) continue;
+        const rr = 15 + rv() * 2;
+        const x = zn.x + Math.cos(a) * rr;
+        const z = zn.z + Math.sin(a) * rr;
+        if (nearNpc(x, z, 5)) continue;
+        const w = 4.5 + rv() * 1.5;
+        const dd = 4 + rv() * 1.2;
+        L.houses.push({ x, z, rot: Math.atan2(zn.x - x, zn.z - z), w, d: dd, roof: snow ? 0xf4f8fc : rv() < 0.5 ? 0xd84a3a : 0x3a8a6a, wall: snow ? 0x8a6a46 : 0xe8d0a0 });
+        block(x, z, (w + dd) / 4 + 0.35);
+      }
+      if (snow) {
+        L.fires.push({ x: zn.x, z: zn.z, big: true });
+        block(zn.x, zn.z, 0.9);
+      } else {
+        // Oasis: laguna con palmeras en el centro de la plaza
+        L.ponds.push({ x: zn.x, y: heightAt(zn.x, zn.z) + 0.06, z: zn.z, s: 3.2, c: 0x4ab0d8 });
+        block(zn.x, zn.z, 3.3);
+        for (let k = 0; k < 5; k++) {
+          const a = (k / 5) * Math.PI * 2 + 0.5;
+          const x = zn.x + Math.cos(a) * 4.6;
+          const z = zn.z + Math.sin(a) * 4.6;
+          L.palms.push({ x, y: heightAt(x, z), z, s: 1.1 + rv() * 0.3, rot: a });
+          block(x, z, 0.35);
+        }
+      }
+    }
+    // Tundra: cristales de hielo · Cañón: cristales gigantes de colores y peñascos violetas
+    const scatter = (zn, n, fn) => {
+      for (let i = 0; i < n; i++) {
+        const a = r() * Math.PI * 2;
+        const rr = 5 + Math.sqrt(r()) * (zn.r - 5);
+        const x = zn.x + Math.cos(a) * rr;
+        const z = zn.z + Math.sin(a) * rr;
+        if (pathDist(x, z) < 3.5 || inArena(x, z)) continue;
+        fn(x, z);
+      }
+    };
+    scatter(zoneById('tundra'), 22, (x, z) => {
+      const s = 0.6 + r() * 1.2;
+      L.crystals.push({ x, y: heightAt(x, z), z, s, rot: r() * 6, c: r() < 0.6 ? 0xdff4ff : 0x9fd8ff });
+      if (s > 0.9) block(x, z, s * 0.5);
+    });
+    scatter(zoneById('canon'), 60, (x, z) => {
+      const s = 0.8 + r() * 2.2;
+      L.crystals.push({ x, y: heightAt(x, z), z, s, rot: r() * 6, c: [0xff9ad5, 0xb98cff, 0x7fd0ff, 0xffe08a][Math.floor(r() * 4)] });
+      if (s > 0.9) block(x, z, s * 0.5);
+    });
+    // Pantano: charcos verdes (de adorno) y setas brillantes
+    scatter(zoneById('pantano'), 30, (x, z) => {
+      L.ponds.push({ x, y: heightAt(x, z) + 0.05, z, s: 1.4 + r() * 2.4, c: 0x5a8a3a });
+      if (r() < 0.6) L.shrooms.push({ x: x + 2, y: heightAt(x + 2, z), z, s: 0.6 + r() * 0.6, c: r() < 0.5 ? 0xd8ff6a : 0x7fe0ff });
+    });
+    // Desierto: pirámides de bloques
+    const dz = zoneById('desierto');
+    for (const [ox, oz, s] of [[-14, -22, 9], [16, 14, 6], [-26, 8, 5]]) {
+      const x = dz.x + ox;
+      const z = dz.z + oz;
+      L.pyramids.push({ x, y: heightAt(x, z), z, s });
+      block(x, z, s * 0.75);
+    }
+    // Ruinas del Eclipse: columnas rotas y muros caídos
+    const ez = zoneById('eclipse');
+    scatter(ez, 26, (x, z) => {
+      if (r() < 0.6) {
+        L.pillars.push({ x, y: heightAt(x, z), z, c: 0x5a5468, h: 0.3 + r() * 0.8 });
+        block(x, z, 0.8);
+      } else {
+        L.walls.push({ x, y: heightAt(x, z), z, rot: r() * 6, h: 1 + r() * 2, c: 0x4a4458 });
+        block(x, z, 1.15);
+      }
+    });
+
+    // Arenas de los jefes nuevos
+    const ringOf = (ar, n, fn) => {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        fn(ar.x + Math.cos(a) * ar.r, ar.z + Math.sin(a) * ar.r, a);
+      }
+    };
+    ringOf(ARENAS.escarcha, 10, (x, z) => {
+      L.crystals.push({ x, y: heightAt(x, z), z, s: 2.4, rot: x, c: 0xdff4ff });
+      block(x, z, 1.1);
+    });
+    L.ponds.push({ x: ARENAS.charca.x, y: heightAt(ARENAS.charca.x, ARENAS.charca.z) + 0.05, z: ARENAS.charca.z, s: 7, c: 0x3f6a3a });
+    ringOf(ARENAS.charca, 9, (x, z) => {
+      L.shrooms.push({ x, y: heightAt(x, z), z, s: 1.4, c: 0xd8ff6a });
+    });
+    const pa = ARENAS.piramide;
+    L.pyramids.push({ x: pa.x - 4, y: heightAt(pa.x - 4, pa.z - pa.r - 9), z: pa.z - pa.r - 9, s: 12 });
+    block(pa.x - 4, pa.z - pa.r - 9, 9);
+    ringOf(pa, 8, (x, z) => {
+      L.pillars.push({ x, y: heightAt(x, z), z, c: 0xe0c890, h: 0.7 });
+      block(x, z, 0.8);
+    });
+    ringOf(ARENAS.espejo, 8, (x, z) => {
+      L.crystals.push({ x, y: heightAt(x, z), z, s: 3, rot: x, c: 0xe0d0ff });
+      block(x, z, 1.3);
+    });
+    ringOf(ARENAS.eclipse, 10, (x, z) => {
+      L.pillars.push({ x, y: heightAt(x, z), z, c: 0x3a3450, h: 1.3 });
+      block(x, z, 0.8);
+    });
+
     // Rejilla espacial para consultar obstáculos cercanos rápido
     const CELL = 8;
     const grid = new Map();
@@ -351,7 +513,7 @@
   }
 
   return {
-    WORLD, WORLD_LIMIT, VILLAGE_R, WATER_Y, FIELD_ZONES, OUTER_ZONES, ss, lerp, rng, pathDist, heightAt, inVillage, inSafe, zoneAt,
+    WORLD, WORLD_LIMIT, EDGE, VILLAGE_R, WATER_Y, FIELD_ZONES, OUTER_ZONES, ROADS, HOMES, nearestHome, biome, ss, lerp, rng, pathDist, heightAt, inVillage, inSafe, zoneAt,
     waterDepth, SWIM_DEPTH, DEEP_DEPTH, SWIM_Y, layout, collide,
   };
 });

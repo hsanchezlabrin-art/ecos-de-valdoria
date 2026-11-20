@@ -132,6 +132,7 @@
     look.set(t.x, t.y + 1.6, t.z);
     camera.lookAt(look);
     G.world.sky.position.copy(camera.position);
+    if (G.world.cull) G.world.cull(camera.position, camera.far);
     V.Gfx.update(dt, t, G.player ? G.player.pos : null);
   }
 
@@ -248,6 +249,9 @@
           break;
         case 'KeyB':
           UI.togglePanel('friend');
+          break;
+        case 'KeyU':
+          UI.toggleMarket();
           break;
         case 'KeyF':
           Game.attackTarget();

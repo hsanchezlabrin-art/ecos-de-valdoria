@@ -685,10 +685,13 @@
   // Por ahora tienen modelos la armadura de tela del gnomo y la de cuero del elfo (las demás razas no
   // los piden: así no se descarga un archivo que no existe).
   const ARMOR_MODEL = {
-    CLOTH_ROBE: (g, race) => (race === 'gnomo' ? `tela_${g}` : null),
-    LIGHT_LEATHER: (g, race) => (race === 'elfo' ? `cuero_${g}` : null),
-    MEDIUM_SCALE: (g, race) => (race === 'lagarto' ? `escamas_${g}` : null),
+    CLOTH_ROBE: (g, race) => (race === 'gnomo' ? `tela_${MODEL_GRADE[g] || g}` : null),
+    LIGHT_LEATHER: (g, race) => (race === 'elfo' ? `cuero_${MODEL_GRADE[g] || g}` : null),
+    MEDIUM_SCALE: (g, race) => (race === 'lagarto' ? `escamas_${MODEL_GRADE[g] || g}` : null),
   };
+  // Los grados Cometa y Aurora (niveles 55 y 70) usan el diseño Arcoíris teñido con su color
+  const MODEL_GRADE = { cometa: 'arcoiris', aurora: 'arcoiris' };
+  const GRADE_TINT = { cometa: 0xd8f0ff, aurora: 0xb8ffdc };
   const armorModelName = (item, raceKey) => {
     const v = ARMOR_MODEL[item.armorType];
     return typeof v === 'function' ? v(item.grade, raceKey.split('_')[0]) : v;
@@ -742,7 +745,7 @@
       const ud = (src.material && src.material.userData) || {};
       let mat;
       if (ud.colores && ud.brilla) mat = new THREE.MeshBasicMaterial({ vertexColors: true });
-      else if (ud.colores) mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.05 });
+      else if (ud.colores) mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.05, color: GRADE_TINT[item.grade] || 0xffffff });
       else mat = M.mat(TRIM[item.grade], { metalness: metal ? 0.3 : 0.05, roughness: metal ? 0.5 : 0.8 });
       // Los vértices de la armadura están en el mismo espacio que los del cuerpo: se usa su esqueleto
       const sm = new THREE.SkinnedMesh(src.geometry.clone(), mat);

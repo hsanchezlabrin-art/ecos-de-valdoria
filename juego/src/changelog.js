@@ -8,6 +8,21 @@
 })(function () {
   return [
     {
+      version: '0.31.0',
+      date: '2026-11-19',
+      title: 'Nivel 80, tierras lejanas, portales y mercado',
+      items: [
+        'El nivel máximo sube a 80 (desde el 50 cada nivel pide más experiencia) y las habilidades llegan al Nv 12.',
+        'Dos grados de equipo nuevos: Cometa Plateado (nivel 55) y Aurora Eterna (nivel 70), para las cinco razas.',
+        'El mundo tiene el triple de superficie: dos aldeas nuevas, Villa Nevada y el Oasis del Sol, unidas por caminos, y cinco zonas para los niveles 40 a 80: Tundra de los Muñecos de Nieve, Pantano de las Luciérnagas, Desierto de las Dunas Doradas, Cañón de Cristal Prismático y Ruinas del Eclipse.',
+        'Cinco jefes nuevos con su propia mecánica: la Reina de la Escarcha (¡muévete o te congelas!), la Hidra del Pantano (charcos de veneno), la Gran Esfinge de Arena (remolino), el Coloso Prismático (escudo espejo) y el Rey del Eclipse (círculo de luz).',
+        'Red de portales: el Portal de los Viajeros de cada aldea te lleva, por oro, a las aldeas y zonas que ya visitaste. No funciona en combate.',
+        'Mercado de Aventureros (tecla U o un Subastador): pon tus objetos a la venta al precio que quieras y compra lo que venden otros. Si vendes sin estar conectado, el oro te llega al entrar.',
+        'Protección al reaparecer: 6 segundos en que nadie puede atacarte (se termina si atacas), con una burbuja dorada.',
+        'Las Gemas de Poder lanzan un destello de luz desde la mano que sujeta el arma en cada golpe.',
+      ],
+    },
+    {
       version: '0.30.0',
       date: '2026-11-19',
       title: 'Lagartos nuevos y sus armaduras',
