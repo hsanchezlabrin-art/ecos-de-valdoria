@@ -1,4 +1,4 @@
 {
-  "shell": 2,
+  "shell": 3,
   "nota": "Versión de la app de escritorio (carcasa). Súbela solo cuando cambie algo en desktop/; el juego se actualiza solo desde la web."
 }

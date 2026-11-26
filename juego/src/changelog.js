@@ -8,6 +8,22 @@
 })(function () {
   return [
     {
+      version: '0.32.0',
+      date: '2026-11-26',
+      title: 'Interfaz nueva de madera y oro',
+      items: [
+        'Toda la interfaz tiene un estilo nuevo, cálido y de bloques: ventanas de madera con esquinas doradas, botones grandes, barras gruesas y letras más fáciles de leer.',
+        'Pantalla de carga nueva con cielo, islas flotantes y una barra de progreso de madera, y un emblema nuevo para el juego, el ícono y la app.',
+        'Al elegir personaje ves el retrato de su raza, su clase y su nivel, y lo ves de cuerpo entero sobre un pedestal. El botón «Entrar al mundo» siempre queda a la vista.',
+        'Tu retrato y el contador de Gemas de Poder aparecen junto a tus barras de vida y maná. El minimapa y el mapa grande tienen colores más claros.',
+        'Los objetos tienen el borde del color de su grado; los de Arcoíris Celestial, Cometa Plateado y Aurora Eterna brillan y cambian de color.',
+        'En el celular hay botones nuevos junto a Atacar: Objetivo (siguiente monstruo), Acción (hablar con el personaje más cercano) y Habilidades. El joystick ahora es de madera con perilla dorada.',
+        'En Ajustes puedes agrandar toda la interfaz (texto, botones y ventanas) hasta un 130%.',
+        'La web, la guía y las novedades estrenan el mismo estilo, con los datos actuales: nivel 80, ocho grados de equipo y 14 tierras y aldeas.',
+        'App de escritorio: pantalla de inicio e ícono nuevos (llegan al instalar la versión nueva).',
+      ],
+    },
+    {
       version: '0.31.0',
       date: '2026-11-19',
       title: 'Nivel 80, tierras lejanas, portales y mercado',

@@ -16,7 +16,7 @@ const GAME_URL = `${WEB}/juego/`;
 const CHECK_TIMEOUT = 8000;
 // Versión de la carcasa de escritorio: subirla SOLO cuando cambie algo de desktop/ (main.js,
 // preload, splash, instalador). El sitio publica la vigente en /escritorio.json.
-const SHELL = 2;
+const SHELL = 3;
 
 let splash = null;
 let win = null;
