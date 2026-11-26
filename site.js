@@ -160,7 +160,10 @@
     if (!box) return;
     for (const id of D.CLASS_IDS) {
       const c = D.CLASSES[id];
-      const stage = el('div', { class: 'class-stage' }, el('span', { class: 'glyph', 'aria-hidden': 'true' }, c.glyph));
+      // Retrato vóxel de la raza en la esquina (si no carga portraits.js, el símbolo de la clase)
+      const badge = el('span', { class: 'glyph', 'aria-hidden': 'true' }, c.glyph);
+      if (V.Portraits) badge.innerHTML = V.Portraits.portrait(id);
+      const stage = el('div', { class: 'class-stage' }, badge);
       const card = el(
         'article',
         { class: 'class-card' },
@@ -195,19 +198,26 @@
       return n;
     };
     const field = D.ZONES.filter((z) => z.id !== 'aldea');
-    add('circle', { cx: 0, cy: 0, r: R - 4, fill: 'rgba(38,48,31,.5)', stroke: 'rgba(176,146,98,.35)' });
+    add('circle', { cx: 0, cy: 0, r: R - 4, fill: '#4c8f38', stroke: '#3f250f', 'stroke-width': 6 });
     const roads = V.Terrain ? V.Terrain.ROADS : field.map((z) => [0, 0, z.x, z.z]);
-    for (const r of roads) add('line', { x1: r[0], y1: r[1], x2: r[2], y2: r[3], stroke: 'rgba(176,146,98,.6)', 'stroke-width': 5, 'stroke-linecap': 'round' });
-    for (const z of field) add('circle', { cx: z.x, cy: z.z, r: z.r, fill: z.safe ? 'rgba(217,181,106,.45)' : tint(z.tint), 'fill-opacity': 0.75, stroke: z.safe ? '#d9b56a' : 'rgba(0,0,0,.35)' });
-    add('circle', { cx: 0, cy: 0, r: 22, fill: 'rgba(217,181,106,.45)', stroke: '#d9b56a', 'stroke-width': 1.5 });
+    for (const r of roads) add('line', { x1: r[0], y1: r[1], x2: r[2], y2: r[3], stroke: 'rgba(240,214,150,.9)', 'stroke-width': 5, 'stroke-linecap': 'round' });
+    for (const z of field) add('circle', { cx: z.x, cy: z.z, r: z.r, fill: z.safe ? 'rgba(255,200,61,.6)' : tint(z.tint), 'fill-opacity': 0.9, stroke: z.safe ? '#ffc83d' : '#3f250f', 'stroke-width': 2.5 });
+    add('circle', { cx: 0, cy: 0, r: 22, fill: 'rgba(255,200,61,.6)', stroke: '#ffc83d', 'stroke-width': 2.5 });
     for (const z of D.ZONES) {
-      const t = add('text', { x: z.x, y: z.z + 5, 'text-anchor': 'middle', fill: '#f3e7cc', 'font-size': 15, 'font-family': 'Cinzel, Georgia, serif', 'font-weight': 700, 'paint-order': 'stroke', stroke: 'rgba(0,0,0,.7)', 'stroke-width': 4 });
+      const t = add('text', { x: z.x, y: z.z + 5, 'text-anchor': 'middle', fill: z.safe ? '#ffe999' : '#fff6e3', 'font-size': 17, 'font-family': "'Lilita One', 'Arial Rounded MT Bold', sans-serif", 'font-weight': 400, 'paint-order': 'stroke', stroke: '#3f250f', 'stroke-width': 5, 'stroke-linejoin': 'round' });
       t.textContent = { aldea: 'Aldea', praderas: 'Praderas', bosque: 'Bosque', minas: 'Minas', ciudadela: 'Ciudadela', valle: 'Valle', islas: 'Islas', nevada: 'Villa Nevada', tundra: 'Tundra', pantano: 'Pantano', desierto: 'Desierto', oasis: 'Oasis', canon: 'Cañón', eclipse: 'Eclipse' }[z.id] || z.name;
     }
     // Jefes
     for (const m of Object.values(D.MOBS).filter((mm) => mm.boss)) add('text', { x: m.at.x, y: m.at.z - 12, 'text-anchor': 'middle', 'font-size': 18, fill: '#c895ff' }).textContent = '☠';
     box.append(svg);
 
+    // Título con los números actuales del mundo
+    const title = $('#worldTitle');
+    if (title) {
+      const villages = D.ZONES.filter((z) => z.safe).length;
+      const bosses = Object.values(D.MOBS).filter((m) => m.boss).length;
+      title.textContent = `${D.ZONES.length - villages} tierras, ${villages} aldeas y ${bosses} jefes`;
+    }
     const list = $('#zoneList');
     if (!list) return;
     for (const z of D.ZONES) {
@@ -222,6 +232,25 @@
         )
       );
     }
+  }
+
+  // ---------- Grados de equipo ----------
+  function gradeList() {
+    const box = $('#gradeList');
+    if (!box || !D.GRADES) return;
+    const order = D.GRADE_ORDER || Object.keys(D.GRADES);
+    order.forEach((k, i) => {
+      const g = D.GRADES[k];
+      box.append(
+        el(
+          'li',
+          { class: `grade vw-grade-${k}`, style: `--r:${g.color}` },
+          el('span', { class: 'gn' }, String(i + 1)),
+          el('strong', {}, g.name),
+          el('small', {}, g.lvl > 1 ? `Desde el nivel ${g.lvl}` : 'Desde el inicio')
+        )
+      );
+    });
   }
 
   // ---------- Guía ----------
@@ -473,6 +502,7 @@
   hero();
   classCards();
   worldMap();
+  gradeList();
   guideClasses();
   guideLevels();
   guideZones();

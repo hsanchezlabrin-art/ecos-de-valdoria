@@ -4,20 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ecos de Valdoria · RPG de fantasía en 3D</title>
-<meta name="description" content="Ecos de Valdoria es un RPG de fantasía en 3D para Windows. Elige entre cinco razas (Oso, Elfo, Gnomo, Hada-Gato o Lagarto), explora seis tierras del nivel 1 al 40 y enfréntate a Tharmok en el pantano.">
+<meta name="description" content="Ecos de Valdoria es un RPG de fantasía en 3D, vóxel y en línea, para el navegador, Windows y Mac. Elige entre cinco razas (Oso, Elfo, Gnomo, Hada-Gato o Lagarto), sube hasta el nivel 80 y explora 14 tierras y aldeas con tus amigos.">
 <meta property="og:title" content="Ecos de Valdoria">
-<meta property="og:description" content="RPG de fantasía en 3D para Windows. Cinco razas, tres cambios de clase, seis tierras y cuatro grandes jefes.">
-<link rel="icon" href="favicon.png">
+<meta property="og:description" content="RPG de fantasía en 3D, vóxel y en línea. Cinco razas, nivel máximo 80, tres cambios de clase, ocho grados de equipo y 14 tierras y aldeas.">
+<meta property="og:image" content="juego/icon-512.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="favicon.png" sizes="64x64" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#5cc4ff">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:ital,wght@0,600;0,700;0,800;0,900;1,600&display=swap">
 <link rel="stylesheet" href="site.css">
 </head>
 <body>
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="./"><span class="mark">V</span>Ecos de Valdoria</a>
+    <a class="brand" href="./"><span class="mark" data-emblem="simple" aria-hidden="true"></span>Ecos de Valdoria</a>
     <nav class="nav" aria-label="Principal">
       <a href="#clases">Razas</a>
       <a href="#mundo">Mundo</a>
@@ -32,9 +37,15 @@
   <section class="hero" id="hero">
     <canvas id="heroCanvas" aria-hidden="true"></canvas>
     <div class="wrap hero-copy">
-      <p class="eyebrow">RPG de fantasía en 3D · En línea · Windows y macOS</p>
-      <h1>Ecos de Valdoria</h1>
-      <p class="lead">Seis tierras rodean la Aldea de los Bloques: praderas, un bosque de árboles gigantes, minas de cristal, una gran ciudadela, un valle de dragones e islas sobre las nubes. Elige tu raza, crece con tu mascota y enfréntate al Rey Tronco, al Mega-Autómata 3000, a Ignis y al Gran Guardián Celestial.</p>
+      <p class="eyebrow">RPG de fantasía en 3D · En línea · Navegador, Windows y macOS</p>
+      <h1 class="vw-logo" aria-label="Ecos de Valdoria"><span class="l1" data-t="Ecos de">Ecos de</span><span class="l2" data-t="Valdoria">Valdoria</span></h1>
+      <p class="lead">Elige tu raza, crece con tu mascota y viaja desde las praderas de la Aldea de los Bloques hasta las Ruinas del Eclipse. Sube hasta el nivel 80, cambia de clase y consigue equipo de ocho grados, de Madera a Aurora Eterna.</p>
+      <ul class="hero-stats" aria-label="El juego en números">
+        <li><b>80</b><span>nivel máximo</span></li>
+        <li><b>10 · 25 · 40</b><span>cambios de clase</span></li>
+        <li><b>8</b><span>grados de equipo</span></li>
+        <li><b>14</b><span>tierras y aldeas</span></li>
+      </ul>
       <div class="cta">
         <a class="btn btn-gold" href="jugar">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg>
@@ -69,11 +80,24 @@
       <div>
         <div class="block-head">
           <p class="eyebrow">El mundo</p>
-          <h2>Once tierras, nueve jefes</h2>
+          <h2 id="worldTitle">14 tierras y aldeas</h2>
           <p class="lead">Desde las praderas tranquilas hasta las Ruinas del Eclipse, en el nivel 80: cada tierra es más peligrosa, paga mejor botín y guarda un gran jefe con su propia mecánica. Cuatro aldeas unidas por caminos y por la red de portales.</p>
         </div>
         <ul class="zones" id="zoneList"></ul>
       </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section class="block" id="grados">
+    <div class="wrap">
+      <div class="block-head">
+        <p class="eyebrow">Ocho grados</p>
+        <h2>De Madera a Aurora Eterna</h2>
+        <p class="lead">Cada grado tiene su color: lo ves en el borde de cada objeto del inventario. Los últimos brillan y cambian de color.</p>
+      </div>
+      <ul class="grades" id="gradeList"></ul>
     </div>
   </section>
 
@@ -88,7 +112,7 @@
       <div class="features">
         <div class="feature"><span class="ic">⚔︎</span><h3>Combate en tiempo real</h3><p>Haz clic para atacar, encadena habilidades y bebe pociones en el momento justo.</p></div>
         <div class="feature"><span class="ic">★</span><h3>Habilidades con niveles</h3><p>Cada 5 niveles tus habilidades suben de nivel (hasta Nv 12): pegan más fuerte y curan más.</p></div>
-        <div class="feature"><span class="ic">◆</span><h3>Equipo por grados</h3><p>De Madera a Arcoíris Celestial: seis grados de armas y armaduras para tu raza, más el botín de los jefes.</p></div>
+        <div class="feature"><span class="ic">◆</span><h3>Equipo por grados</h3><p>De Madera a Aurora Eterna: ocho grados de armas y armaduras para tu raza, más el botín de los jefes.</p></div>
         <div class="feature"><span class="ic">✚</span><h3>Grupos</h3><p>Invita a otros jugadores a tu grupo, mira su vida y maná y comparte la experiencia de cada caza.</p></div>
         <div class="feature"><span class="ic">⚑</span><h3>Gremios</h3><p>Funda tu gremio con tus amigos: nombre, emblema y color, rangos, chat propio y su emblema bajo tu nombre.</p></div>
         <div class="feature"><span class="ic">⚡</span><h3>PvP y PK</h3><p>Duelos entre jugadores como en los MMORPG clásicos: hay que forzar el ataque, y quien ataca a inocentes queda con el nombre rojo.</p></div>
@@ -176,6 +200,7 @@
 <script src="juego/src/gfx.js"></script>
 <script src="juego/src/models.js"></script>
 <script src="juego/src/world.js"></script>
+<script src="juego/src/portraits.js"></script>
 <script src="site.js"></script>
 </body>
 </html>

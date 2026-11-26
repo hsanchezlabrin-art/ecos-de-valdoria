@@ -163,6 +163,39 @@
       if (!t || t.dead || t.hidden) Game.targetNearest();
       Game.attackTarget();
     });
+    // Objetivo: pasa al siguiente monstruo cercano (como Tab en el teclado)
+    const tBtn = $('btnTarget');
+    if (tBtn) tBtn.addEventListener('click', () => Game.targetNearest());
+    // Acción: habla con el personaje de la aldea más cercano (tiendas, maestro, portales, mercado)
+    const aBtn = $('btnAction');
+    if (aBtn) {
+      aBtn.addEventListener('click', () => {
+        const P = G.player;
+        const npcs = (G.world && G.world.npcs) || [];
+        if (!P || !P.pos || !npcs.length) return;
+        let best = null;
+        let bd = 14 * 14;
+        for (const n of npcs) {
+          const d = (n.x - P.pos.x) ** 2 + (n.z - P.pos.z) ** 2;
+          if (d < bd) {
+            bd = d;
+            best = n;
+          }
+        }
+        if (best) Game.selectNpc(best.id);
+        else if (V.UI) V.UI.notify && V.UI.notify('No hay nadie cerca para hablar.', 'warn');
+      });
+      // Solo se muestra cuando hay un personaje cerca
+      setInterval(() => {
+        const P = G.player;
+        const npcs = (G.world && G.world.npcs) || [];
+        const near = !!P && !!P.pos && npcs.some((n) => (n.x - P.pos.x) ** 2 + (n.z - P.pos.z) ** 2 < 14 * 14);
+        if (aBtn.hidden === near) aBtn.hidden = !near;
+      }, 400);
+    }
+    // Habilidades: abre la ventana Estado (estadísticas y habilidades)
+    const sBtn = $('btnSkillsTouch');
+    if (sBtn) sBtn.addEventListener('click', () => V.UI && V.UI.togglePanel('stats'));
   }
 
   function onStart(canvas) {

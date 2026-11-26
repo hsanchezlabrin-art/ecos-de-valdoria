@@ -33,7 +33,7 @@ function createSplash() {
     movable: true,
     show: false,
     center: true,
-    backgroundColor: '#0b0d10',
+    backgroundColor: '#7fd3ff',
     icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'splash-preload.js') },
   });

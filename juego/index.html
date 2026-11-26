@@ -6,14 +6,16 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0b0d10">
+<meta name="theme-color" content="#5cc4ff">
 <title>Ecos de Valdoria</title>
-<link rel="icon" href="../favicon.png">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="../favicon.png" sizes="64x64" type="image/png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Alegreya+Sans:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;800;900&display=swap">
 <style>
   /* Interfaz de juego: paneles de pizarra oscura con filo de bronce sobre el mundo 3D. */
   :root {
@@ -889,6 +891,9 @@
   #start { padding-left: max(16px, 6vw, calc(env(safe-area-inset-left, 0px) + 16px)); padding-right: max(16px, 4vw, calc(env(safe-area-inset-right, 0px) + 16px)); padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
   .start-card { max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 </style>
+<!-- VoxelWarmUITheme: tokens y componentes de la interfaz (madera, piedra y oro) -->
+<link rel="stylesheet" href="theme.css">
+<script src="./src/portraits.js"></script>
 </head>
 <body>
 
@@ -897,10 +902,12 @@
 
 <div id="hud" hidden>
   <section class="frame player-frame" aria-label="Personaje">
+    <div class="pf-portrait" id="pPortrait" aria-hidden="true"></div>
     <div class="pf-head"><span class="lvl" id="pLvl">1</span><span class="pname" id="pName"></span><span class="pclass" id="pClass">Guerrero</span></div>
     <div class="bar hp"><i id="pHpFill"></i><span id="pHpTxt"></span></div>
     <div class="bar mp"><i id="pMpFill"></i><span id="pMpTxt"></span></div>
     <div class="bar xp"><i id="pXpFill"></i><span id="pXpTxt"></span></div>
+    <div class="pf-gems" id="pGems" title="Gemas de Poder (tecla 9 para activarlas)">Gemas de Poder (<b id="pGemsN">0</b>)</div>
     <div class="bar air" id="pAir" hidden><i id="pAirFill"></i><span id="pAirTxt">Aire</span></div>
     <div id="buffs" hidden></div>
   </section>
@@ -925,7 +932,7 @@
   </section>
 
   <section class="frame mapbox" aria-label="Mapa">
-    <div class="zone" id="zoneName">Aldea de Brezal</div>
+    <div class="zone" id="zoneName">Aldea de los Bloques</div>
     <div class="mm-wrap">
       <canvas id="minimap" width="180" height="180" title="Abrir mapa (M)"></canvas>
       <div class="mm-zoom"><button type="button" id="mmIn" aria-label="Acercar mapa">+</button><button type="button" id="mmOut" aria-label="Alejar mapa">−</button></div>
@@ -950,19 +957,19 @@
   </section>
   <nav id="hotbar" aria-label="Habilidades"></nav>
   <div class="menu-btns">
-    <button id="btnInv" data-icon="▣">Inventario <kbd>I</kbd></button>
-    <button id="btnStats" data-icon="♙">Estado <kbd>C</kbd></button>
-    <button id="btnQuests" data-icon="❗">Misiones <kbd>J</kbd></button>
-    <button id="btnGuild" data-icon="⚑">Gremio <kbd>G</kbd></button>
-    <button id="btnAlbum" data-icon="📖">Álbum <kbd>K</kbd></button>
-    <button id="btnFriend" data-icon="💗">Amistad <kbd>B</kbd></button>
-    <button id="btnMarket" data-icon="⚖">Mercado <kbd>U</kbd></button>
-    <button id="btnMap" data-icon="⌖">Mapa <kbd>M</kbd></button>
-    <button id="btnHelp" data-icon="?">Controles <kbd>H</kbd></button>
-    <button id="btnGfx" data-icon="⚙">Ajustes <kbd>O</kbd></button>
-    <button id="btnGuide" data-icon="➜">Guía: sí <kbd>➜</kbd></button>
-    <button id="btnFull" data-icon="⛶" hidden>Pantalla completa <kbd>⛶</kbd></button>
-    <button id="btnExit" data-icon="⏏">Salir <kbd>⏏</kbd></button>
+    <button id="btnInv" data-icon="▣" title="Inventario (I)">Inventario <kbd>I</kbd></button>
+    <button id="btnStats" data-icon="♙" title="Estado (C)">Estado <kbd>C</kbd></button>
+    <button id="btnQuests" data-icon="❗" title="Misiones (J)">Misiones <kbd>J</kbd></button>
+    <button id="btnGuild" data-icon="⚑" title="Gremio (G)">Gremio <kbd>G</kbd></button>
+    <button id="btnAlbum" data-icon="📖" title="Álbum (K)">Álbum <kbd>K</kbd></button>
+    <button id="btnFriend" data-icon="💗" title="Amistad (B)">Amistad <kbd>B</kbd></button>
+    <button id="btnMarket" data-icon="⚖" title="Mercado (U)">Mercado <kbd>U</kbd></button>
+    <button id="btnMap" data-icon="⌖" title="Mapa (M)">Mapa <kbd>M</kbd></button>
+    <button id="btnHelp" data-icon="?" title="Controles (H)">Controles <kbd>H</kbd></button>
+    <button id="btnGfx" data-icon="⚙" title="Ajustes (O)">Ajustes <kbd>O</kbd></button>
+    <button id="btnGuide" data-icon="➜" title="Guía: sí">Guía: sí <kbd>➜</kbd></button>
+    <button id="btnFull" data-icon="⛶" hidden title="Pantalla completa">Pantalla completa <kbd>⛶</kbd></button>
+    <button id="btnExit" data-icon="⏏" title="Salir">Salir <kbd>⏏</kbd></button>
   </div>
   <div id="exitAsk" hidden>
     <div>
@@ -1154,6 +1161,9 @@
   </div>
   <div id="joystick" hidden aria-label="Joystick de movimiento"><div id="joyKnob"></div></div>
   <button id="btnAttack" class="touch-only" aria-label="Atacar">Atacar</button>
+  <button type="button" id="btnTarget" class="touch-pill" aria-label="Elegir el siguiente objetivo"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.2" aria-hidden="true"><circle cx="16" cy="16" r="10"/><circle cx="16" cy="16" r="3.5" fill="currentColor"/><path d="M16 1v6M16 25v6M1 16h6M25 16h6" stroke-linecap="round"/></svg>Objetivo</button>
+  <button type="button" id="btnAction" class="touch-pill" aria-label="Hablar con el personaje más cercano"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M5 6h22a3 3 0 0 1 3 3v11a3 3 0 0 1-3 3H14l-7 6v-6H5a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z" stroke="#3f250f" stroke-width="2" stroke-linejoin="round"/><circle cx="10" cy="14.5" r="2" fill="#3f250f"/><circle cx="16" cy="14.5" r="2" fill="#3f250f"/><circle cx="22" cy="14.5" r="2" fill="#3f250f"/></svg>Acción</button>
+  <button type="button" id="btnSkillsTouch" class="touch-pill" aria-label="Ver habilidades"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16 2l4.2 8.6 9.4 1.4-6.8 6.6 1.6 9.4L16 23.6 7.6 28l1.6-9.4L2.4 12l9.4-1.4z" stroke="#3f250f" stroke-width="2" stroke-linejoin="round"/></svg>Habilid.</button>
   <div id="labels"></div>
   <div id="floats"></div>
 </div>
@@ -1164,8 +1174,8 @@
 <div id="start">
   <div class="start-card">
     <button type="button" class="ghost set-open" id="btnSetStart" aria-label="Configuración">⚙ Configuración</button>
+    <h1 class="vw-logo" aria-label="Ecos de Valdoria"><span class="l1" data-t="Ecos de">Ecos de</span><span class="l2" data-t="Valdoria">Valdoria</span></h1>
     <p class="eyebrow" id="versionTag"></p>
-    <h1>Ecos de Valdoria</h1>
 
     <!-- Cuenta -->
     <section class="view" id="viewAuth">
@@ -1216,11 +1226,11 @@
       </div>
       <span class="pick-label">Raza</span>
       <div class="class-pick" role="group" aria-label="Raza">
-        <button type="button" data-cls="oso"><b>🐻</b><span>Oso</span></button>
-        <button type="button" data-cls="elfo"><b>🏹</b><span>Elfo</span></button>
-        <button type="button" data-cls="gnomo"><b>⚙</b><span>Gnomo</span></button>
-        <button type="button" data-cls="hada"><b>🐱</b><span>Hada-Gato</span></button>
-        <button type="button" data-cls="lagarto"><b>🦎</b><span>Lagarto</span></button>
+        <button type="button" data-cls="oso"><b data-portrait="oso"></b><span>Oso</span></button>
+        <button type="button" data-cls="elfo"><b data-portrait="elfo"></b><span>Elfo</span></button>
+        <button type="button" data-cls="gnomo"><b data-portrait="gnomo"></b><span>Gnomo</span></button>
+        <button type="button" data-cls="hada"><b data-portrait="hada"></b><span>Hada-Gato</span></button>
+        <button type="button" data-cls="lagarto"><b data-portrait="lagarto"></b><span>Lagarto</span></button>
       </div>
       <p class="class-desc" id="classDesc"></p>
       <p class="net-msg" id="createMsg" role="status"></p>
@@ -1245,10 +1255,15 @@
 </div>
 
 <div id="loading" role="status" aria-live="polite">
+  <div class="load-scene" aria-hidden="true">
+    <span class="cloud"></span><span class="cloud"></span><span class="cloud"></span>
+    <div class="isle a"><i></i><i></i></div><div class="isle b"><i></i><i></i></div>
+    <div class="hills"></div>
+  </div>
   <div class="load-card">
-    <div class="load-emblem" aria-hidden="true">V</div>
-    <p class="eyebrow">Ecos de</p>
-    <h2>Valdoria</h2>
+    <div class="load-emblem" data-emblem aria-hidden="true"></div>
+    <h2 class="vw-logo load-logo" aria-label="Ecos de Valdoria"><span class="l1" data-t="Ecos de">Ecos de</span><span class="l2" data-t="Valdoria">Valdoria</span></h2>
+    <p class="load-msg">Cargando el mundo…</p>
     <div class="load-track"><i id="loadBar"></i></div>
     <p id="loadTxt">Cargando…</p>
   </div>

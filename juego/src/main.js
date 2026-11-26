@@ -317,11 +317,17 @@
     const rim = new THREE.DirectionalLight(0xd9b56a, 1);
     rim.position.set(-4, 3, -4);
     pv.scene.add(key, rim);
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.6, 0.12, 40), new THREE.MeshStandardMaterial({ color: 0x2a2620, roughness: 0.9 }));
-    disc.position.y = -0.06;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.025, 6, 64), new THREE.MeshBasicMaterial({ color: 0x8a6d3b }));
-    ring.rotation.x = Math.PI / 2;
-    pv.scene.add(disc, ring);
+    // Pedestal de madera con aro dorado (estilo vóxel de la interfaz)
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6e431d, roughness: 0.9, flatShading: true });
+    const top = new THREE.MeshStandardMaterial({ color: 0x9a6232, roughness: 0.9, flatShading: true });
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffc83d, roughness: 0.35, metalness: 0.4, flatShading: true });
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.62, 0.34, 16), [wood, top, wood]);
+    disc.position.y = -0.17;
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.66, 1.66, 0.1, 16, 1, true), gold);
+    ring.position.y = -0.05;
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.8, 0.16, 16), gold);
+    base.position.y = -0.42;
+    pv.scene.add(disc, ring, base);
     let dragX = null;
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
@@ -492,10 +498,12 @@
       b.type = 'button';
       b.dataset.id = ch.id;
       b.innerHTML = '<span class="cg"></span><span><strong></strong><small></small></span><span class="lv"></span>';
-      b.querySelector('.cg').textContent = CLASSES[ch.cls] ? CLASSES[ch.cls].glyph : '?';
+      // Retrato vóxel de la raza (si falta el dibujo, el símbolo de la clase)
+      if (V.Portraits && CLASSES[ch.cls]) b.querySelector('.cg').innerHTML = V.Portraits.portrait(ch.cls);
+      else b.querySelector('.cg').textContent = CLASSES[ch.cls] ? CLASSES[ch.cls].glyph : '?';
       b.querySelector('strong').textContent = ch.name;
       b.querySelector('small').textContent = className(ch.cls, ch.sex, ch.stage, ch.branch);
-      b.querySelector('.lv').textContent = `Nv ${ch.level}`;
+      b.querySelector('.lv').textContent = `Nivel ${ch.level}`;
       b.addEventListener('click', () => selectChar(ch.id));
       b.addEventListener('dblclick', () => enterWorld());
       li.append(b);

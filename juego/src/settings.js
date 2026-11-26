@@ -20,6 +20,34 @@
     shadows: 'Sin sombras el juego va más rápido.',
   };
 
+  // Tamaño de la interfaz (texto, botones y ventanas). Se guarda aparte de los gráficos.
+  const UI_KEY = 'valdoria-ui-scale';
+  const UI_SCALES = [
+    [0.9, 'Pequeña'],
+    [1, 'Normal'],
+    [1.15, 'Grande'],
+    [1.3, 'Muy grande'],
+  ];
+  let uiScale = 1;
+  try {
+    const v = Number(localStorage.getItem(UI_KEY));
+    if (UI_SCALES.some(([s]) => s === v)) uiScale = v;
+  } catch {
+    /* sin almacenamiento */
+  }
+  const applyUiScale = () => document.documentElement.style.setProperty('--ui-scale', String(uiScale));
+  applyUiScale();
+  function setUiScale(v) {
+    uiScale = v;
+    applyUiScale();
+    try {
+      localStorage.setItem(UI_KEY, String(v));
+    } catch {
+      /* sin almacenamiento */
+    }
+    sync();
+  }
+
   const el = (tag, cls, text) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -100,6 +128,23 @@
       choiceRow('fps', 'Límite de FPS', V.Gfx.CHOICES.fps),
       choiceRow('shadows', 'Sombras', [true, false])
     );
+    const ui = sec('Interfaz');
+    const row = el('div', 'set-row');
+    const head = el('div', 'set-label');
+    head.append(el('span', '', 'Tamaño de la interfaz'), el('small', '', 'Agranda el texto, los botones y las ventanas.'));
+    const seg = el('div', 'seg');
+    seg.setAttribute('role', 'radiogroup');
+    seg.setAttribute('aria-label', 'Tamaño de la interfaz');
+    for (const [v, name] of UI_SCALES) {
+      const b = el('button', '', name);
+      b.type = 'button';
+      b.dataset.ui = String(v);
+      b.setAttribute('role', 'radio');
+      b.onclick = () => setUiScale(v);
+      seg.append(b);
+    }
+    row.append(head, seg);
+    ui.append(row);
     const im = sec('Imagen');
     im.append(rangeRow('brightness', 'Brillo'), rangeRow('gamma', 'Gamma'), rangeRow('contrast', 'Contraste'), rangeRow('saturation', 'Saturación'));
     const so = sec('Sonido');
@@ -110,7 +155,10 @@
     const foot = el('div', 'set-foot');
     const def = el('button', 'ghost', 'Valores por defecto');
     def.type = 'button';
-    def.onclick = () => V.Gfx.resetSettings();
+    def.onclick = () => {
+      setUiScale(1);
+      V.Gfx.resetSettings();
+    };
     const ok = el('button', 'btn', 'Listo');
     ok.type = 'button';
     ok.onclick = close;
@@ -122,7 +170,7 @@
   function sync() {
     const s = V.Gfx.settings;
     panel.querySelectorAll('.seg button').forEach((b) => {
-      const on = String(s[b.dataset.key]) === b.dataset.value;
+      const on = b.dataset.ui ? Number(b.dataset.ui) === uiScale : String(s[b.dataset.key]) === b.dataset.value;
       b.classList.toggle('on', on);
       b.setAttribute('aria-checked', on ? 'true' : 'false');
     });

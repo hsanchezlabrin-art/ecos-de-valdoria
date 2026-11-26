@@ -61,9 +61,12 @@ function initUI() {
     friend: $('friendPanel'),
     portal: $('portalPanel'),
     market: $('marketPanel'),
+    gemsN: $('pGemsN'),
+    gemsBox: $('pGems'),
   };
   E.hud.hidden = false;
   E.pName.textContent = G.player.name;
+  if (V.Portraits && $('pPortrait')) $('pPortrait').innerHTML = V.Portraits.portrait(G.player.cls);
   $('pClass').textContent = className(G.player.cls, G.player.sex, G.player.stage, G.player.branch);
   buildHotbar();
   bindMaster();
@@ -240,6 +243,9 @@ function updateHotbar() {
       qty = p.gems || 0;
       low = qty === 0;
       s.b.classList.toggle('on', !!p.gemsOn && qty > 0);
+      // Contador junto a las barras del jugador
+      if (E.gemsN && E.gemsN.textContent !== String(qty)) E.gemsN.textContent = qty;
+      if (E.gemsBox) E.gemsBox.classList.toggle('on', !!p.gemsOn && qty > 0);
     } else {
       cd = p.cds.pot || 0;
       qty = countItem(s.d.id);
@@ -655,6 +661,7 @@ function openTrade(mode, ref) {
   $('trOk').classList.toggle('danger', mode === 'destroy');
   const icon = $('trIcon');
   icon.style.setProperty('--r', RARITY[it.rarity].color);
+  icon.dataset.r = it.rarity;
   icon.textContent = it.glyph;
   $('trName').textContent = it.name;
   $('trName').style.color = RARITY[it.rarity].color;
@@ -799,6 +806,7 @@ function slotEl(id, qty, onClick, extraCls = '', onQuick = null) {
   if (id) {
     const it = ITEMS[id];
     b.style.setProperty('--r', RARITY[it.rarity].color);
+    b.dataset.r = it.rarity;
     b.classList.add('filled');
     b.title = itemTitle(it) + (shopOpen() ? `\nVender: ${sellPrice(it)} oro` : '');
     b.innerHTML = `<span class="glyph"></span>${qty > 1 ? `<span class="qty">${qty}</span>` : ''}`;
@@ -843,6 +851,7 @@ function openItemMenu(anchor, source) {
   const ic = document.createElement('span');
   ic.className = 'islot filled';
   ic.style.setProperty('--r', RARITY[it.rarity].color);
+  ic.dataset.r = it.rarity;
   ic.textContent = it.glyph;
   const nm = document.createElement('div');
   const strong = document.createElement('strong');
@@ -1033,9 +1042,9 @@ function drawMinimap() {
   c.beginPath();
   c.arc(half, half, half - 1, 0, Math.PI * 2);
   c.clip();
-  c.fillStyle = '#26301f';
+  c.fillStyle = '#4c8f38';
   c.fillRect(0, 0, W, W);
-  c.strokeStyle = 'rgba(176,146,98,.55)';
+  c.strokeStyle = 'rgba(240,214,150,.8)';
   c.lineWidth = 3;
   for (const r of V.Terrain.ROADS) {
     c.beginPath();
@@ -1044,12 +1053,12 @@ function drawMinimap() {
     c.stroke();
   }
   for (const z of G.world.zones) {
-    c.fillStyle = `rgba(${z.tint.map((t) => Math.round(t * 255)).join(',')},.55)`;
+    c.fillStyle = `rgba(${z.tint.map((t) => Math.round(t * 255)).join(',')},.8)`;
     c.beginPath();
     c.arc(tx(z.x), tz(z.z), z.r * s, 0, Math.PI * 2);
     c.fill();
   }
-  c.fillStyle = 'rgba(217,181,106,.35)';
+  c.fillStyle = 'rgba(255,200,61,.5)';
   c.beginPath();
   c.arc(tx(0), tz(0), 22 * s, 0, Math.PI * 2);
   c.fill();
@@ -1658,6 +1667,7 @@ function itemIcon(id, qty) {
   const it = ITEMS[id];
   const ic = mk('span', 'mk-ic', it.glyph);
   ic.style.setProperty('--r', RARITY[it.rarity] ? RARITY[it.rarity].color : '#cfc6b2');
+  ic.dataset.r = it.rarity;
   if (qty > 1) ic.append(mk('i', '', String(qty)));
   return ic;
 }
@@ -2555,6 +2565,7 @@ function openDrops(m) {
     const ic = document.createElement('span');
     ic.className = 'islot filled';
     ic.style.setProperty('--r', RARITY[it.rarity].color);
+    ic.dataset.r = it.rarity;
     ic.textContent = it.glyph;
     const nm = document.createElement('div');
     const strong = document.createElement('strong');
@@ -2619,14 +2630,17 @@ function drawBigMap() {
   const s = mapView.scale;
   const tx = (x) => W / 2 + (x - ctr.x) * s;
   const tz = (z) => W / 2 + (z - ctr.z) * s;
-  c.fillStyle = '#1d251a';
+  // Mar alrededor y tierra de Valdoria (colores cálidos de la interfaz vóxel)
+  c.fillStyle = '#2a6fa8';
   c.fillRect(0, 0, W, W);
-  // Borde del mundo
-  c.fillStyle = '#26301f';
+  c.fillStyle = '#4c8f38';
+  c.strokeStyle = '#3f250f';
+  c.lineWidth = 4;
   c.beginPath();
   c.arc(tx(0), tz(0), V.Terrain.WORLD_LIMIT * s, 0, Math.PI * 2);
   c.fill();
-  c.strokeStyle = 'rgba(176,146,98,.6)';
+  c.stroke();
+  c.strokeStyle = 'rgba(240,214,150,.85)';
   c.lineWidth = Math.max(2, 3 * s * 0.6);
   for (const r of V.Terrain.ROADS) {
     c.beginPath();
@@ -2635,24 +2649,25 @@ function drawBigMap() {
     c.stroke();
   }
   for (const z of G.world.zones) {
-    c.fillStyle = `rgba(${z.tint.map((t) => Math.round(t * 255)).join(',')},.6)`;
+    c.fillStyle = `rgba(${z.tint.map((t) => Math.round(t * 255)).join(',')},.85)`;
     c.beginPath();
     c.arc(tx(z.x), tz(z.z), z.r * s, 0, Math.PI * 2);
     c.fill();
   }
-  c.fillStyle = 'rgba(217,181,106,.4)';
+  c.fillStyle = 'rgba(255,200,61,.55)';
   c.beginPath();
   c.arc(tx(0), tz(0), 22 * s, 0, Math.PI * 2);
   c.fill();
   // Nombres de zonas
-  c.font = `700 ${Math.round(11 + s * 2)}px Cinzel, Georgia, serif`;
+  c.font = `400 ${Math.round(12 + s * 2)}px 'Lilita One', 'Arial Rounded MT Bold', sans-serif`;
   c.textAlign = 'center';
+  c.lineJoin = 'round';
   for (const z of [V.Data.ZONES[0], ...G.world.zones]) {
     const label = z.lvl ? `${z.name} · ${z.lvl}` : z.name;
-    c.lineWidth = 4;
-    c.strokeStyle = 'rgba(0,0,0,.7)';
+    c.lineWidth = 5;
+    c.strokeStyle = '#3f250f';
     c.strokeText(label, tx(z.x), tz(z.z) - (z.safe ? 0 : z.r * s * 0.15));
-    c.fillStyle = '#f3e7cc';
+    c.fillStyle = z.safe ? '#ffe999' : '#fff6e3';
     c.fillText(label, tx(z.x), tz(z.z) - (z.safe ? 0 : z.r * s * 0.15));
   }
   for (const m of G.mobs) {
